@@ -1,0 +1,23 @@
+{
+  "name": "agentnote-obsidian",
+  "version": "0.1.0",
+  "description": "agentNote: an explicit memory layer between you and AI agents, as an Obsidian plugin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "test": "npm run build && node test/e2e.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "obsidian": "^1.7.2",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
+}
