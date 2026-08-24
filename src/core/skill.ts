@@ -1,134 +1,102 @@
-/**
- * Skill installer — writes a SKILL.md that teaches local agents (Claude Code,
- * Codex, WorkBuddy and any other agent that reads skill files) how to use
- * this vault's agentNote memory layer over the local HTTP API.
- *
- * Pure Node, no Obsidian imports: covered by the e2e tests.
- */
-
 import * as fs from "fs";
 import * as path from "path";
 
-export interface SkillInstallResult {
-  dir: string;
-  file: string;
-}
+export interface AgentTarget { id: string; name: string; detectRel: string; skillsRel: string }
+export interface DetectedAgent extends AgentTarget { skillDir: string; installed: boolean }
+export interface AgentPromptOptions { port: number; instructions?: string }
 
-/** A local agent whose skill directory we know how to find. */
-export interface AgentTarget {
-  id: string;
-  name: string;
-  /** Directory (relative to home) whose existence marks this agent as installed. */
-  detectRel: string;
-  /** User-level skills directory (relative to home). */
-  skillsRel: string;
-}
-
-/** Common local agents, all using the <skillsRel>/agentnote/SKILL.md convention. */
 export const KNOWN_AGENTS: AgentTarget[] = [
   { id: "claude-code", name: "Claude Code", detectRel: ".claude", skillsRel: ".claude/skills" },
-  { id: "codex", name: "Codex (OpenAI)", detectRel: ".codex", skillsRel: ".codex/skills" },
+  { id: "codex", name: "Codex", detectRel: ".codex", skillsRel: ".codex/skills" },
   { id: "workbuddy", name: "WorkBuddy", detectRel: ".workbuddy", skillsRel: ".workbuddy/skills" },
 ];
+const SKILL_NAME = "agentnote";
 
-export interface DetectedAgent extends AgentTarget {
-  /** Absolute dir the skill would be installed into. */
-  skillDir: string;
-  /** True if an agentnote SKILL.md is already present there. */
-  alreadyInstalled: boolean;
+export function detectAgents(home: string): DetectedAgent[] {
+  return KNOWN_AGENTS.filter((agent) => fs.existsSync(path.join(home, agent.detectRel))).map((agent) => {
+    const skillDir = path.join(home, agent.skillsRel, SKILL_NAME);
+    return { ...agent, skillDir, installed: fs.existsSync(path.join(skillDir, "SKILL.md")) };
+  });
 }
 
-const SKILL_FOLDER = "agentnote";
-
-/** Detect which known agents are installed under the given home directory. */
-export function detectAgents(homeDir: string): DetectedAgent[] {
-  const found: DetectedAgent[] = [];
-  for (const agent of KNOWN_AGENTS) {
-    if (!fs.existsSync(path.join(homeDir, agent.detectRel))) continue;
-    const skillDir = path.join(homeDir, agent.skillsRel, SKILL_FOLDER);
-    found.push({
-      ...agent,
-      skillDir,
-      alreadyInstalled: fs.existsSync(path.join(skillDir, "SKILL.md")),
-    });
-  }
-  return found;
-}
-
-/** Claude Code user-level skills directory layout: <home>/.claude/skills/<name>/SKILL.md */
-export function defaultSkillDir(homeDir: string): string {
-  return path.join(homeDir, ".claude", "skills", SKILL_FOLDER);
-}
-
-/**
- * Render the skill definition. The port is baked in so the skill works
- * without any discovery step; if the user later changes the plugin port they
- * should re-install the skill.
- *
- * 叙事只讲三件事：读、写、守规范。其余能力（分享/分组/快照）一笔带过。
- */
-export function renderSkillMd(opts: { port: number; prefs?: string }): string {
-  const base = `http://127.0.0.1:${opts.port}`;
-  const prefs = (opts.prefs ?? "").trim();
+export function renderSkillMd({ port, instructions = "" }: AgentPromptOptions): string {
+  const base = `http://127.0.0.1:${port}`;
   return `---
 name: agentnote
-description: 读写用户的 agentNote 显式记忆层（Obsidian vault 里的长期记忆）。当用户让你"记住"某件事、查询以往记忆、使用 s-x- 分享引用，或任务需要跨会话的用户偏好/项目约定时使用。
+description: 用户的 Obsidian 本地笔记和文件中转系统。用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”时，使用它把内容写入笔记；用户给出 agentNote 分享地址时，直接读取地址。
 ---
 
-# agentNote — 用户的显式记忆层
+# agentNote
 
-就三件事：**读、写、守规范**。本地 HTTP API：${base}（仅 localhost、无鉴权）。
-服务随 Obsidian 运行：**连接被拒绝 = Obsidian 没开**，不是数据丢失——重试或请用户打开 Obsidian。
+agentNote 让用户 vault 中的内容通过本地 HTTP 流向 agent。服务地址：${base}。仅本机可访问；连接被拒绝表示 Obsidian 未启动。
 
-## 一、规范（最重要）
+## 自然语言写入
 
-每条记忆都必须能回答三个问题，缺了就是低质量记忆：
+当用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”或语义等价的话时，创建一条笔记，不要求用户提供文件路径或 API 参数。
 
-- **background**：这条记忆从哪来、为什么存在
-- **scenarios**：什么情况下应该用它
-- **caveats**：什么时候不该用它 / 何时失效
-
-规则：
-
-1. 你写入的每条记忆都必须带这三个 boundary 字段，并标 \`"source": "agent"\`。
-2. 先读后写：改一条记忆前先 GET 它，别覆盖用户的最新编辑。
-3. 用户说"记住……"、"以后都……"时，主动写一条带完整边界的记忆。
-
-## 二、读
-
-\`\`\`
-GET ${base}/api/nodes?tag=&q=&type=snippet|file|folder   # 搜索/列出（q 搜标题正文标签）
-GET ${base}/api/nodes/<id>                               # 读单条（含 boundary 和 warnings）
-GET ${base}/api/health                                   # 健康检查
-\`\`\`
-
-需要用户过往的决定、偏好、流程 SOP 时，**先搜记忆再回答**。
-
-## 三、写
-
-\`\`\`
+\`\`\`json
 POST ${base}/api/nodes
-{"type":"snippet","title":"...","content":"...",
- "boundary":{"background":"...","scenarios":"...","caveats":"..."},
- "tags":[],"source":"agent"}
-
-PUT  ${base}/api/nodes/<id>    # 改任意子集（改 title 会自动重命名笔记文件，id 不变）
-\`\`\`
-
-响应信封：\`{"ok":true,"data":...}\` 或 \`{"ok":false,"error":"..."}\`。
-
-## 顺带一提
-
-- **分享引用**：用户发来的 ${base}/api/shares/s-x-.../resolve 链接，直接 GET 即得当前内容（加 \`?raw=1\` 拿纯文本）。**实时解析、别缓存**；410 = 用户已吊销，视为收回。
-- 节点文件就是 vault 里 \`agentNote/nodes/\` 下的普通 markdown，frontmatter 即规范本体，直接读文件也能学会格式。
-${prefs ? `\n## 用户偏好\n\n${prefs}\n` : ""}`;
+{
+  "title": "简短主题",
+  "content": "整理后的正文",
+  "background": "这是什么、从哪来、为什么要保存",
+  "source": "agent"
 }
 
-/** Write SKILL.md into the given directory (created if missing). Overwrites any previous install. */
-export function installSkill(dir: string, opts: { port: number; prefs?: string }): SkillInstallResult {
-  if (!dir.trim()) throw new Error("skill directory must not be empty");
+\`\`\`
+
+写入前不需要为了找旧笔记而搜索。用户明确要求修改既有笔记时，先 GET 最新内容，再 PATCH 对应 id。背景只需说明必要上下文。
+
+## 分享地址
+
+用户提供 \`${base}/api/shares/s-x-.../resolve\` 时，直接 GET 并使用返回内容。它是活引用：每次读取都是当前内容。
+
+- \`kind: text\`：正文和背景。
+- \`kind: file\`：文件地址、背景和当前文件内容。
+- \`kind: folder\`：文件夹地址、背景和第一层文件名称。
+
+追加 \`?raw=1\` 只获取内容文本。不要要求用户复制原文件或重新粘贴正文。
+
+## 可用接口
+
+\`\`\`
+GET  ${base}/api/health
+GET  ${base}/api/nodes?q=
+GET  ${base}/api/nodes/<id>
+POST ${base}/api/nodes
+PATCH ${base}/api/nodes/<id>
+POST ${base}/api/shares
+GET  ${base}/api/shares/<id>/resolve
+\`\`\`
+${instructions.trim() ? `\n## 此 agent 的附加要求\n\n${instructions.trim()}\n` : ""}`;
+}
+
+export function installSkill(dir: string, options: AgentPromptOptions): void {
   fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "SKILL.md"), renderSkillMd(options), "utf8");
+}
+
+/** A portable task for agents outside the built-in registry. */
+export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "port">): string {
+  const base = `http://127.0.0.1:${port}`;
+  return `请把 agentNote 安装为你自己可持久化使用的一项 skill、instruction 或工具说明。不要假设你必须使用某个固定目录；先识别你当前运行环境中用于保存长期技能/系统指令的正确机制，再自行创建或更新名为 agentnote 的条目。
+
+安装前先验证服务：GET ${base}/api/health。若连接失败，不要伪造安装成功；请告诉用户需要打开 Obsidian 或启动 agentNote 本地服务。
+
+写入以下能力说明，并按你的运行环境采用可在后续会话自动加载的格式：
+
+1. agentNote 是用户的 Obsidian 本地笔记和文件中转系统，服务地址是 ${base}，仅本机可访问。
+2. 当用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”或语义等价的话时，调用 POST ${base}/api/nodes 创建笔记。请求至少包含 title、content、background、source: "agent"。background 要说明这是什么、从哪来、为什么保存。
+3. 用户明确要求修改既有笔记时，先 GET ${base}/api/nodes/<id>，再 PATCH 同一地址；不要为了普通新建写入而先搜索旧笔记。
+4. 用户给出 ${base}/api/shares/s-x-.../resolve 形式的地址时，直接 GET。它是活引用：每次都读当前内容，不要求用户重新复制文件。
+5. 分享返回三种形态：kind=text 表示正文+背景；kind=file 表示文件地址+背景+当前内容；kind=folder 表示文件夹地址+背景+第一层文件名称。追加 ?raw=1 只获得内容文本。
+6. 服务不可用只表示 Obsidian 或本地服务未运行，不表示用户文件丢失。
+
+完成后请自行验证：读取刚创建的 skill/instruction，确认其中包含 ${base} 和“写到 Obsidian”的触发语义；再 GET ${base}/api/health。最后向用户简短报告你把它安装在什么机制/位置，以及验证结果。`;
+}
+
+export function uninstallSkill(dir: string): void {
   const file = path.join(dir, "SKILL.md");
-  fs.writeFileSync(file, renderSkillMd(opts), "utf8");
-  return { dir, file };
+  if (fs.existsSync(file)) fs.rmSync(file);
+  if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
 }

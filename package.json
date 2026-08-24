@@ -1,7 +1,7 @@
 {
   "name": "agentnote-obsidian",
   "version": "0.1.0",
-  "description": "agentNote: an explicit memory layer between you and AI agents, as an Obsidian plugin",
+  "description": "agentNote: a local note and file relay for AI agents, as an Obsidian plugin",
   "private": true,
   "type": "module",
   "scripts": {

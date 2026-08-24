@@ -23,10 +23,6 @@
  * (birthtime / mtime), archived = lives in nodes/归档/. Nothing else is
  * serialized, so renaming a file renames the node and git keeps history.
  *
- * Parsing is lenient toward the retired three-field layout: a legacy
- * `boundary.background` (or a `title:` key) is still read if present, so an
- * old file never loses its memory — it just gets rewritten in the new shape
- * on its next save.
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -85,22 +81,12 @@ export function parseNode(raw: string, meta: NodeMeta): AgentNode {
   }
   if (!data || data[FM_MARKER] !== true) throw new NodeParseError("not an agentnote node file");
 
-  // 单字段 schema：「背景」. Lenient fallback for the retired three-field
-  // layout: boundary.background is salvaged so old files lose nothing.
-  let background = typeof data["背景"] === "string" ? data["背景"] : "";
-  if (!background) {
-    const legacy = data.boundary as { background?: unknown } | undefined;
-    if (legacy && typeof legacy.background === "string") background = legacy.background;
-  }
-
-  // Title normally comes from the file name; a legacy `title:` key wins so
-  // id-named legacy files keep their real name through migration.
-  const fmTitle = typeof data.title === "string" ? data.title.trim() : "";
+  const background = typeof data["背景"] === "string" ? data["背景"] : "";
 
   return {
     id: String(data.id ?? ""),
     type: (data.type as NodeType) ?? "snippet",
-    title: fmTitle || meta.title,
+    title: meta.title,
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     source: (data.source as NodeSource) ?? "user",
     background,

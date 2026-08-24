@@ -42,32 +42,17 @@ export type ShareTarget =
 
 export interface Share {
   id: string; // "s-x-..."
-  /** Legacy node shares carry nodeId directly; new shares carry target. */
-  nodeId?: string;
-  target?: ShareTarget;
+  target: ShareTarget;
   /** Exact text span of the target's content (live-checked at resolve time). */
   selection?: string;
+  /** Context supplied for a direct file/folder share. Node shares use the node background. */
+  background?: string;
   created: string;
-  revoked: boolean;
-  revokedAt?: string;
 }
 
 /** Normalize a share to its target (back-compat with legacy nodeId shares). */
 export function shareTarget(share: Share): ShareTarget {
-  if (share.target) return share.target;
-  return { kind: "node", nodeId: share.nodeId ?? "" };
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  parentId: string | null;
-}
-
-export interface GroupsData {
-  groups: Group[];
-  /** nodeId -> groupIds (many-to-many) */
-  membership: Record<string, string[]>;
+  return share.target;
 }
 
 export interface QualityWarning {

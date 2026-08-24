@@ -3,7 +3,7 @@
   "name": "agentNote",
   "version": "0.1.0",
   "minAppVersion": "1.5.0",
-  "description": "你与 AI agent 之间的显式记忆层：带边界标注的记忆节点、可吊销的活引用分享，以及供 agent 读写的本地 HTTP API。",
+  "description": "本地笔记和文件的中转系统：通过 HTTP 分享地址让 AI agent 直接读取内容，并一键接入本地 agent。",
   "author": "agentNote",
   "isDesktopOnly": true
 }

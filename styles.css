@@ -1,181 +1,55 @@
-/* agentNote UI styles */
-
-.agentnote-boundary-panel {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 12px;
-  background: var(--background-secondary);
-  font-size: 0.9em;
-}
-
-.agentnote-boundary-row {
-  margin: 2px 0;
-  white-space: pre-wrap;
-}
-
-.agentnote-boundary-meta {
-  margin-top: 6px;
-  color: var(--text-muted);
-  font-size: 0.8em;
-}
-
-.agentnote-warning {
-  color: var(--text-error);
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.agentnote-share {
-  background: var(--background-secondary-alt);
-  border-radius: 4px;
-  padding: 0 4px;
-  border-bottom: 1px dashed var(--text-accent);
-}
-
-.agentnote-share-dead {
-  color: var(--text-error);
-  border-bottom-color: var(--text-error);
-}
-
-.agentnote-field {
-  margin-bottom: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.agentnote-field textarea {
-  min-height: 60px;
-}
-
-/* ---------- sidebar panel ---------- */
+/* agentNote 接入台 */
 
 .agentnote-panel {
-  padding: 8px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  font-size: 0.92em;
+  gap: 14px;
 }
 
-.agentnote-toolbar {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.agentnote-search {
-  flex: 1;
-}
-
+.agentnote-panel h3,
 .agentnote-section h4 {
-  margin: 0 0 6px 0;
+  margin: 0;
+}
+
+.agentnote-section {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.agentnote-empty {
-  color: var(--text-muted);
-  font-size: 0.85em;
-  padding: 4px 0;
-}
-
-.agentnote-node {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  padding: 6px 8px;
-  margin-bottom: 6px;
-}
-
-.agentnote-node-title {
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-}
-
-.agentnote-node-title:hover {
-  color: var(--text-accent);
-}
-
-.agentnote-badge-warn {
-  color: var(--text-error);
-}
-
+.agentnote-section p,
 .agentnote-node-meta {
+  margin: 0;
   color: var(--text-muted);
-  font-size: 0.8em;
-  margin: 2px 0 4px 0;
+  font-size: 0.86em;
+}
+
+.agentnote-agent-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--background-secondary);
 }
 
 .agentnote-node-actions {
   display: flex;
-  gap: 4px;
-}
-
-.agentnote-mini-btn {
-  padding: 1px 6px;
-  font-size: 0.85em;
-  line-height: 1.4;
-}
-
-.agentnote-group {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1px 0;
-}
-
-.agentnote-group-name {
-  cursor: pointer;
-}
-
-.agentnote-group-name:hover {
-  color: var(--text-accent);
-}
-
-.agentnote-filter-chip {
-  font-size: 0.75em;
-  color: var(--text-accent);
-  cursor: pointer;
-  font-weight: normal;
-}
-
-.agentnote-share-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 0;
-  font-size: 0.85em;
-}
-
-.agentnote-share-live {
-  color: var(--text-normal);
-}
-
-.agentnote-share-revoked {
-  color: var(--text-muted);
-  text-decoration: line-through;
-}
-
-.agentnote-footer {
-  margin-top: auto;
-  border-top: 1px solid var(--background-modifier-border);
-  padding-top: 8px;
-  display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
 }
 
-.agentnote-server-status {
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 0.85em;
+.agentnote-prompt-preview {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.78em;
 }
 
-.agentnote-prompt-btn {
+.agentnote-manual-prompt {
   width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  font-family: var(--font-monospace);
+  font-size: 0.82em;
 }
