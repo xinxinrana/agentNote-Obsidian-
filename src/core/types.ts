@@ -6,35 +6,29 @@
 export type NodeType = "snippet" | "file" | "folder";
 export type NodeSource = "user" | "agent";
 
-/** Boundary fields every memory must answer. */
-export interface Boundary {
-  /** 背景：这条记忆从哪来、为什么存在 */
-  background: string;
-  /** 适用场景：什么情况下应该用它 */
-  scenarios: string;
-  /** 注意与失效条件：什么时候不该用 / 何时过期 */
-  caveats: string;
-}
-
 export interface AgentNode {
   id: string;
   type: NodeType;
   title: string;
   tags: string[];
-  boundary: Boundary;
+  /** 背景：这条记忆从哪来、为什么存在。唯一的边界字段（单字段 schema）。 */
+  background: string;
   source: NodeSource;
   /** For file/folder nodes: absolute path on disk being indexed. */
   path?: string;
   /** Body content. For snippet nodes this IS the memory; for file/folder
    *  nodes it's an optional human/agent-written description of the target. */
   content: string;
-  created: string; // ISO
-  updated: string; // ISO
+  created: string; // ISO, from file stat (birthtime)
+  updated: string; // ISO, from file stat (mtime)
+  /** Derived from file location (agentNote/nodes/归档/ = archived).
+   *  Never serialized to frontmatter. */
+  archived: boolean;
 }
 
 /**
  * What a share points at. Everything in the vault is shareable:
- * - node:   an agentNote memory node (carries boundary/warnings)
+ * - node:   an agentNote memory node (carries background/warnings)
  * - file:   any vault file (vault-relative path) — resolved live from disk
  * - folder: any vault folder (vault-relative path) — resolved to a live listing
  *
@@ -77,29 +71,31 @@ export interface GroupsData {
 }
 
 export interface QualityWarning {
-  code: "missing-boundary";
+  code: "missing-background";
   message: string;
-  missing: (keyof Boundary)[];
 }
 
-/** Compute quality warnings for a node (PRD FR-8). */
+/** Compute quality warnings for a node (FR-8). Agent-written memories must
+ *  carry a 「背景」; user-written ones are trusted as-is. */
 export function qualityWarnings(node: AgentNode): QualityWarning[] {
   if (node.source === "user") return [];
-  const missing = (Object.keys(node.boundary) as (keyof Boundary)[]).filter(
-    (k) => !node.boundary[k] || !node.boundary[k].trim()
-  );
-  if (missing.length === 0) return [];
+  if (node.background && node.background.trim()) return [];
   return [
     {
-      code: "missing-boundary",
-      message: `这条记忆由「${node.source}」写入，缺少边界字段：${missing.join(
-        ", "
-      )}。信任它之前请先补全。`,
-      missing,
+      code: "missing-background",
+      message: `这条记忆由「${node.source}」写入，缺少「背景」字段。信任它之前请先补全。`,
     },
   ];
 }
 
-export function emptyBoundary(): Boundary {
-  return { background: "", scenarios: "", caveats: "" };
+/** Obsidian tags cannot contain spaces: whitespace is stripped on write so
+ *  agents don't silently get a different tag back than they sent. */
+export function normalizeTags(tags: string[] | undefined): string[] {
+  if (!Array.isArray(tags)) return [];
+  const out: string[] = [];
+  for (const t of tags) {
+    const cleaned = String(t).replace(/\s+/g, "").trim();
+    if (cleaned && !out.includes(cleaned)) out.push(cleaned);
+  }
+  return out;
 }

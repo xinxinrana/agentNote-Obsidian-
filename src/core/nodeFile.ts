@@ -11,47 +11,51 @@
  *   agentnote: true
  *   id: n-abc123
  *   type: snippet            # snippet | file | folder
- *   title: My memory
- *   tags: [api, backend]
  *   source: agent            # user | agent
- *   created: 2026-07-28T...
- *   updated: 2026-07-28T...
+ *   背景: 用户在 8/13 反馈后定稿的单字段……
+ *   tags: [api, backend]
  *   path: D:/work/config.yml # file/folder nodes only
- *   boundary:
- *     background: ...
- *     scenarios: ...
- *     caveats: ...
  *   ---
  *
  *   Body content...
  *
- * The file on disk is named after the title (<title>.md); the id lives in
- * frontmatter and is the stable reference for shares/groups. History is
- * delegated to git — no version field, no version directory.
+ * Deliberately minimal: title = file name, created/updated = file stat
+ * (birthtime / mtime), archived = lives in nodes/归档/. Nothing else is
+ * serialized, so renaming a file renames the node and git keeps history.
+ *
+ * Parsing is lenient toward the retired three-field layout: a legacy
+ * `boundary.background` (or a `title:` key) is still read if present, so an
+ * old file never loses its memory — it just gets rewritten in the new shape
+ * on its next save.
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { AgentNode, Boundary, NodeSource, NodeType, emptyBoundary } from "./types";
+import { AgentNode, NodeSource, NodeType } from "./types";
 
 const FM_MARKER = "agentnote";
+
+/** Facts that live outside the file content (file name + stat + location). */
+export interface NodeMeta {
+  /** File name without extension — this IS the node title. */
+  title: string;
+  /** ISO, from file stat birthtime. */
+  created: string;
+  /** ISO, from file stat mtime. */
+  updated: string;
+  /** Derived from living under nodes/归档/. Never serialized. */
+  archived: boolean;
+}
 
 export function serializeNode(node: AgentNode): string {
   const fm: Record<string, unknown> = {
     [FM_MARKER]: true,
     id: node.id,
     type: node.type,
-    title: node.title,
-    tags: node.tags,
     source: node.source,
-    created: node.created,
-    updated: node.updated,
+    背景: node.background ?? "",
+    tags: node.tags,
   };
   if (node.path) fm.path = node.path;
-  fm.boundary = {
-    background: node.boundary.background,
-    scenarios: node.boundary.scenarios,
-    caveats: node.boundary.caveats,
-  };
   const yaml = stringifyYaml(fm, { lineWidth: 0 }).trimEnd();
   const body = node.content.replace(/\s*$/, "");
   return `---\n${yaml}\n---\n\n${body}\n`;
@@ -70,7 +74,7 @@ export function isNodeFile(raw: string): boolean {
   }
 }
 
-export function parseNode(raw: string): AgentNode {
+export function parseNode(raw: string, meta: NodeMeta): AgentNode {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
   if (!m) throw new NodeParseError("missing frontmatter block");
   let data: Record<string, unknown>;
@@ -80,23 +84,30 @@ export function parseNode(raw: string): AgentNode {
     throw new NodeParseError(`invalid YAML frontmatter: ${(e as Error).message}`);
   }
   if (!data || data[FM_MARKER] !== true) throw new NodeParseError("not an agentnote node file");
-  const b = (data.boundary ?? {}) as Partial<Boundary>;
-  const boundary: Boundary = {
-    ...emptyBoundary(),
-    ...(typeof b.background === "string" ? { background: b.background } : {}),
-    ...(typeof b.scenarios === "string" ? { scenarios: b.scenarios } : {}),
-    ...(typeof b.caveats === "string" ? { caveats: b.caveats } : {}),
-  };
+
+  // 单字段 schema：「背景」. Lenient fallback for the retired three-field
+  // layout: boundary.background is salvaged so old files lose nothing.
+  let background = typeof data["背景"] === "string" ? data["背景"] : "";
+  if (!background) {
+    const legacy = data.boundary as { background?: unknown } | undefined;
+    if (legacy && typeof legacy.background === "string") background = legacy.background;
+  }
+
+  // Title normally comes from the file name; a legacy `title:` key wins so
+  // id-named legacy files keep their real name through migration.
+  const fmTitle = typeof data.title === "string" ? data.title.trim() : "";
+
   return {
     id: String(data.id ?? ""),
     type: (data.type as NodeType) ?? "snippet",
-    title: String(data.title ?? ""),
+    title: fmTitle || meta.title,
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     source: (data.source as NodeSource) ?? "user",
+    background,
     path: typeof data.path === "string" ? data.path : undefined,
-    boundary,
     content: (m[2] ?? "").replace(/^\n+/, "").replace(/\s*$/, ""),
-    created: String(data.created ?? ""),
-    updated: String(data.updated ?? ""),
+    created: meta.created || String(data.created ?? ""),
+    updated: meta.updated || String(data.updated ?? ""),
+    archived: meta.archived,
   };
 }
