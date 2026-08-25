@@ -1,8 +1,17 @@
 import { App, ItemView, Modal, Notice, Setting, WorkspaceLeaf } from "obsidian";
 import type AgentNotePlugin from "../main";
 import { renderManualInstallPrompt, renderSkillMd, type DetectedAgent } from "../core/skill";
+import claudeCodeIcon from "../assets/agents/claude-code.svg";
+import codexIcon from "../assets/agents/codex.svg";
+import workbuddyIcon from "../assets/agents/workbuddy.png";
 
 export const AGENTNOTE_VIEW = "agentnote-view";
+
+const AGENT_ICONS: Record<string, string> = {
+  "claude-code": claudeCodeIcon,
+  codex: codexIcon,
+  workbuddy: workbuddyIcon,
+};
 
 export class AgentNoteView extends ItemView {
   constructor(leaf: WorkspaceLeaf, private plugin: AgentNotePlugin) { super(leaf); }
@@ -28,24 +37,29 @@ export class AgentNoteView extends ItemView {
   }
   private renderAgents(agents: DetectedAgent[]): void {
     const section = this.contentEl.createDiv({ cls: "agentnote-section" });
-    section.createEl("h4", { text: "已识别的 agent" });
+    section.createEl("h4", { text: "接入 agent" });
+    section.createEl("p", { text: "接入会在该 agent 的长期 skill 目录写入一份 agentNote 使用说明。" });
     const manual = section.createEl("button", { text: "手动接入任意 agent" });
     manual.onclick = () => new ManualInstallModal(this.app, this.plugin).open();
     if (!agents.length) { section.createEl("p", { text: "尚未识别到内置 agent。可使用上方“手动接入任意 agent”。" }); return; }
     for (const agent of agents) {
       const profile = this.plugin.profile(agent.id);
       const card = section.createDiv({ cls: "agentnote-agent-card" });
-      card.createEl("strong", { text: agent.name });
-      card.createEl("div", { cls: "agentnote-node-meta", text: agent.installed && profile.enabled ? "已接入" : "未接入" });
-      card.createEl("div", { cls: "agentnote-node-meta", text: agent.skillDir });
+      const header = card.createDiv({ cls: "agentnote-agent-header" });
+      const icon = header.createEl("img", { cls: "agentnote-agent-icon", attr: { src: AGENT_ICONS[agent.id], alt: `${agent.name} 图标` } });
+      icon.decoding = "async";
+      const identity = header.createDiv();
+      identity.createEl("strong", { text: agent.name });
+      identity.createEl("div", { cls: `agentnote-agent-status ${agent.installed && profile.enabled ? "is-connected" : ""}`, text: agent.installed && profile.enabled ? "已接入" : "未接入" });
+      card.createEl("div", { cls: "agentnote-agent-path", text: `安装位置：${agent.skillDir}` });
       const actions = card.createDiv({ cls: "agentnote-node-actions" });
-      const install = actions.createEl("button", { text: agent.installed ? "更新提示词" : "安装提示词", cls: "mod-cta" });
+      const install = actions.createEl("button", { text: agent.installed ? "更新接入" : "接入 agentNote", cls: "mod-cta" });
       install.onclick = () => void this.plugin.installAgent(agent);
       const edit = actions.createEl("button", { text: "管理提示词" });
       edit.onclick = () => new AgentPromptModal(this.app, this.plugin, agent, () => this.refresh()).open();
       if (agent.installed) {
-        const disable = actions.createEl("button", { text: "移除接入" });
-        disable.onclick = () => void this.plugin.disableAgent(agent);
+        const disable = actions.createEl("button", { text: "移除接入", cls: "mod-warning" });
+        disable.onclick = () => new RemoveAgentModal(this.app, this.plugin, agent, () => this.refresh()).open();
       }
     }
   }
@@ -56,6 +70,21 @@ export class AgentNoteView extends ItemView {
     section.createEl("p", { text: "笔记管理是辅助功能。agent 通过已安装的提示词理解“写到笔记里”。" });
     const create = section.createEl("button", { text: "新建笔记" });
     create.onclick = () => this.plugin.openCreateNoteModal();
+  }
+}
+
+class RemoveAgentModal extends Modal {
+  constructor(app: App, private plugin: AgentNotePlugin, private agent: DetectedAgent, private done: () => Promise<void>) { super(app); }
+  onOpen(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("h2", { text: `移除 ${this.agent.name} 接入？` });
+    this.contentEl.createEl("p", { text: "这会移除 agentNote 的长期提示词；不会删除该 agent 的其他 skill、配置或对话。" });
+    this.contentEl.createEl("code", { cls: "agentnote-skill-path", text: `${this.agent.skillDir}/SKILL.md` });
+    new Setting(this.contentEl).addButton((button) => button.setButtonText("取消").onClick(() => this.close()))
+      .addButton((button) => button.setButtonText("确认移除").setWarning().onClick(async () => {
+        await this.plugin.disableAgent(this.agent);
+        await this.done(); this.close();
+      }));
   }
 }
 

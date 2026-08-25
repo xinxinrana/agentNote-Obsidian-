@@ -33,6 +33,7 @@ const pluginConfig = {
   sourcemap: prod ? false : "inline",
   minify: prod,
   treeShaking: true,
+  loader: { ".svg": "dataurl", ".png": "dataurl" },
   outfile: "main.js",
 };
 

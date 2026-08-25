@@ -1,0 +1,11 @@
+{
+  "audience": "希望让本地 Obsidian 文件与 AI agent 协作的个人用户",
+  "reader_task": "快速理解 agentNote 的用途，并选择 GitHub 或压缩包完成安装",
+  "genre_contract": "router.marketing",
+  "adapter": null,
+  "presentation_mode": "normal",
+  "visual_plan": {
+    "reason": "用短流程、对比表和下载入口降低理解与安装成本",
+    "blocks": []
+  }
+}

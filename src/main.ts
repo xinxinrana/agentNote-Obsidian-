@@ -33,7 +33,7 @@ export default class AgentNotePlugin extends Plugin {
       menu.addItem((item) => item.setTitle("agentNote: 分享选中内容").setIcon("link").onClick(() => void this.shareSelection(editor)));
     }));
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => this.openSharePathModal(file.path)));
+      menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
     if (this.settings.autostartServer) await this.startServer(true);
   }
@@ -49,15 +49,23 @@ export default class AgentNotePlugin extends Plugin {
   async saveProfile(agentId: string, profile: AgentProfile): Promise<void> { this.settings.agents[agentId] = profile; await this.saveSettings(); }
   async installAgent(agent: DetectedAgent): Promise<void> {
     const profile = this.profile(agent.id);
-    installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions });
-    await this.saveProfile(agent.id, { ...profile, enabled: true });
-    new Notice(`${agent.name} 已接入 agentNote；重启 agent 后生效。`);
+    try {
+      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions });
+      await this.saveProfile(agent.id, { ...profile, enabled: true });
+      new Notice(`${agent.name} 已接入 agentNote；重启 agent 后生效。`);
+    } catch (error) {
+      new Notice(`${agent.name} 接入失败：${(error as Error).message}`);
+    }
     this.refreshPanels();
   }
   async disableAgent(agent: DetectedAgent): Promise<void> {
-    uninstallSkill(agent.skillDir);
-    await this.saveProfile(agent.id, { ...this.profile(agent.id), enabled: false });
-    new Notice(`${agent.name} 的 agentNote 提示词已移除。`);
+    try {
+      uninstallSkill(agent.skillDir);
+      await this.saveProfile(agent.id, { ...this.profile(agent.id), enabled: false });
+      new Notice(`${agent.name} 的 agentNote 接入已移除。`);
+    } catch (error) {
+      new Notice(`${agent.name} 移除失败：${(error as Error).message}`);
+    }
     this.refreshPanels();
   }
   async startServer(quiet = false): Promise<void> {
@@ -70,7 +78,6 @@ export default class AgentNotePlugin extends Plugin {
   async stopServer(quiet = false): Promise<void> { if (!this.server) return; await this.server.stop(); this.server = null; if (!quiet) new Notice("agentNote 服务已停止。"); this.refreshPanels(); }
 
   openCreateNoteModal(): void { new CreateNoteModal(this.app, this).open(); }
-  openSharePathModal(relPath: string, selection?: string): void { new SharePathModal(this.app, this, relPath, selection).open(); }
   private async currentNodeId(): Promise<string | null> {
     const active = this.app.workspace.getActiveFile();
     if (!active) return null;
@@ -86,14 +93,18 @@ export default class AgentNotePlugin extends Plugin {
     const nodeId = await this.currentNodeId();
     if (nodeId) { const share = await this.store.createShare(nodeId, selection); await this.copyShareUrl(share.id); return; }
     const file = this.app.workspace.getActiveFile();
-    if (file) this.openSharePathModal(file.path, selection);
+    if (file) await this.sharePath(file.path, selection);
   }
-  private async shareCurrentFile(): Promise<void> { const file = this.app.workspace.getActiveFile(); if (file) this.openSharePathModal(file.path); }
+  private async shareCurrentFile(): Promise<void> { const file = this.app.workspace.getActiveFile(); if (file) await this.sharePath(file.path); }
+  private async sharePath(relPath: string, selection?: string): Promise<void> {
+    try { const share = await this.store.createPathShare(relPath, undefined, selection); await this.copyShareUrl(share.id); }
+    catch (error) { new Notice(`分享失败：${(error as Error).message}`); }
+  }
   async copyShareUrl(id: string): Promise<void> {
     const port = this.server?.port ?? this.settings.port;
     const url = `http://127.0.0.1:${port}/api/shares/${id}/resolve`;
     await navigator.clipboard.writeText(url);
-    new Notice(`已复制分享地址：\n${url}`, 8000);
+    new Notice("分享地址已复制，直接发给 agent 即可。", 4000);
   }
   async loadSettings(): Promise<void> { const saved = await this.loadData(); this.settings = { ...DEFAULT_SETTINGS, ...saved, agents: saved?.agents ?? {} }; }
   async saveSettings(): Promise<void> { await this.saveData(this.settings); }
@@ -109,20 +120,6 @@ class CreateNoteModal extends Modal {
     new Setting(this.contentEl).setName("背景").setDesc("这是什么、从哪来、为什么保存").addTextArea((input) => input.onChange((value) => background = value));
     new Setting(this.contentEl).addButton((button) => button.setButtonText("创建").setCta().onClick(async () => {
       try { const node = await this.plugin.store.createNode({ title, content, background, source: "user" }); this.close(); new Notice(`已创建笔记：${node.title}`); this.plugin.refreshPanels(); }
-      catch (error) { new Notice((error as Error).message); }
-    }));
-  }
-}
-
-class SharePathModal extends Modal {
-  constructor(app: App, private plugin: AgentNotePlugin, private relPath: string, private selection?: string) { super(app); }
-  onOpen(): void {
-    this.contentEl.empty(); this.contentEl.createEl("h2", { text: "分享给 agent" });
-    this.contentEl.createEl("p", { text: this.relPath });
-    let background = "";
-    new Setting(this.contentEl).setName("背景").setDesc("帮助 agent 理解这份内容为什么要看").addTextArea((input) => input.onChange((value) => background = value));
-    new Setting(this.contentEl).addButton((button) => button.setButtonText("创建分享地址").setCta().onClick(async () => {
-      try { const share = await this.plugin.store.createPathShare(this.relPath, background, this.selection); this.close(); await this.plugin.copyShareUrl(share.id); }
       catch (error) { new Notice((error as Error).message); }
     }));
   }

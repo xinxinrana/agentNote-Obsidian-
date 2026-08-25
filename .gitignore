@@ -3,3 +3,4 @@ main.js
 test/core-bundle.cjs
 dist/
 *.log
+.learnings/

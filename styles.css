@@ -32,6 +32,41 @@
   background: var(--background-secondary);
 }
 
+.agentnote-agent-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.agentnote-agent-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--background-primary);
+  padding: 5px;
+}
+
+.agentnote-agent-status {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.82em;
+}
+
+.agentnote-agent-status.is-connected {
+  color: var(--text-success);
+}
+
+.agentnote-agent-path,
+.agentnote-skill-path {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: 0.78em;
+}
+
 .agentnote-node-actions {
   display: flex;
   flex-wrap: wrap;

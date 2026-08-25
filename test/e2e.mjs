@@ -55,11 +55,11 @@ try {
     assert.deepEqual(result.data.entries, ["nested/", "README.md"].sort((a, b) => a.localeCompare(b))); assert.equal(result.data.entries.includes("nested/hidden.md"), false); assert.equal(result.data.address, folder);
   });
 
-  await test("direct vault file sharing keeps user-supplied background", async () => {
+  await test("direct vault file sharing needs no user-entered background", async () => {
     await fsp.writeFile(path.join(vault, "plain.md"), "plain body");
-    const created = await api("POST", "/api/shares", { path: "plain.md", background: "用户临时提供的材料。" });
+    const created = await api("POST", "/api/shares", { path: "plain.md" });
     const result = await api("GET", `/api/shares/${created.data.id}/resolve`);
-    assert.equal(result.data.kind, "file"); assert.equal(result.data.address, "plain.md"); assert.match(result.data.background, /临时/);
+    assert.equal(result.data.kind, "file"); assert.equal(result.data.address, "plain.md"); assert.equal(result.data.background, "");
   });
 
   await test("archive is a folder move and does not break an existing share", async () => {
@@ -73,7 +73,7 @@ try {
 
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
     const prompt = renderSkillMd({ port, instructions: "使用中文。" });
-    assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /第一层文件名称/); assert.doesNotMatch(prompt, /scenarios/);
+    assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.doesNotMatch(prompt, /scenarios/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
     const [codex] = detectAgents(home); installSkill(codex.skillDir, { port }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); await fsp.rm(home, { recursive: true, force: true });
   });

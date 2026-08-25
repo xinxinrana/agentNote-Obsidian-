@@ -40,12 +40,13 @@ POST ${base}/api/nodes
   "title": "简短主题",
   "content": "整理后的正文",
   "background": "这是什么、从哪来、为什么要保存",
+  "tags": ["可选标签"],
   "source": "agent"
 }
 
 \`\`\`
 
-写入前不需要为了找旧笔记而搜索。用户明确要求修改既有笔记时，先 GET 最新内容，再 PATCH 对应 id。背景只需说明必要上下文。
+写入时根据用户表达整理标题、正文、背景和标签；背景或标签不明确时可以留空。写入前不需要为了找旧笔记而搜索。用户明确要求修改既有笔记时，先 GET 最新内容，再 PATCH 对应 id。
 
 ## 分享地址
 
@@ -86,7 +87,7 @@ export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "po
 写入以下能力说明，并按你的运行环境采用可在后续会话自动加载的格式：
 
 1. agentNote 是用户的 Obsidian 本地笔记和文件中转系统，服务地址是 ${base}，仅本机可访问。
-2. 当用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”或语义等价的话时，调用 POST ${base}/api/nodes 创建笔记。请求至少包含 title、content、background、source: "agent"。background 要说明这是什么、从哪来、为什么保存。
+2. 当用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”或语义等价的话时，调用 POST ${base}/api/nodes 创建笔记。根据用户表达整理 title、content、background、tags 和 source: "agent"；background 要说明这是什么、从哪来、为什么保存。
 3. 用户明确要求修改既有笔记时，先 GET ${base}/api/nodes/<id>，再 PATCH 同一地址；不要为了普通新建写入而先搜索旧笔记。
 4. 用户给出 ${base}/api/shares/s-x-.../resolve 形式的地址时，直接 GET。它是活引用：每次都读当前内容，不要求用户重新复制文件。
 5. 分享返回三种形态：kind=text 表示正文+背景；kind=file 表示文件地址+背景+当前内容；kind=folder 表示文件夹地址+背景+第一层文件名称。追加 ?raw=1 只获得内容文本。
