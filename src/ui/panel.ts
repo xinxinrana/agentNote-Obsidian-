@@ -1,8 +1,8 @@
 import { App, ItemView, Modal, Notice, Setting, WorkspaceLeaf } from "obsidian";
 import type AgentNotePlugin from "../main";
 import { renderManualInstallPrompt, renderSkillMd, type DetectedAgent } from "../core/skill";
-import claudeCodeIcon from "../assets/agents/claude-code.svg";
-import codexIcon from "../assets/agents/codex.svg";
+import claudeCodeIcon from "../assets/agents/claude-code.png";
+import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
 
 export const AGENTNOTE_VIEW = "agentnote-view";

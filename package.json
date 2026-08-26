@@ -8,7 +8,8 @@
     "build": "node esbuild.config.mjs",
     "dev": "node esbuild.config.mjs --watch",
     "test": "npm run build && node test/e2e.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy:test": "npm run build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\deploy-test.ps1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
