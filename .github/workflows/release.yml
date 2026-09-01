@@ -1,0 +1,28 @@
+name: Release
+
+# Tag push (e.g. `git tag 0.2.0 && git push origin 0.2.0`) builds the plugin
+# and publishes a Release whose assets are exactly what the in-plugin
+# updater downloads: main.js, manifest.json, styles.css.
+
+on:
+  push:
+    tags: ["*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Publish release with build artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css --title "$GITHUB_REF_NAME" --generate-notes

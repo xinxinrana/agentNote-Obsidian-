@@ -66,10 +66,18 @@ agent 会把标题、正文、背景和标签整理成笔记，写回当前 vaul
 4. 打开侧边栏的 agentNote 接入台，确认本地服务正在运行。
 5. 在“接入 agent”中选择你的 agent，点击“接入 agentNote”。接入后重启对应 agent。
 
+### 更新
+
+在 Obsidian 设置 → agentNote 中点击“检查更新”。插件会从 GitHub Releases 的最新构建产物中判断是否有新版本；有更新时点击“更新到 vX.Y.Z”，下载完成后插件自动重载，无需手动替换文件。
+
 ## 本地与隐私
 
 - 服务默认地址为 `http://127.0.0.1:27182`，只监听本机。
 - 不上传 vault 内容，不提供账号、云同步或公网分享。
 - Obsidian 关闭时，本地服务会停止；你的原始文件仍留在 vault 中。
+
+## 作者
+
+Evan · [github.com/xinxinrana](https://github.com/xinxinrana)
 
 更多操作说明见 [功能与使用](docs/功能与使用.md)。产品原则见 [核心产品设计](docs/product-design.md)。

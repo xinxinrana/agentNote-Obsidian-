@@ -8,3 +8,4 @@ export * from "./nodeFile";
 export * from "./store";
 export * from "./server";
 export * from "./skill";
+export * from "./version";

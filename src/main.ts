@@ -1,9 +1,12 @@
 import * as os from "os";
+import * as path from "path";
 import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { AgentServer } from "./core/server";
 import { detectAgents, DetectedAgent, installSkill, uninstallSkill } from "./core/skill";
+import { isNewerVersion } from "./core/version";
 import { VaultStore } from "./core/store";
 import { isNodeFile } from "./core/nodeFile";
+import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
 import { AGENTNOTE_VIEW, AgentNoteView } from "./ui/panel";
 
 export interface AgentProfile { enabled: boolean; instructions: string }
@@ -76,6 +79,16 @@ export default class AgentNotePlugin extends Plugin {
     this.refreshPanels();
   }
   async stopServer(quiet = false): Promise<void> { if (!this.server) return; await this.server.stop(); this.server = null; if (!quiet) new Notice("agentNote 服务已停止。"); this.refreshPanels(); }
+  async applyUpdate(release: ReleaseInfo): Promise<void> {
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) throw new Error("agentNote 需要桌面端文件系统 vault。");
+    const dir = path.join(adapter.getBasePath(), this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`);
+    await installRelease(dir, release);
+    new Notice(`agentNote 已更新到 v${release.version}，正在重载插件。`);
+    const plugins = (this.app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;
+    await plugins.disablePlugin(this.manifest.id);
+    await plugins.enablePlugin(this.manifest.id);
+  }
 
   openCreateNoteModal(): void { new CreateNoteModal(this.app, this).open(); }
   private async currentNodeId(): Promise<string | null> {
@@ -129,6 +142,31 @@ class AgentNoteSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app, plugin); }
   display(): void {
     this.containerEl.empty(); this.containerEl.createEl("h2", { text: "agentNote" });
+    this.containerEl.createEl("h3", { text: "版本与更新" });
+    const update = new Setting(this.containerEl)
+      .setName(`当前版本 v${this.plugin.manifest.version} · 作者 Evan`)
+      .setDesc("更新来自 GitHub Releases 的构建产物，更新后插件自动重载。")
+      .addButton((check) => check.setButtonText("检查更新").onClick(async () => {
+        check.setButtonText("检查中…").setDisabled(true);
+        try {
+          const release = await fetchLatestRelease();
+          if (!isNewerVersion(release.version, this.plugin.manifest.version)) {
+            update.setDesc(`已是最新版本（GitHub 最新为 v${release.version}）。`);
+            return;
+          }
+          update.setDesc(`发现新版本 v${release.version}。`);
+          update.addButton((upgrade) => upgrade.setButtonText(`更新到 v${release.version}`).setCta().onClick(async () => {
+            upgrade.setButtonText("更新中…").setDisabled(true);
+            try { await this.plugin.applyUpdate(release); }
+            catch (error) { new Notice(`更新失败：${(error as Error).message}`); upgrade.setButtonText("重试更新").setDisabled(false); }
+          }));
+        } catch (error) {
+          update.setDesc(`检查失败：${(error as Error).message}`);
+        } finally {
+          check.setButtonText("检查更新").setDisabled(false);
+        }
+      }));
+    this.containerEl.createEl("h3", { text: "本地服务" });
     new Setting(this.containerEl).setName("本地服务端口").setDesc("agent 通过此端口读取分享和写入笔记。").addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => { const port = Number(value); if (Number.isInteger(port) && port > 0 && port < 65536) { this.plugin.settings.port = port; await this.plugin.saveSettings(); } }));
     new Setting(this.containerEl).setName("启动 Obsidian 时运行服务").addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => { this.plugin.settings.autostartServer = value; await this.plugin.saveSettings(); }));
     this.containerEl.createEl("p", { text: "agent 的安装、提示词与接入状态在 agentNote 接入台中管理。" });

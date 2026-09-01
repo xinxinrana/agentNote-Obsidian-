@@ -31,9 +31,13 @@ export interface UpdateNodeInput {
 }
 
 export type ShareResult =
-  | { shareId: string; kind: "text"; title: string; background: string; content: string; updated: string; sourcePath?: string }
-  | { shareId: string; kind: "file"; title: string; background: string; address: string; content: string; updated: string }
-  | { shareId: string; kind: "folder"; title: string; background: string; address: string; entries: string[]; updated: string };
+  | { shareId: string; kind: "text"; title: string; background: string; content: string; updated: string; filePath: string; hint: string }
+  | { shareId: string; kind: "file"; title: string; background: string; address: string; content: string; updated: string; filePath: string; hint: string }
+  | { shareId: string; kind: "folder"; title: string; background: string; address: string; entries: string[]; updated: string; filePath: string; hint: string };
+
+/** Tells the receiving agent how to use filePath: the link stays the read
+ *  entry; local file access (when available) is the edit entry. */
+const SHARE_HINT = "优先通过本链接读取：它是活引用，始终返回当前内容。需要修改时，具备本地文件能力的 agent 可直接编辑 filePath 指向的本地文件，无需全量重写。";
 
 function newId(prefix: string): string { return `${prefix}-${randomBytes(6).toString("hex")}`; }
 function safeFileBase(title: string, fallback: string): string {
@@ -120,6 +124,12 @@ export class VaultStore {
     if (!file) throw new StoreError(404, `笔记不存在: ${id}`);
     return path.relative(this.root, file).split(path.sep).join("/");
   }
+  private async nodeFileAbsPath(id: string): Promise<string> {
+    await this.scanNodes();
+    const file = this.idToPath.get(id);
+    if (!file) throw new StoreError(404, `笔记不存在: ${id}`);
+    return file;
+  }
 
   private async nodePath(title: string, id: string, archived: boolean): Promise<string> {
     const dir = archived ? this.p("nodes", "归档") : this.p("nodes");
@@ -184,6 +194,12 @@ export class VaultStore {
     if (selection && !node.content.includes(selection)) throw new StoreError(400, "选段已不在当前正文中");
     return this.appendShare({ kind: "node", nodeId }, selection);
   }
+  /** Every written node gets a whole-note share link; reuse the existing one
+   *  so the link returned at write time stays the canonical address. */
+  async ensureShareForNode(nodeId: string): Promise<Share> {
+    const existing = (await this.readShares()).find((share) => share.target.kind === "node" && share.target.nodeId === nodeId && !share.selection);
+    return existing ?? this.createShare(nodeId);
+  }
   private vaultPath(relPath: string): { rel: string; abs: string } {
     const rel = relPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     if (!rel || rel.split("/").includes("..")) throw new StoreError(400, "必须提供 vault 内相对路径");
@@ -209,7 +225,7 @@ export class VaultStore {
     if (node.type === "snippet") {
       const content = share.selection ?? node.content;
       if (share.selection && !node.content.includes(share.selection)) throw new StoreError(410, "分享选段已不在当前正文中");
-      return { shareId: share.id, kind: "text", title: node.title, background: node.background, content, updated: node.updated, sourcePath: await this.nodeFilePath(node.id) };
+      return { shareId: share.id, kind: "text", title: node.title, background: node.background, content, updated: node.updated, filePath: await this.nodeFileAbsPath(node.id), hint: SHARE_HINT };
     }
     if (!node.path) throw new StoreError(410, "笔记缺少文件地址");
     const stat = await fsp.stat(node.path).catch(() => null);
@@ -222,13 +238,13 @@ export class VaultStore {
     const body = await fsp.readFile(abs, "utf8");
     const content = share.selection ?? body;
     if (share.selection && !body.includes(share.selection)) throw new StoreError(410, "分享选段已不在当前文件中");
-    return { shareId: share.id, kind: "file", title, background, address, content, updated: stat.mtime.toISOString() };
+    return { shareId: share.id, kind: "file", title, background, address, content, updated: stat.mtime.toISOString(), filePath: abs, hint: SHARE_HINT };
   }
   private async resolveFolderShare(share: Share, address: string, abs: string, background = share.background ?? "", title = path.basename(address)): Promise<ShareResult> {
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat?.isDirectory()) throw new StoreError(410, `分享文件夹已不存在: ${address}`);
     const entries = (await fsp.readdir(abs, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)).map((item) => item.isDirectory() ? `${item.name}/` : item.name);
-    return { shareId: share.id, kind: "folder", title, background, address, entries, updated: stat.mtime.toISOString() };
+    return { shareId: share.id, kind: "folder", title, background, address, entries, updated: stat.mtime.toISOString(), filePath: abs, hint: SHARE_HINT };
   }
 
   warningsFor(node: AgentNode) { return qualityWarnings(node); }

@@ -24,6 +24,11 @@ export class AgentServer {
     return this.port!;
   }
   async stop(): Promise<void> { if (this.server) await new Promise<void>((resolve) => this.server!.close(() => resolve())); this.server = null; }
+  private shareLink(shareId: string): string { return `http://127.0.0.1:${this.port ?? this.opts.port}/api/shares/${shareId}/resolve`; }
+  private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated") {
+    const share = await this.store.ensureShareForNode(node.id);
+    return { status, link: this.shareLink(share.id), ...nodeView(node) };
+  }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -34,12 +39,12 @@ export class AgentServer {
 
     if (parts[1] === "nodes" && parts.length === 2) {
       if (method === "GET") return send(res, 200, { ok: true, data: (await this.store.listNodes({ q: url.searchParams.get("q") ?? undefined, type: url.searchParams.get("type") as NodeType ?? undefined, archived: url.searchParams.has("archived") ? url.searchParams.get("archived") === "true" : undefined })).map(nodeView) });
-      if (method === "POST") return send(res, 201, { ok: true, data: nodeView(await this.store.createNode(await readBody(req) as CreateNodeInput)) });
+      if (method === "POST") return send(res, 201, { ok: true, data: await this.withLink(await this.store.createNode(await readBody(req) as CreateNodeInput), "created") });
     }
     if (parts[1] === "nodes" && parts.length === 3) {
       const id = parts[2];
       if (method === "GET") return send(res, 200, { ok: true, data: nodeView(await this.store.getNode(id)) });
-      if (method === "PUT" || method === "PATCH") return send(res, 200, { ok: true, data: nodeView(await this.store.updateNode(id, await readBody(req) as UpdateNodeInput)) });
+      if (method === "PUT" || method === "PATCH") return send(res, 200, { ok: true, data: await this.withLink(await this.store.updateNode(id, await readBody(req) as UpdateNodeInput), "updated") });
     }
     if (parts[1] === "nodes" && parts.length === 4 && parts[3] === "archive" && method === "POST") {
       const body = await readBody(req) as { archived?: boolean };

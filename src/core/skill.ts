@@ -46,7 +46,9 @@ POST ${base}/api/nodes
 
 \`\`\`
 
-写入时根据用户表达整理标题、正文、背景和标签；背景或标签不明确时可以留空。写入前不需要为了找旧笔记而搜索。用户明确要求修改既有笔记时，先 GET 最新内容，再 PATCH 对应 id。
+写入时根据用户表达整理标题、正文、背景和标签；背景或标签不明确时可以留空。写入前不需要为了找旧笔记而搜索。
+
+写入成功的响应包含 \`status\` 和 \`link\`：\`link\` 是这条笔记的永久地址，写入后立即把它发给用户，并在后续对话中用它指代这条笔记。用户之后说"修改刚才那篇"时，直接用这条 link，不要重新搜索。
 
 ## 分享地址
 
@@ -57,6 +59,14 @@ POST ${base}/api/nodes
 - \`kind: folder\`：文件夹地址、背景和第一层文件名称。
 
 追加 \`?raw=1\` 只获取内容文本。不要要求用户复制原文件或重新粘贴正文。
+
+## 读取与修改的规则
+
+分享返回中的 \`filePath\` 是内容在本机的真实路径，\`hint\` 是使用规则：
+
+- 读取始终优先通过链接，它返回当前内容和背景。
+- 需要修改时，如果你有本地文件能力，直接对 \`filePath\` 做局部编辑，不要通过接口全量重写。笔记文件是带 frontmatter 的 Markdown：正文可以直接改，frontmatter 中的 \`id\`、\`type\`、\`source\` 等字段保持不变。
+- 没有本地文件能力时，GET 链接拿到当前内容，再 PATCH \`/api/nodes/<id>\`。
 
 ## 可用接口
 
@@ -88,10 +98,11 @@ export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "po
 
 1. agentNote 是用户的 Obsidian 本地笔记和文件中转系统，服务地址是 ${base}，仅本机可访问。
 2. 当用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”或语义等价的话时，调用 POST ${base}/api/nodes 创建笔记。根据用户表达整理 title、content、background、tags 和 source: "agent"；background 要说明这是什么、从哪来、为什么保存。
-3. 用户明确要求修改既有笔记时，先 GET ${base}/api/nodes/<id>，再 PATCH 同一地址；不要为了普通新建写入而先搜索旧笔记。
+3. 写入成功的响应包含 status 和 link：link 是这条笔记的永久地址。写入后立即把 link 发给用户，并在后续对话中用它指代这条笔记；用户说“修改刚才那篇”时直接用这条 link，不要重新搜索。
 4. 用户给出 ${base}/api/shares/s-x-.../resolve 形式的地址时，直接 GET。它是活引用：每次都读当前内容，不要求用户重新复制文件。
 5. 分享返回三种形态：kind=text 表示正文+背景；kind=file 表示文件地址+背景+当前内容；kind=folder 表示文件夹地址+背景+第一层文件名称。追加 ?raw=1 只获得内容文本。
-6. 服务不可用只表示 Obsidian 或本地服务未运行，不表示用户文件丢失。
+6. 分享返回中的 filePath 是内容在本机的真实路径。读取始终优先通过链接；需要修改时，如果你有本地文件能力，直接对 filePath 做局部编辑（笔记文件是带 frontmatter 的 Markdown，正文可改，id/type/source 等字段保持不变），不要全量重写；没有本地文件能力时，GET 链接后 PATCH /api/nodes/<id>。
+7. 服务不可用只表示 Obsidian 或本地服务未运行，不表示用户文件丢失。
 
 完成后请自行验证：读取刚创建的 skill/instruction，确认其中包含 ${base} 和“写到 Obsidian”的触发语义；再 GET ${base}/api/health。最后向用户简短报告你把它安装在什么机制/位置，以及验证结果。`;
 }
