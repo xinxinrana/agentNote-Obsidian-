@@ -20,8 +20,9 @@
  *   Body content...
  *
  * Deliberately minimal: title = file name, created/updated = file stat
- * (birthtime / mtime), archived = lives in nodes/归档/. Nothing else is
- * serialized, so renaming a file renames the node and git keeps history.
+ * (birthtime / mtime), archived = lives in nodes/归档/. `pinned` protects a
+ * note from archive recommendations. Renaming a file renames the node and git
+ * keeps history.
  *
  */
 
@@ -50,6 +51,7 @@ export function serializeNode(node: AgentNode): string {
     source: node.source,
     背景: node.background ?? "",
     tags: node.tags,
+    pinned: node.pinned,
   };
   if (node.path) fm.path = node.path;
   const yaml = stringifyYaml(fm, { lineWidth: 0 }).trimEnd();
@@ -95,5 +97,6 @@ export function parseNode(raw: string, meta: NodeMeta): AgentNode {
     created: meta.created || String(data.created ?? ""),
     updated: meta.updated || String(data.updated ?? ""),
     archived: meta.archived,
+    pinned: data.pinned === true,
   };
 }

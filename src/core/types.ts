@@ -21,6 +21,8 @@ export interface AgentNode {
   content: string;
   created: string; // ISO, from file stat (birthtime)
   updated: string; // ISO, from file stat (mtime)
+  /** User-protected notes are excluded from archive recommendations. */
+  pinned: boolean;
   /** Derived from file location (agentNote/nodes/归档/ = archived).
    *  Never serialized to frontmatter. */
   archived: boolean;
@@ -52,7 +54,10 @@ export interface Share {
 
 /** Normalize a share to its target (back-compat with legacy nodeId shares). */
 export function shareTarget(share: Share): ShareTarget {
-  return share.target;
+  if (share.target) return share.target;
+  const legacy = share as Share & { nodeId?: string };
+  if (legacy.nodeId) return { kind: "node", nodeId: legacy.nodeId };
+  throw new Error("分享记录缺少目标");
 }
 
 export interface QualityWarning {

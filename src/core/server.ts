@@ -39,7 +39,11 @@ export class AgentServer {
 
     if (parts[1] === "nodes" && parts.length === 2) {
       if (method === "GET") return send(res, 200, { ok: true, data: (await this.store.listNodes({ q: url.searchParams.get("q") ?? undefined, type: url.searchParams.get("type") as NodeType ?? undefined, archived: url.searchParams.has("archived") ? url.searchParams.get("archived") === "true" : undefined })).map(nodeView) });
-      if (method === "POST") return send(res, 201, { ok: true, data: await this.withLink(await this.store.createNode(await readBody(req) as CreateNodeInput), "created") });
+      if (method === "POST") {
+        const body = await readBody(req) as CreateNodeInput;
+        const idempotencyKey = req.headers["idempotency-key"]?.toString() ?? body.idempotencyKey;
+        return send(res, 201, { ok: true, data: await this.withLink(await this.store.createNode(body, idempotencyKey), "created") });
+      }
     }
     if (parts[1] === "nodes" && parts.length === 3) {
       const id = parts[2];

@@ -4,6 +4,7 @@ import { renderManualInstallPrompt, renderSkillMd, type DetectedAgent } from "..
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
+import type { DashboardInsights, InsightEvent, InsightNote } from "../core/store";
 
 export const AGENTNOTE_VIEW = "agentnote-view";
 
@@ -14,6 +15,7 @@ const AGENT_ICONS: Record<string, string> = {
 };
 
 export class AgentNoteView extends ItemView {
+  private bulkUndoIds: string[] | null = null;
   constructor(leaf: WorkspaceLeaf, private plugin: AgentNotePlugin) { super(leaf); }
   getViewType(): string { return AGENTNOTE_VIEW; }
   getDisplayText(): string { return "agentNote 接入台"; }
@@ -23,9 +25,96 @@ export class AgentNoteView extends ItemView {
   async refresh(): Promise<void> {
     this.contentEl.empty(); this.contentEl.addClass("agentnote-panel");
     this.contentEl.createEl("h3", { text: "agentNote 接入台" });
+    await this.renderDashboard();
     this.renderServer();
     this.renderAgents(this.plugin.detectedAgents());
     await this.renderNotes();
+  }
+  private activityText(event: InsightEvent): string {
+    if (event.type === "node-created") return "新建了一条笔记";
+    if (event.type === "node-updated") return "更新了一条笔记";
+    if (event.type === "node-archived") return "归档了一条笔记";
+    if (event.type === "node-restored") return "恢复了一条笔记";
+    return event.targetKind === "node" ? "agent 读取了分享笔记" : `agent 读取了分享${event.targetKind === "folder" ? "文件夹" : "文件"}`;
+  }
+  private timeText(iso: string): string { return new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  private renderValueNotes(section: HTMLElement, title: string, notes: InsightNote[]): void {
+    const header = section.createDiv({ cls: "agentnote-insight-heading" });
+    header.createEl("h4", { text: title });
+    if (!notes.length) { section.createEl("p", { text: "分享笔记被读取后，这里会显示它带来的复用价值。" }); return; }
+    const cards = section.createDiv({ cls: "agentnote-value-cards" });
+    for (const entry of notes) {
+      const card = cards.createDiv({ cls: "agentnote-value-card" });
+      const titleRow = card.createDiv({ cls: "agentnote-value-title" });
+      titleRow.createEl("strong", { text: entry.node.title });
+      if (entry.node.pinned) titleRow.createEl("span", { cls: "agentnote-pin-badge", text: "已固定" });
+      card.createEl("p", { text: entry.reason });
+      if (entry.lastRead) card.createEl("small", { text: `最近读取：${this.timeText(entry.lastRead)}` });
+      const actions = card.createDiv({ cls: "agentnote-node-actions" });
+      const pin = actions.createEl("button", { text: entry.node.pinned ? "取消固定" : "固定" });
+      pin.onclick = () => void (async () => {
+        pin.disabled = true;
+        await this.plugin.store.updateNode(entry.node.id, { pinned: !entry.node.pinned });
+        this.plugin.refreshPanels();
+      })();
+    }
+  }
+  private async renderDashboard(): Promise<void> {
+    const insights = await this.plugin.store.getDashboardInsights();
+    const dashboard = this.contentEl.createDiv({ cls: "agentnote-dashboard" });
+    const overview = dashboard.createDiv({ cls: "agentnote-insight-overview" });
+    overview.createEl("h4", { text: "你的知识正在工作" });
+    overview.createEl("p", { text: `本周新增 ${insights.summary.weekCreated} 条资料；${insights.summary.weekUsedNotes} 条笔记经 ${insights.summary.weekResolves} 次链接解析进入 agent 工作流。` });
+    const stats = overview.createDiv({ cls: "agentnote-insight-stats" });
+    for (const [value, label] of [[insights.summary.weekCreated, "本周新增"], [insights.summary.weekResolves, "本周读取"], [insights.summary.monthResolves, "本月读取"]] as const) {
+      const stat = stats.createDiv(); stat.createEl("strong", { text: String(value) }); stat.createEl("span", { text: label });
+    }
+    const grid = dashboard.createDiv({ cls: "agentnote-insight-grid" });
+    const value = grid.createDiv({ cls: "agentnote-insight-section" });
+    this.renderValueNotes(value, "本周最有价值", insights.weekly);
+    this.renderValueNotes(value, "本月最有价值", insights.monthly);
+    const activity = grid.createDiv({ cls: "agentnote-insight-section" });
+    activity.createEl("h4", { text: "近期活动" });
+    if (!insights.activities.length) activity.createEl("p", { text: "创建并分享资料给 agent 后，这里会留下它进入工作流的记录。" });
+    else {
+      const list = activity.createEl("ul", { cls: "agentnote-activity-list" });
+      for (const event of insights.activities) {
+        const item = list.createEl("li"); item.createEl("span", { text: this.activityText(event) }); item.createEl("time", { text: this.timeText(event.at) });
+      }
+    }
+    this.renderArchiveRecommendations(dashboard, insights);
+  }
+  private renderArchiveRecommendations(dashboard: HTMLElement, insights: DashboardInsights): void {
+    const section = dashboard.createDiv({ cls: "agentnote-archive-section" });
+    const heading = section.createDiv({ cls: "agentnote-insight-heading" });
+    heading.createEl("h4", { text: `建议归档 · ${insights.archiveCandidates.length}` });
+    if (insights.archiveCandidates.length) {
+      const archiveAll = heading.createEl("button", { text: `归档全部建议（${insights.archiveCandidates.length}）`, cls: "mod-warning" });
+      archiveAll.onclick = () => void (async () => {
+        archiveAll.disabled = true;
+        const ids = insights.archiveCandidates.map((node) => node.id);
+        try { await this.plugin.store.archiveNodes(ids, true); this.bulkUndoIds = ids; new Notice(`已归档 ${ids.length} 条建议笔记。`); this.plugin.refreshPanels(); }
+        catch (error) { new Notice(`归档失败：${(error as Error).message}`); archiveAll.disabled = false; }
+      })();
+    }
+    if (this.bulkUndoIds?.length) {
+      const undo = section.createDiv({ cls: "agentnote-undo" });
+      undo.createSpan({ text: `刚刚归档了 ${this.bulkUndoIds.length} 条笔记。` });
+      const button = undo.createEl("button", { text: "撤销" });
+      button.onclick = () => void (async () => { await this.plugin.store.archiveNodes(this.bulkUndoIds!, false); this.bulkUndoIds = null; this.plugin.refreshPanels(); })();
+    }
+    if (!insights.archiveCandidates.length) { section.createEl("p", { text: "没有低使用且陈旧的笔记。固定笔记不会被推荐归档。" }); return; }
+    const list = section.createDiv({ cls: "agentnote-archive-list" });
+    for (const node of insights.archiveCandidates.slice(0, 5)) {
+      const card = list.createDiv({ cls: "agentnote-archive-card" });
+      card.createEl("strong", { text: node.title });
+      card.createEl("span", { text: "创建满 30 天，未被读取，且近 30 天未更新。" });
+      const actions = card.createDiv({ cls: "agentnote-node-actions" });
+      const keep = actions.createEl("button", { text: "固定并保留" });
+      keep.onclick = () => void (async () => { await this.plugin.store.updateNode(node.id, { pinned: true }); this.plugin.refreshPanels(); })();
+      const archive = actions.createEl("button", { text: "归档", cls: "mod-warning" });
+      archive.onclick = () => void (async () => { await this.plugin.store.archiveNode(node.id, true); this.plugin.refreshPanels(); })();
+    }
   }
   private renderServer(): void {
     const section = this.contentEl.createDiv({ cls: "agentnote-section" });

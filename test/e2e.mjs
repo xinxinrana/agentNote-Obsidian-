@@ -36,10 +36,32 @@ try {
     assert.ok(result.data.link.startsWith(base)); assert.match(result.data.link, /\/api\/shares\/s-x-[0-9a-f]+\/resolve$/);
     textLink = result.data.link;
   });
+  await test("legacy shares do not turn successful writes into failed responses", async () => {
+    const sharesPath = path.join(vault, "agentNote", "data", "shares.json");
+    const shares = JSON.parse(await fsp.readFile(sharesPath, "utf8"));
+    shares.push({ id: "s-x-legacy", nodeId: textId, created: new Date().toISOString() });
+    await fsp.writeFile(sharesPath, JSON.stringify(shares));
+    const result = await api("POST", "/api/nodes", { title: "兼容性验证", content: "旧分享记录存在时也应正常返回。" });
+    assert.equal(result.status, 201); assert.equal(result.ok, true); assert.ok(result.data.id); assert.ok(result.data.created); assert.ok(result.data.updated);
+  });
+  await test("idempotency key creates exactly one note", async () => {
+    const payload = { title: "幂等写入", content: "重复请求不能重复创建。", idempotencyKey: "create-note-001" };
+    const first = await api("POST", "/api/nodes", payload);
+    const second = await api("POST", "/api/nodes", payload);
+    assert.equal(first.ok, true); assert.equal(second.ok, true); assert.equal(second.data.id, first.data.id);
+    const nodes = await api("GET", "/api/nodes?q=幂等写入"); assert.equal(nodes.data.length, 1);
+  });
   await test("the write response link is the note's permanent address", async () => {
     const result = await api("GET", textLink.replace(base, ""));
     assert.equal(result.data.kind, "text"); assert.equal(result.data.content, "周五晚间不发布生产版本。");
     assert.ok(path.isAbsolute(result.data.filePath)); assert.match(result.data.hint, /优先通过本链接/);
+  });
+  await test("dashboard records successful link use and ranks reusable notes", async () => {
+    const insights = await store.getDashboardInsights();
+    assert.ok(insights.summary.weekResolves >= 1);
+    assert.ok(insights.summary.weekUsedNotes >= 1);
+    assert.equal(insights.weekly[0].node.id, textId);
+    assert.match(insights.weekly[0].reason, /本周被读取/);
   });
   await test("text share resolves to body plus background", async () => {
     const created = await api("POST", "/api/shares", { nodeId: textId });
@@ -50,6 +72,22 @@ try {
     const result = await api("PATCH", `/api/nodes/${textId}`, { content: "周五全天不发布生产版本。" });
     assert.equal(result.data.status, "updated"); assert.equal(result.data.link, textLink);
     const resolved = await api("GET", textLink.replace(base, "")); assert.match(resolved.data.content, /周五全天/);
+  });
+  await test("PATCH updates the archived state and returns the complete node", async () => {
+    const result = await api("PATCH", `/api/nodes/${textId}`, { archived: true });
+    assert.equal(result.status, 200); assert.equal(result.ok, true); assert.equal(result.data.archived, true); assert.equal(result.data.id, textId); assert.ok(result.data.updated);
+    const listed = await api("GET", `/api/nodes?archived=true`); assert.ok(listed.data.some((node) => node.id === textId && node.archived));
+    await api("PATCH", `/api/nodes/${textId}`, { archived: false });
+  });
+  await test("pinned notes stay out of archive recommendations", async () => {
+    const stale = await store.createNode({ title: "待归档笔记", content: "不再使用的资料。" });
+    const future = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+    const before = await store.getDashboardInsights(future);
+    assert.ok(before.archiveCandidates.some((node) => node.id === stale.id));
+    const pinned = await store.updateNode(stale.id, { pinned: true });
+    assert.equal(pinned.pinned, true);
+    const after = await store.getDashboardInsights(future);
+    assert.equal(after.archiveCandidates.some((node) => node.id === stale.id), false);
   });
 
   await test("file share resolves to address, background, and current content", async () => {

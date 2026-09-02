@@ -3,7 +3,7 @@ import * as fsp from "fs/promises";
 import * as path from "path";
 import { randomBytes } from "crypto";
 import { isNodeFile, parseNode, serializeNode } from "./nodeFile";
-import { AgentNode, NodeSource, NodeType, Share, ShareTarget, normalizeTags, qualityWarnings } from "./types";
+import { AgentNode, NodeSource, NodeType, Share, ShareTarget, normalizeTags, qualityWarnings, shareTarget } from "./types";
 
 export class StoreError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -20,6 +20,7 @@ export interface CreateNodeInput {
   tags?: string[];
   source?: NodeSource;
   path?: string;
+  idempotencyKey?: string;
 }
 export interface UpdateNodeInput {
   title?: string;
@@ -28,6 +29,25 @@ export interface UpdateNodeInput {
   tags?: string[];
   path?: string;
   source?: NodeSource;
+  archived?: boolean;
+  pinned?: boolean;
+}
+
+export type InsightEventType = "node-created" | "node-updated" | "node-archived" | "node-restored" | "share-resolved";
+export interface InsightEvent {
+  at: string;
+  type: InsightEventType;
+  nodeId?: string;
+  shareId?: string;
+  targetKind?: ShareTarget["kind"];
+}
+export interface InsightNote { node: AgentNode; reads: number; lastRead?: string; score: number; reason: string }
+export interface DashboardInsights {
+  summary: { weekCreated: number; weekResolves: number; weekUsedNotes: number; monthResolves: number };
+  weekly: InsightNote[];
+  monthly: InsightNote[];
+  activities: InsightEvent[];
+  archiveCandidates: AgentNode[];
 }
 
 export type ShareResult =
@@ -49,6 +69,7 @@ export class VaultStore {
   readonly dataDir: string;
   private cache = new Map<string, { mtimeMs: number; node: AgentNode }>();
   private idToPath = new Map<string, string>();
+  private idempotentCreates = new Map<string, Promise<AgentNode>>();
 
   constructor(vaultRoot: string) {
     this.root = path.resolve(vaultRoot);
@@ -60,6 +81,8 @@ export class VaultStore {
     await Promise.all([fsp.mkdir(this.p("nodes"), { recursive: true }), fsp.mkdir(this.p("data"), { recursive: true })]);
     const shares = this.p("data", "shares.json");
     if (!fs.existsSync(shares)) await fsp.writeFile(shares, "[]", "utf8");
+    const events = this.p("data", "events.json");
+    if (!fs.existsSync(events)) await fsp.writeFile(events, "[]", "utf8");
   }
 
   private async markdownFiles(dir: string): Promise<string[]> {
@@ -151,13 +174,48 @@ export class VaultStore {
     this.idToPath.set(node.id, destination);
   }
 
-  async createNode(input: CreateNodeInput): Promise<AgentNode> {
+  private async readIdempotencyKeys(): Promise<Record<string, string>> {
+    try {
+      const value = JSON.parse(await fsp.readFile(this.p("data", "idempotency.json"), "utf8"));
+      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    } catch { return {}; }
+  }
+  private async writeIdempotencyKeys(keys: Record<string, string>): Promise<void> {
+    await fsp.writeFile(this.p("data", "idempotency.json"), JSON.stringify(keys, null, 2), "utf8");
+  }
+
+  async createNode(input: CreateNodeInput, idempotencyKey?: string): Promise<AgentNode> {
     if (!input.title?.trim()) throw new StoreError(400, "标题不能为空");
+    const key = idempotencyKey?.trim();
+    if (key) {
+      const active = this.idempotentCreates.get(key);
+      if (active) return active;
+      const operation = this.createNodeWithKey(input, key);
+      this.idempotentCreates.set(key, operation);
+      try { return await operation; } finally { this.idempotentCreates.delete(key); }
+    }
+    return this.createNodeWithKey(input);
+  }
+  private async createNodeWithKey(input: CreateNodeInput, idempotencyKey?: string): Promise<AgentNode> {
+    if (idempotencyKey) {
+      const keys = await this.readIdempotencyKeys();
+      const existingId = keys[idempotencyKey];
+      if (existingId) {
+        try { return await this.getNode(existingId); }
+        catch (error) { if (!(error instanceof StoreError) || error.statusCode !== 404) throw error; delete keys[idempotencyKey]; await this.writeIdempotencyKeys(keys); }
+      }
+    }
     const type = input.type ?? "snippet";
     if ((type === "file" || type === "folder") && !input.path?.trim()) throw new StoreError(400, `${type} 笔记需要文件地址`);
     const now = new Date().toISOString();
-    const node: AgentNode = { id: newId("n"), type, title: input.title.trim(), content: input.content ?? "", background: input.background?.trim() ?? "", tags: normalizeTags(input.tags), source: input.source ?? "agent", path: input.path?.trim() || undefined, created: now, updated: now, archived: false };
+    const node: AgentNode = { id: newId("n"), type, title: input.title.trim(), content: input.content ?? "", background: input.background?.trim() ?? "", tags: normalizeTags(input.tags), source: input.source ?? "agent", path: input.path?.trim() || undefined, created: now, updated: now, archived: false, pinned: false };
     await this.writeNode(node);
+    if (idempotencyKey) {
+      const keys = await this.readIdempotencyKeys();
+      keys[idempotencyKey] = node.id;
+      await this.writeIdempotencyKeys(keys);
+    }
+    await this.recordEvent({ type: "node-created", nodeId: node.id }).catch(() => undefined);
     return node;
   }
   async updateNode(id: string, patch: UpdateNodeInput): Promise<AgentNode> {
@@ -168,19 +226,33 @@ export class VaultStore {
     if (patch.tags !== undefined) node.tags = normalizeTags(patch.tags);
     if (patch.path !== undefined) node.path = patch.path || undefined;
     if (patch.source !== undefined) node.source = patch.source;
+    const archivedChanged = patch.archived !== undefined && patch.archived !== node.archived;
+    if (patch.archived !== undefined) node.archived = patch.archived;
+    if (patch.pinned !== undefined) node.pinned = patch.pinned;
     node.updated = new Date().toISOString();
     await this.writeNode(node);
+    await this.recordEvent({ type: archivedChanged ? (node.archived ? "node-archived" : "node-restored") : "node-updated", nodeId: node.id }).catch(() => undefined);
     return node;
   }
   async archiveNode(id: string, archived: boolean): Promise<AgentNode> {
     const node = await this.getNode(id);
     node.archived = archived;
     await this.writeNode(node);
+    await this.recordEvent({ type: archived ? "node-archived" : "node-restored", nodeId: node.id }).catch(() => undefined);
     return node;
+  }
+  async archiveNodes(ids: string[], archived: boolean): Promise<AgentNode[]> {
+    const changed: AgentNode[] = [];
+    for (const id of ids) changed.push(await this.archiveNode(id, archived));
+    return changed;
   }
 
   private async readShares(): Promise<Share[]> {
-    try { return JSON.parse(await fsp.readFile(this.p("data", "shares.json"), "utf8")); } catch { return []; }
+    try {
+      const shares = JSON.parse(await fsp.readFile(this.p("data", "shares.json"), "utf8"));
+      if (!Array.isArray(shares)) return [];
+      return shares.map((share) => ({ ...share, target: shareTarget(share as Share) }));
+    } catch { return []; }
   }
   private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
   async listShares(): Promise<Share[]> { return this.readShares(); }
@@ -217,9 +289,68 @@ export class VaultStore {
   async resolveShare(id: string): Promise<ShareResult> {
     const share = (await this.readShares()).find((candidate) => candidate.id === id);
     if (!share) throw new StoreError(404, `分享不存在: ${id}`);
-    if (share.target.kind === "node") return this.resolveNodeShare(share, await this.getNode(share.target.nodeId));
-    const { rel, abs } = this.vaultPath(share.target.path);
-    return share.target.kind === "file" ? this.resolveFileShare(share, rel, abs) : this.resolveFolderShare(share, rel, abs);
+    let result: ShareResult;
+    if (share.target.kind === "node") {
+      result = await this.resolveNodeShare(share, await this.getNode(share.target.nodeId));
+    } else {
+      const target = share.target;
+      const { rel, abs } = this.vaultPath(target.path);
+      result = target.kind === "file" ? await this.resolveFileShare(share, rel, abs) : await this.resolveFolderShare(share, rel, abs);
+    }
+    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, targetKind: share.target.kind }).catch(() => undefined);
+    return result;
+  }
+
+  private async readEvents(): Promise<InsightEvent[]> {
+    try {
+      const events = JSON.parse(await fsp.readFile(this.p("data", "events.json"), "utf8"));
+      return Array.isArray(events) ? events.filter((event): event is InsightEvent => !!event && typeof event.at === "string" && typeof event.type === "string") : [];
+    } catch { return []; }
+  }
+  private async recordEvent(event: Omit<InsightEvent, "at">): Promise<void> {
+    const events = await this.readEvents();
+    events.push({ ...event, at: new Date().toISOString() });
+    await fsp.writeFile(this.p("data", "events.json"), JSON.stringify(events, null, 2), "utf8");
+  }
+  async getDashboardInsights(now = new Date()): Promise<DashboardInsights> {
+    const nodes = await this.listNodes();
+    const events = await this.readEvents();
+    const weekStart = new Date(now); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const archiveBefore = new Date(now); archiveBefore.setDate(archiveBefore.getDate() - 30);
+    const inRange = (at: string, start: Date) => new Date(at) >= start && new Date(at) <= now;
+    const resolveEvents = events.filter((event) => event.type === "share-resolved");
+    const buildRanking = (start: Date, monthly: boolean): InsightNote[] => {
+      const usage = new Map<string, InsightEvent[]>();
+      for (const event of resolveEvents.filter((event) => event.nodeId && inRange(event.at, start))) {
+        const items = usage.get(event.nodeId!) ?? []; items.push(event); usage.set(event.nodeId!, items);
+      }
+      return nodes.filter((node) => !node.archived && usage.has(node.id)).map((node) => {
+        const reads = usage.get(node.id)!;
+        const distinctWeeks = new Set(reads.map((event) => {
+          const date = new Date(event.at); const monday = new Date(date); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); return monday.toISOString().slice(0, 10);
+        })).size;
+        const updated = inRange(node.updated, start);
+        const score = monthly ? distinctWeeks * 1000 + reads.length * 10 + (updated ? 1 : 0) : reads.length * 10 + (updated ? 1 : 0);
+        const lastRead = reads.map((event) => event.at).sort().at(-1);
+        const reason = monthly ? `本月被读取 ${reads.length} 次，跨 ${distinctWeeks} 周复用` : `本周被读取 ${reads.length} 次${updated ? "，并在本周更新" : ""}`;
+        return { node, reads: reads.length, lastRead, score, reason };
+      }).sort((a, b) => b.score - a.score || (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).slice(0, 3);
+    };
+    const usedNodeIds = new Set(resolveEvents.filter((event) => event.nodeId && inRange(event.at, weekStart)).map((event) => event.nodeId));
+    const everUsed = new Set(resolveEvents.flatMap((event) => event.nodeId ? [event.nodeId] : []));
+    return {
+      summary: {
+        weekCreated: nodes.filter((node) => inRange(node.created, weekStart)).length,
+        weekResolves: resolveEvents.filter((event) => inRange(event.at, weekStart)).length,
+        weekUsedNotes: usedNodeIds.size,
+        monthResolves: resolveEvents.filter((event) => inRange(event.at, monthStart)).length,
+      },
+      weekly: buildRanking(weekStart, false),
+      monthly: buildRanking(monthStart, true),
+      activities: events.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
+      archiveCandidates: nodes.filter((node) => !node.archived && !node.pinned && new Date(node.created) <= archiveBefore && new Date(node.updated) <= archiveBefore && !everUsed.has(node.id)).sort((a, b) => a.updated.localeCompare(b.updated)),
+    };
   }
   private async resolveNodeShare(share: Share, node: AgentNode): Promise<ShareResult> {
     if (node.type === "snippet") {

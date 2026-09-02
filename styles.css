@@ -18,6 +18,149 @@
   gap: 8px;
 }
 
+.agentnote-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agentnote-insight-overview,
+.agentnote-insight-section,
+.agentnote-archive-section {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--background-secondary);
+}
+
+.agentnote-insight-overview h4,
+.agentnote-insight-section h4,
+.agentnote-archive-section h4 {
+  margin: 0;
+}
+
+.agentnote-insight-overview p {
+  margin: 6px 0 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.agentnote-insight-stats,
+.agentnote-insight-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.agentnote-insight-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.agentnote-insight-stats > div {
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--background-primary);
+}
+
+.agentnote-insight-stats strong,
+.agentnote-insight-stats span {
+  display: block;
+}
+
+.agentnote-insight-stats strong {
+  font-size: 1.25em;
+  color: var(--interactive-accent);
+}
+
+.agentnote-insight-stats span,
+.agentnote-value-card small,
+.agentnote-archive-card span,
+.agentnote-activity-list time {
+  color: var(--text-muted);
+  font-size: 0.78em;
+}
+
+.agentnote-insight-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agentnote-insight-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agentnote-insight-heading,
+.agentnote-value-title,
+.agentnote-archive-card,
+.agentnote-undo,
+.agentnote-activity-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agentnote-value-cards,
+.agentnote-archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.agentnote-value-card,
+.agentnote-archive-card {
+  padding: 9px;
+  border-radius: 7px;
+  background: var(--background-primary);
+}
+
+.agentnote-value-card p {
+  margin: 6px 0 3px;
+  color: var(--text-muted);
+  font-size: 0.84em;
+}
+
+.agentnote-pin-badge {
+  color: var(--text-accent);
+  font-size: 0.75em;
+}
+
+.agentnote-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.84em;
+}
+
+.agentnote-archive-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.agentnote-archive-card {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.agentnote-archive-card span {
+  flex-basis: 100%;
+}
+
+.agentnote-undo {
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--background-primary-alt);
+  font-size: 0.84em;
+}
+
+@media (max-width: 520px) {
+  .agentnote-insight-grid { grid-template-columns: 1fr; }
+}
+
 .agentnote-section p,
 .agentnote-node-meta {
   margin: 0;
