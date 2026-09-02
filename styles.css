@@ -1,10 +1,10 @@
 /* agentNote 接入台 */
 
 .agentnote-panel {
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .agentnote-panel h3,
@@ -16,62 +16,94 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
 }
 
 .agentnote-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.agentnote-insight-overview,
-.agentnote-insight-section,
-.agentnote-archive-section {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 10px;
+.agentnote-home-activity {
   padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
   background: var(--background-secondary);
 }
 
-.agentnote-insight-overview h4,
-.agentnote-insight-section h4,
+.agentnote-dashboard-hero,
+.agentnote-value-section,
+.agentnote-activity-section,
+.agentnote-archive-section {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+
+.agentnote-dashboard-hero {
+  padding: 16px;
+  background: linear-gradient(135deg, var(--background-secondary), var(--background-primary-alt));
+}
+
+.agentnote-dashboard-hero h4,
+.agentnote-value-section h4,
+.agentnote-activity-section h4,
 .agentnote-archive-section h4 {
   margin: 0;
 }
 
-.agentnote-insight-overview p {
+.agentnote-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-accent);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.agentnote-dashboard-hero h4 {
+  font-size: 1.15em;
+  letter-spacing: -0.015em;
+}
+
+.agentnote-dashboard-hero p {
   margin: 6px 0 12px;
   color: var(--text-muted);
   line-height: 1.5;
 }
 
-.agentnote-insight-stats,
-.agentnote-insight-grid {
+.agentnote-metric-strip,
+.agentnote-dashboard-body,
+.agentnote-ranking-grid {
   display: grid;
   gap: 8px;
 }
 
-.agentnote-insight-stats {
+.agentnote-metric-strip {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.agentnote-insight-stats > div {
-  padding: 8px;
+.agentnote-metric {
+  padding: 9px;
   border-radius: 7px;
   background: var(--background-primary);
 }
 
-.agentnote-insight-stats strong,
-.agentnote-insight-stats span {
+.agentnote-metric strong,
+.agentnote-metric span {
   display: block;
 }
 
-.agentnote-insight-stats strong {
-  font-size: 1.25em;
+.agentnote-metric strong {
+  font-size: 1.3em;
   color: var(--interactive-accent);
 }
 
-.agentnote-insight-stats span,
+.agentnote-metric span,
 .agentnote-value-card small,
 .agentnote-archive-card span,
 .agentnote-activity-list time {
@@ -79,17 +111,22 @@
   font-size: 0.78em;
 }
 
-.agentnote-insight-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.agentnote-dashboard-body {
+  grid-template-columns: minmax(0, 1.45fr) minmax(180px, 0.85fr);
+  align-items: start;
 }
 
-.agentnote-insight-section {
+.agentnote-value-section,
+.agentnote-activity-section,
+.agentnote-archive-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 12px;
 }
 
-.agentnote-insight-heading,
+.agentnote-section-heading,
+.agentnote-value-heading,
 .agentnote-value-title,
 .agentnote-archive-card,
 .agentnote-undo,
@@ -98,6 +135,24 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.agentnote-section-heading span {
+  color: var(--text-muted);
+  font-size: 0.78em;
+}
+
+.agentnote-ranking-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agentnote-ranking-column + .agentnote-ranking-column {
+  border-left: 1px solid var(--background-modifier-border);
+  padding-left: 10px;
+}
+
+.agentnote-value-heading h4 {
+  font-size: 0.88em;
 }
 
 .agentnote-value-cards,
@@ -112,6 +167,12 @@
   padding: 9px;
   border-radius: 7px;
   background: var(--background-primary);
+  border: 1px solid transparent;
+}
+
+.agentnote-value-card:hover,
+.agentnote-archive-card:hover {
+  border-color: var(--background-modifier-border-hover);
 }
 
 .agentnote-value-card p {
@@ -133,6 +194,22 @@
   padding: 0;
   list-style: none;
   font-size: 0.84em;
+}
+
+.agentnote-activity-list li {
+  align-items: flex-start;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.agentnote-activity-list li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.agentnote-activity-list time {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .agentnote-archive-section {
@@ -157,8 +234,239 @@
   font-size: 0.84em;
 }
 
+.agentnote-empty-copy {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84em;
+  line-height: 1.5;
+}
+
+.modal.agentnote-insights-modal {
+  width: min(1040px, calc(100vw - 56px));
+  max-width: none;
+  max-height: 86vh;
+}
+
+.agentnote-insights-modal .modal-content {
+  width: auto;
+  max-height: calc(86vh - 40px);
+  overflow: auto;
+  padding: 30px 34px 34px;
+}
+
+.agentnote-modal-header {
+  margin: 4px 0 22px;
+}
+
+.agentnote-modal-header h2 {
+  margin: 0;
+}
+
+.agentnote-insight-tabs,
+.agentnote-timeline-filters {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  overflow-x: auto;
+}
+
+.agentnote-insight-tabs button,
+.agentnote-timeline-filters button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.agentnote-insight-tabs button.is-active,
+.agentnote-timeline-filters button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.agentnote-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+}
+
+.agentnote-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+
+.agentnote-detail-metrics > div {
+  padding: 15px 18px;
+  text-align: center;
+}
+
+.agentnote-detail-metrics > div + div {
+  border-left: 1px solid var(--background-modifier-border);
+}
+
+.agentnote-detail-section {
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.agentnote-detail-metrics strong,
+.agentnote-detail-metrics span {
+  display: block;
+}
+
+.agentnote-detail-metrics strong {
+  color: var(--text-normal);
+  font-size: 1.3em;
+  font-weight: 500;
+}
+
+.agentnote-detail-metrics span {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
+
+.agentnote-detail-section h3,
+.agentnote-modal-body > .agentnote-section-heading h3 {
+  margin: 0 0 10px;
+  font-size: 0.94em;
+}
+
+.agentnote-trend {
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  height: 116px;
+}
+
+.agentnote-heatmap {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.agentnote-heatmap-cell {
+  aspect-ratio: 1;
+  min-height: 16px;
+  border-radius: 3px;
+  background: var(--background-modifier-hover);
+}
+
+.agentnote-heatmap-cell.is-used {
+  background: var(--interactive-accent);
+}
+
+.agentnote-trend-item {
+  display: flex;
+  flex: 1 1 0;
+  height: 100%;
+  flex-direction: column;
+  justify-content: end;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.agentnote-trend-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--interactive-accent);
+  opacity: 0.85;
+}
+
+.agentnote-trend-item span {
+  color: var(--text-muted);
+  font-size: 0.68em;
+}
+
+.agentnote-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agentnote-timeline li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: 0.88em;
+}
+
+.agentnote-timeline time {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+
+.agentnote-timeline li > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.agentnote-timeline li > div span,
+.agentnote-agent-insight small {
+  color: var(--text-muted);
+  font-size: 0.8em;
+  overflow-wrap: anywhere;
+}
+
+.agentnote-agent-insights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.agentnote-agent-insight {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.agentnote-agent-insight-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
+
+.agentnote-section > h4 {
+  font-size: 0.9em;
+}
+
+.agentnote-agent-card {
+  background: var(--background-primary);
+  border-color: var(--background-modifier-border);
+}
+
 @media (max-width: 520px) {
-  .agentnote-insight-grid { grid-template-columns: 1fr; }
+  .agentnote-dashboard-body,
+  .agentnote-ranking-grid { grid-template-columns: 1fr; }
+  .agentnote-ranking-column + .agentnote-ranking-column { border-left: 0; border-top: 1px solid var(--background-modifier-border); padding: 10px 0 0; }
+  .modal.agentnote-insights-modal { width: calc(100vw - 24px); }
+  .agentnote-insights-modal .modal-content { padding: 20px; }
+  .agentnote-detail-metrics > div { padding: 12px 6px; }
+  .agentnote-agent-insights { grid-template-columns: 1fr; }
 }
 
 .agentnote-section p,

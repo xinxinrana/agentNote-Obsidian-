@@ -17,6 +17,7 @@ export default class AgentNotePlugin extends Plugin {
   settings: AgentNoteSettings = DEFAULT_SETTINGS;
   store!: VaultStore;
   server: AgentServer | null = null;
+  private panelRefreshTimer: number | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -38,22 +39,34 @@ export default class AgentNotePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
+    this.registerEvent(this.app.vault.on("create", (file) => this.refreshForAgentNotePath(file.path)));
+    this.registerEvent(this.app.vault.on("modify", (file) => this.refreshForAgentNotePath(file.path)));
+    this.registerEvent(this.app.vault.on("delete", (file) => this.refreshForAgentNotePath(file.path)));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => { this.refreshForAgentNotePath(oldPath); this.refreshForAgentNotePath(file.path); }));
     if (this.settings.autostartServer) await this.startServer(true);
   }
-  async onunload(): Promise<void> { this.app.workspace.detachLeavesOfType(AGENTNOTE_VIEW); await this.stopServer(true); }
+  async onunload(): Promise<void> { if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer); this.app.workspace.detachLeavesOfType(AGENTNOTE_VIEW); await this.stopServer(true); }
   async activatePanel(): Promise<void> {
     let leaf = this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)[0];
     if (!leaf) { leaf = this.app.workspace.getRightLeaf(false)!; await leaf.setViewState({ type: AGENTNOTE_VIEW, active: true }); }
     this.app.workspace.revealLeaf(leaf);
   }
   refreshPanels(): void { for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) if (leaf.view instanceof AgentNoteView) void leaf.view.refresh(); }
+  schedulePanelRefresh(): void {
+    if (this.panelRefreshTimer !== null) return;
+    this.panelRefreshTimer = window.setTimeout(() => { this.panelRefreshTimer = null; this.refreshPanels(); }, 500);
+  }
+  private refreshForAgentNotePath(filePath: string): void {
+    const normalized = filePath.replace(/\\/g, "/");
+    if (normalized === "agentNote" || normalized.startsWith("agentNote/nodes/") || normalized.startsWith("agentNote/data/")) this.schedulePanelRefresh();
+  }
   detectedAgents(): DetectedAgent[] { return detectAgents(os.homedir()); }
   profile(agentId: string): AgentProfile { return this.settings.agents[agentId] ?? { enabled: true, instructions: "" }; }
   async saveProfile(agentId: string, profile: AgentProfile): Promise<void> { this.settings.agents[agentId] = profile; await this.saveSettings(); }
   async installAgent(agent: DetectedAgent): Promise<void> {
     const profile = this.profile(agent.id);
     try {
-      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions });
+      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentName: agent.name });
       await this.saveProfile(agent.id, { ...profile, enabled: true });
       new Notice(`${agent.name} 已接入 agentNote；重启 agent 后生效。`);
     } catch (error) {
@@ -73,7 +86,7 @@ export default class AgentNotePlugin extends Plugin {
   }
   async startServer(quiet = false): Promise<void> {
     if (this.server) return;
-    this.server = new AgentServer(this.store, { port: this.settings.port });
+    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: () => this.schedulePanelRefresh() });
     try { await this.server.start(); if (!quiet) new Notice(`agentNote 服务已启动：127.0.0.1:${this.server.port}`); }
     catch (error) { this.server = null; new Notice(`agentNote 服务启动失败：${(error as Error).message}`); }
     this.refreshPanels();

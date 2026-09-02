@@ -10,13 +10,14 @@ const { VaultStore, AgentServer, detectAgents, installSkill, renderSkillMd, rend
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const store = new VaultStore(vault);
-const server = new AgentServer(store, { port: 0 });
+let activityNotifications = 0;
+const server = new AgentServer(store, { port: 0, onActivity: () => { activityNotifications++; } });
 const port = await server.start();
 const base = `http://127.0.0.1:${port}`;
 let passed = 0;
 
-async function api(method, pathname, body) {
-  const response = await fetch(base + pathname, { method, headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+async function api(method, pathname, body, extraHeaders = {}) {
+  const response = await fetch(base + pathname, { method, headers: { ...(body ? { "content-type": "application/json" } : {}), ...extraHeaders }, body: body ? JSON.stringify(body) : undefined });
   const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
   return { status: response.status, ...data };
 }
@@ -30,9 +31,10 @@ try {
 
   let textId, textLink;
   await test("agent writes a normal note from a natural-language intent", async () => {
-    const result = await api("POST", "/api/nodes", { title: "发布窗口", content: "周五晚间不发布生产版本。", background: "2026 年发布节奏约定，供部署任务参考。", source: "agent" });
+    const result = await api("POST", "/api/nodes", { title: "发布窗口", content: "周五晚间不发布生产版本。", background: "2026 年发布节奏约定，供部署任务参考。", source: "agent" }, { "x-agentnote-agent-name": "Codex", "x-agentnote-session-title": encodeURIComponent("发布流程验证") });
     assert.equal(result.status, 201); assert.equal(result.data.type, "snippet"); assert.equal(result.data.background.includes("发布节奏"), true); textId = result.data.id;
     assert.equal(result.data.status, "created");
+    assert.equal(activityNotifications, 1);
     assert.ok(result.data.link.startsWith(base)); assert.match(result.data.link, /\/api\/shares\/s-x-[0-9a-f]+\/resolve$/);
     textLink = result.data.link;
   });
@@ -52,7 +54,7 @@ try {
     const nodes = await api("GET", "/api/nodes?q=幂等写入"); assert.equal(nodes.data.length, 1);
   });
   await test("the write response link is the note's permanent address", async () => {
-    const result = await api("GET", textLink.replace(base, ""));
+    const result = await api("GET", textLink.replace(base, ""), undefined, { "x-agentnote-agent-name": "Codex", "x-agentnote-session-title": encodeURIComponent("发布流程验证") });
     assert.equal(result.data.kind, "text"); assert.equal(result.data.content, "周五晚间不发布生产版本。");
     assert.ok(path.isAbsolute(result.data.filePath)); assert.match(result.data.hint, /优先通过本链接/);
   });
@@ -62,6 +64,18 @@ try {
     assert.ok(insights.summary.weekUsedNotes >= 1);
     assert.equal(insights.weekly[0].node.id, textId);
     assert.match(insights.weekly[0].reason, /本周被读取/);
+    assert.equal(insights.weeklyTrend.length, 7);
+    assert.ok(insights.timeline.length >= 2);
+    assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.name, "Codex");
+    assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.sessionTitle, "发布流程验证");
+  });
+  await test("workstation insight APIs expose agent, document, and activity attribution", async () => {
+    const activity = await api("GET", "/api/insights/activity?agent=Codex");
+    assert.equal(activity.ok, true); assert.ok(activity.data.every((event) => event.actor?.name === "Codex"));
+    const agents = await api("GET", "/api/insights/agents");
+    assert.equal(agents.data.find((agent) => agent.name === "Codex").uses, 1);
+    const documents = await api("GET", "/api/insights/documents");
+    assert.equal(documents.data.find((document) => document.nodeId === textId).title, "发布窗口");
   });
   await test("text share resolves to body plus background", async () => {
     const created = await api("POST", "/api/shares", { nodeId: textId });
@@ -113,6 +127,14 @@ try {
     const result = await api("GET", `/api/shares/${created.data.id}/resolve`);
     assert.equal(result.data.kind, "file"); assert.equal(result.data.address, "plain.md"); assert.equal(result.data.background, "");
   });
+  await test("legacy activity records recover their document title from the share", async () => {
+    const created = await api("POST", "/api/shares", { path: "plain.md" });
+    const eventsPath = path.join(vault, "agentNote", "data", "events.json");
+    const events = JSON.parse(await fsp.readFile(eventsPath, "utf8"));
+    events.push({ type: "share-resolved", shareId: created.data.id, targetKind: "file", at: new Date().toISOString() });
+    await fsp.writeFile(eventsPath, JSON.stringify(events));
+    assert.equal((await store.listActivity()).find((event) => event.shareId === created.data.id)?.title, "plain");
+  });
 
   await test("archive is a folder move and does not break an existing share", async () => {
     const share = await api("POST", "/api/shares", { nodeId: textId });
@@ -124,8 +146,8 @@ try {
   });
 
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
-    const prompt = renderSkillMd({ port, instructions: "使用中文。" });
-    assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.doesNotMatch(prompt, /scenarios/);
+    const prompt = renderSkillMd({ port, instructions: "使用中文。", agentName: "Codex" });
+    assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
     const [codex] = detectAgents(home); installSkill(codex.skillDir, { port }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); await fsp.rm(home, { recursive: true, force: true });
   });
