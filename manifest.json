@@ -1,7 +1,7 @@
 {
   "id": "agentnote",
   "name": "agentNote",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "minAppVersion": "1.8.0",
   "description": "Share local notes and files with AI agents through a private HTTP service.",
   "author": "Evan",

@@ -1,6 +1,6 @@
 {
   "name": "agentnote-obsidian",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "agentNote: a local note and file relay for AI agents, as an Obsidian plugin",
   "author": "Evan",
   "private": true,
