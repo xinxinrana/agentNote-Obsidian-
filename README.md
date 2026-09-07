@@ -1,83 +1,89 @@
-# agentNote × Obsidian
+# agentNote
 
-让本地笔记和文件直接流向 agent。
+Share local Obsidian notes and files with AI agents through a private, local-only HTTP service.
 
-agentNote 是一个 Obsidian 插件，也是本地第二大脑的知识流动层。它把 vault 中由用户选定的笔记、文件、文件夹或一段选中文本变成只在本机可访问的 HTTP 地址。把地址发给 agent，它就能读取当前内容；不再需要反复复制文件路径、上传附件或粘贴正文。
+agentNote is an Obsidian desktop plugin that connects your vault with agents such as Claude Code, Codex, and WorkBuddy. You choose what an agent can read, and the plugin creates a live local URL that always resolves to the current content.
 
-同时，agentNote 让已接入的 agent 理解“写到 Obsidian”“记到笔记里”这类自然语言，并将内容直接写入你的本地笔记库。
+## Features
 
-它不会让 agent 无差别阅读整个 vault。你决定此刻让哪个 agent 关注哪份资料，agentNote 负责把这块内容和它的背景准确交接过去。
+- Share a note, file, folder, or selected text with an agent.
+- Include background context so the agent understands what the shared material is and why it matters.
+- Let an agent create and update Markdown notes in your vault through natural language.
+- Keep share links live: updated files resolve to their latest content.
+- Show Claude Code, Codex, and WorkBuddy in the connection panel even when they are not installed.
+- Open the official website for an agent that is not detected locally.
+- Track sharing activity and manage archived agentNote memories.
 
-## 适合谁
+## Installation
 
-- 经常把本地资料交给 Claude Code、Codex 或其他 agent 使用的人。
-- 希望笔记留在自己的 Obsidian vault，而不是散落在聊天记录和临时附件里的人。
-- 希望 agent 能读写笔记，但不想记 API、路径或重复说明上下文的人。
+### From the Obsidian Community Plugins directory
 
-## 它能做什么
+1. Open **Settings → Community plugins** in Obsidian.
+2. Search for `agentNote`.
+3. Install and enable the plugin.
+4. Open the **agentNote connection panel** and confirm that the local service is running.
 
-### 1. 把本地内容分享给 agent
+### Manual installation
 
-在文件、文件夹或选中文本上使用“分享给 agent”，agentNote 会把地址复制到剪贴板。把这个地址发给 agent 即可。
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest GitHub release](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest).
+2. Create `.obsidian/plugins/agentnote/` inside your vault.
+3. Copy the three files into that folder.
+4. Restart Obsidian or reload the plugin from **Settings → Community plugins**.
 
-这个地址是活引用：原文件更新后，agent 下次读取同一个地址时拿到的就是最新内容。
+## Basic usage
 
-| 分享对象 | agent 会获得 |
-|---|---|
-| 一段文本 | 正文和背景 |
-| 一个文件 | 文件地址、背景和当前内容 |
-| 一个文件夹 | 文件夹地址、背景和第一层文件名称 |
+### Share content with an agent
 
-### 2. 让 agent 直接写入 Obsidian
+- Right-click a file or folder and choose **agentNote: Share with agent**.
+- Select text in the editor and use **agentNote: Share selected content**.
+- Send the copied local URL to your agent.
 
-在接入台为 agent 安装提示词后，可以直接对它说：
+The response includes the current content, its background, the local file path, and instructions for reading or editing the original file.
 
-> 把这次会议结论写到 Obsidian。
+### Write notes from an agent
 
-> 记到 agent 笔记里，标题叫“发布前检查”。
+After connecting an agent, say one of the following:
 
-agent 会把标题、正文、背景和标签整理成笔记，写回当前 vault。你不需要提供文件路径或请求参数。
+- “Write this to Obsidian.”
+- “Save this to my agent notes.”
+- “Remember this in my notes.”
 
-### 3. 管理接入的 agent
+The agentNote skill asks the agent to create a title, body, background, and tags, then write the result to the vault. The agent receives a permanent local link that can be used for later updates.
 
-接入台始终展示 Claude Code、Codex 和 WorkBuddy。未检测到安装时，可点击“前往官网安装”在浏览器中打开官网；已检测到安装时提供：
+### Connect an agent
 
-- 接入或更新 agentNote 提示词
-- 为不同 agent 增加专属要求
-- 清楚地移除 agentNote 接入，不影响该 agent 的其它配置
-- 为任何未识别的 agent 复制一段通用安装任务
+Open the agentNote connection panel. Detected agents can be connected or updated directly. If an agent is not installed, use **Open official website** to install it first. You can also use **Connect any agent manually** for an agent that is not listed.
 
-### 4. 维护常用内容
+## Local service and privacy
 
-笔记可以归档，归档只是移入 vault 内的归档文件夹，不是删除。已归档内容仍可以重新分享或移回常用区。
+- The service listens on `127.0.0.1` by default, usually at `http://127.0.0.1:27182`.
+- It is available only while Obsidian is running.
+- Vault contents are not uploaded to agentNote's servers.
+- There is no account, cloud sync, telemetry service, or public sharing layer.
+- The plugin uses local filesystem access and the system clipboard for its sharing and agent integration features.
+- This is a desktop-only plugin because it uses Node.js, Electron, and a local HTTP server.
 
-## 安装
+## Documentation
 
-### 从 GitHub 下载
+- [中文功能与使用说明](docs/功能与使用.md)
+- [核心产品设计](docs/product-design.md)
+- [官方社区市场上架流程](docs/官方社区市场上架流程.md)
 
-前往 [agentNote GitHub 仓库](https://github.com/xinxinrana/agentNote-Obsidian-)：
+## Development
 
-1. 若仓库已提供压缩包，在 [Releases 页面](https://github.com/xinxinrana/agentNote-Obsidian-/releases) 下载最新版本；否则从仓库源码构建。
-2. 解压后，把 `main.js`、`manifest.json`、`styles.css` 放入：
-   ```text
-   <你的 vault>/.obsidian/plugins/agentnote/
-   ```
-3. 重启 Obsidian，或在“第三方插件”中重新加载 agentNote。
-4. 打开侧边栏的 agentNote 接入台，确认本地服务正在运行。
-5. 在“接入 agent”中选择你的 agent，点击“接入 agentNote”。接入后重启对应 agent。
+```powershell
+npm install
+npm run typecheck
+npm run build
+node test/e2e.mjs
+```
 
-### 更新
+The build produces the Obsidian plugin bundle in `main.js` and the Node-compatible core test bundle in `test/core-bundle.cjs`.
 
-在 Obsidian 设置 → agentNote 中点击“检查更新”。插件会从 GitHub Releases 的最新构建产物中判断是否有新版本；有更新时点击“更新到 vX.Y.Z”，下载完成后插件自动重载，无需手动替换文件。
+## License
 
-## 本地与隐私
+agentNote is released under the [MIT License](LICENSE).
 
-- 服务默认地址为 `http://127.0.0.1:27182`，只监听本机。
-- 不上传 vault 内容，不提供账号、云同步或公网分享。
-- Obsidian 关闭时，本地服务会停止；你的原始文件仍留在 vault 中。
+## Author
 
-## 作者
-
-Evan · [github.com/xinxinrana](https://github.com/xinxinrana)
-
-更多操作说明见 [功能与使用](docs/功能与使用.md)。产品原则见 [核心产品设计](docs/product-design.md)。
+Evan · [GitHub](https://github.com/xinxinrana)
