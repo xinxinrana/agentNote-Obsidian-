@@ -53,7 +53,7 @@ export default class AgentNotePlugin extends Plugin {
   async activatePanel(): Promise<void> {
     let leaf = this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)[0];
     if (!leaf) { leaf = this.app.workspace.getRightLeaf(false)!; await leaf.setViewState({ type: AGENTNOTE_VIEW, active: true }); }
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
   refreshPanels(): void { for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) if (leaf.view instanceof AgentNoteView) void leaf.view.refresh(); }
   schedulePanelRefresh(): void {
@@ -166,7 +166,7 @@ class CreateNoteModal extends Modal {
 class AgentNoteSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app, plugin); }
   display(): void {
-    this.containerEl.empty(); new Setting(this.containerEl).setName("agentNote").setHeading();
+    this.containerEl.empty(); new Setting(this.containerEl).setName("插件设置").setHeading();
     new Setting(this.containerEl).setName("版本与更新").setHeading();
     const update = new Setting(this.containerEl)
       .setName(`当前版本 v${this.plugin.manifest.version} · 作者 Evan`)

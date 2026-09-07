@@ -229,10 +229,13 @@ class RemoveAgentModal extends Modal {
     this.contentEl.createEl("p", { text: "这会移除 agentNote 的长期提示词；不会删除该 agent 的其他 skill、配置或对话。" });
     this.contentEl.createEl("code", { cls: "agentnote-skill-path", text: `${this.agent.skillDir}/SKILL.md` });
     new Setting(this.contentEl).addButton((button) => button.setButtonText("取消").onClick(() => this.close()))
-      .addButton((button) => button.setButtonText("确认移除").setDestructive().onClick(async () => {
-        await this.plugin.disableAgent(this.agent);
-        await this.done(); this.close();
-      }));
+      .addButton((button) => {
+        button.buttonEl.addClass("mod-warning");
+        button.setButtonText("确认移除").onClick(async () => {
+          await this.plugin.disableAgent(this.agent);
+          await this.done(); this.close();
+        });
+      });
   }
 }
 

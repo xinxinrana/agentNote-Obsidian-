@@ -319,7 +319,7 @@ export class VaultStore {
     try {
       const events: unknown = JSON.parse(await fsp.readFile(this.p("data", "events.json"), "utf8")) as unknown;
       if (!Array.isArray(events)) return [];
-      const valid = events.filter((event): event is InsightEvent => !!event && typeof event.at === "string" && typeof event.type === "string");
+      const valid = events.filter((event: unknown): event is InsightEvent => isRecord(event) && typeof event.at === "string" && typeof event.type === "string");
       const shares = new Map((await this.readShares()).map((share) => [share.id, share]));
       return Promise.all(valid.map(async (event) => {
         if (event.title || !event.shareId) return event;
