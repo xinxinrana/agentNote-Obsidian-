@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 
 const prod = process.argv.includes("--production");
 const watch = process.argv.includes("--watch");
@@ -19,7 +19,7 @@ const external = [
   "@lezer/common",
   "@lezer/highlight",
   "@lezer/lr",
-  ...builtins,
+  ...builtinModules,
 ];
 
 /** Plugin bundle (Obsidian entry). */
@@ -44,7 +44,7 @@ const pluginConfig = {
 const coreConfig = {
   entryPoints: ["src/core/index.ts"],
   bundle: true,
-  external: [...builtins],
+  external: [...builtinModules],
   format: "cjs",
   platform: "node",
   target: "node18",

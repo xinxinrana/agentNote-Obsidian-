@@ -31,6 +31,10 @@ import { AgentNode, NodeSource, NodeType } from "./types";
 
 const FM_MARKER = "agentnote";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 /** Facts that live outside the file content (file name + stat + location). */
 export interface NodeMeta {
   /** File name without extension — this IS the node title. */
@@ -65,8 +69,8 @@ export function isNodeFile(raw: string): boolean {
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(raw);
   if (!m) return false;
   try {
-    const data = parseYaml(m[1]);
-    return !!data && typeof data === "object" && data[FM_MARKER] === true;
+    const data: unknown = parseYaml(m[1]) as unknown;
+    return isRecord(data) && data[FM_MARKER] === true;
   } catch {
     return false;
   }

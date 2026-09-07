@@ -74,6 +74,10 @@ function safeFileBase(title: string, fallback: string): string {
   return title.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().replace(/[. ]+$/, "").slice(0, 80) || fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 export class VaultStore {
   readonly root: string;
   readonly dataDir: string;
@@ -186,8 +190,8 @@ export class VaultStore {
 
   private async readIdempotencyKeys(): Promise<Record<string, string>> {
     try {
-      const value = JSON.parse(await fsp.readFile(this.p("data", "idempotency.json"), "utf8"));
-      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+      const value: unknown = JSON.parse(await fsp.readFile(this.p("data", "idempotency.json"), "utf8")) as unknown;
+      return isRecord(value) && Object.values(value).every((item) => typeof item === "string") ? value as Record<string, string> : {};
     } catch { return {}; }
   }
   private async writeIdempotencyKeys(keys: Record<string, string>): Promise<void> {
@@ -259,9 +263,9 @@ export class VaultStore {
 
   private async readShares(): Promise<Share[]> {
     try {
-      const shares = JSON.parse(await fsp.readFile(this.p("data", "shares.json"), "utf8"));
+      const shares: unknown = JSON.parse(await fsp.readFile(this.p("data", "shares.json"), "utf8")) as unknown;
       if (!Array.isArray(shares)) return [];
-      return shares.map((share) => ({ ...share, target: shareTarget(share as Share) }));
+      return shares.filter(isRecord).map((share) => ({ ...share, target: shareTarget(share as unknown as Share) } as unknown as Share));
     } catch { return []; }
   }
   private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
@@ -313,7 +317,7 @@ export class VaultStore {
 
   private async readEvents(): Promise<InsightEvent[]> {
     try {
-      const events = JSON.parse(await fsp.readFile(this.p("data", "events.json"), "utf8"));
+      const events: unknown = JSON.parse(await fsp.readFile(this.p("data", "events.json"), "utf8")) as unknown;
       if (!Array.isArray(events)) return [];
       const valid = events.filter((event): event is InsightEvent => !!event && typeof event.at === "string" && typeof event.type === "string");
       const shares = new Map((await this.readShares()).map((share) => [share.id, share]));

@@ -361,6 +361,7 @@
 
 .agentnote-heatmap-cell.is-used {
   background: var(--interactive-accent);
+  opacity: var(--agentnote-heatmap-opacity, 0.3);
 }
 
 .agentnote-trend-item {
@@ -379,7 +380,12 @@
   min-height: 4px;
   border-radius: 4px 4px 2px 2px;
   background: var(--interactive-accent);
+  height: var(--agentnote-trend-height, 4%);
   opacity: 0.85;
+}
+
+.agentnote-full-width {
+  width: 100%;
 }
 
 .agentnote-trend-item span {

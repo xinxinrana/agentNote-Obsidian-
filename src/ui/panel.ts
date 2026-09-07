@@ -161,13 +161,13 @@ class InsightsModal extends Modal {
       const heatmap = trendSection.createDiv({ cls: "agentnote-heatmap" });
       for (const point of trend) {
         const cell = heatmap.createEl("span", { cls: `agentnote-heatmap-cell${point.count ? " is-used" : ""}`, attr: { "aria-label": `${point.label} 日：${point.count} 次使用`, title: `${point.label} 日：${point.count} 次使用` } });
-        if (point.count) cell.style.opacity = String(0.3 + point.count / max * 0.7);
+        if (point.count) cell.setCssProps({ "--agentnote-heatmap-opacity": String(0.3 + point.count / max * 0.7) });
       }
     } else {
       const bars = trendSection.createDiv({ cls: "agentnote-trend" });
       for (const point of trend) {
         const item = bars.createDiv({ cls: "agentnote-trend-item" });
-        const bar = item.createDiv({ cls: "agentnote-trend-bar" }); bar.style.height = `${Math.max(4, point.count / max * 100)}%`; bar.setAttribute("aria-label", `${point.label}：${point.count} 次使用`);
+        const bar = item.createDiv({ cls: "agentnote-trend-bar" }); bar.setCssProps({ "--agentnote-trend-height": `${Math.max(4, point.count / max * 100)}%` }); bar.setAttribute("aria-label", `${point.label}：${point.count} 次使用`);
         item.createEl("span", { text: point.label });
       }
     }
@@ -229,7 +229,7 @@ class RemoveAgentModal extends Modal {
     this.contentEl.createEl("p", { text: "这会移除 agentNote 的长期提示词；不会删除该 agent 的其他 skill、配置或对话。" });
     this.contentEl.createEl("code", { cls: "agentnote-skill-path", text: `${this.agent.skillDir}/SKILL.md` });
     new Setting(this.contentEl).addButton((button) => button.setButtonText("取消").onClick(() => this.close()))
-      .addButton((button) => button.setButtonText("确认移除").setWarning().onClick(async () => {
+      .addButton((button) => button.setButtonText("确认移除").setDestructive().onClick(async () => {
         await this.plugin.disableAgent(this.agent);
         await this.done(); this.close();
       }));
@@ -258,7 +258,7 @@ class AgentPromptModal extends Modal {
     this.contentEl.empty(); this.contentEl.createEl("h2", { text: `${this.agent.name} 的提示词` });
     this.contentEl.createEl("p", { text: "基础提示词会教 agent 识别“写到 Obsidian / agent 笔记 / 笔记里”并调用本地服务。这里填写该 agent 专属的附加要求。" });
     let instructions = profile.instructions;
-    new Setting(this.contentEl).setName("附加要求").addTextArea((input) => { input.setValue(instructions); input.inputEl.style.width = "100%"; input.onChange((value) => instructions = value); });
+    new Setting(this.contentEl).setName("附加要求").addTextArea((input) => { input.setValue(instructions); input.inputEl.addClass("agentnote-full-width"); input.onChange((value) => instructions = value); });
     new Setting(this.contentEl).addButton((button) => button.setButtonText("预览基础提示词").onClick(() => {
       const existing = this.contentEl.querySelector(".agentnote-prompt-preview");
       if (existing) existing.remove();

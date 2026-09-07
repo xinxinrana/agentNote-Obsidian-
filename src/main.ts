@@ -13,6 +13,10 @@ export interface AgentProfile { enabled: boolean; instructions: string }
 interface AgentNoteSettings { port: number; autostartServer: boolean; agents: Record<string, AgentProfile> }
 const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, agents: {} };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 export default class AgentNotePlugin extends Plugin {
   settings: AgentNoteSettings = DEFAULT_SETTINGS;
   store!: VaultStore;
@@ -28,8 +32,8 @@ export default class AgentNotePlugin extends Plugin {
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
     this.addRibbonIcon("bot", "打开 agentNote 接入台", () => void this.activatePanel());
-    this.addCommand({ id: "open-agentnote-panel", name: "打开 agentNote 接入台", callback: () => this.activatePanel() });
-    this.addCommand({ id: "create-note", name: "新建 agentNote 笔记", callback: () => this.openCreateNoteModal() });
+    this.addCommand({ id: "open-panel", name: "打开接入台", callback: () => void this.activatePanel() });
+    this.addCommand({ id: "create-note", name: "新建笔记", callback: () => this.openCreateNoteModal() });
     this.addCommand({ id: "share-selection", name: "分享选中内容", editorCallback: (editor) => void this.shareSelection(editor) });
     this.addCommand({ id: "share-current-note", name: "分享当前文件", callback: () => void this.shareCurrentFile() });
     this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
@@ -45,7 +49,7 @@ export default class AgentNotePlugin extends Plugin {
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => { this.refreshForAgentNotePath(oldPath); this.refreshForAgentNotePath(file.path); }));
     if (this.settings.autostartServer) await this.startServer(true);
   }
-  async onunload(): Promise<void> { if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer); this.app.workspace.detachLeavesOfType(AGENTNOTE_VIEW); await this.stopServer(true); }
+  onunload(): void { if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer); void this.stopServer(true); }
   async activatePanel(): Promise<void> {
     let leaf = this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)[0];
     if (!leaf) { leaf = this.app.workspace.getRightLeaf(false)!; await leaf.setViewState({ type: AGENTNOTE_VIEW, active: true }); }
@@ -132,7 +136,15 @@ export default class AgentNotePlugin extends Plugin {
     await navigator.clipboard.writeText(url);
     new Notice("分享地址已复制，直接发给 agent 即可。", 4000);
   }
-  async loadSettings(): Promise<void> { const saved = await this.loadData(); this.settings = { ...DEFAULT_SETTINGS, ...saved, agents: saved?.agents ?? {} }; }
+  async loadSettings(): Promise<void> {
+    const saved: unknown = await this.loadData() as unknown;
+    const settings = isRecord(saved) ? saved : {};
+    this.settings = {
+      port: typeof settings.port === "number" ? settings.port : DEFAULT_SETTINGS.port,
+      autostartServer: typeof settings.autostartServer === "boolean" ? settings.autostartServer : DEFAULT_SETTINGS.autostartServer,
+      agents: isRecord(settings.agents) ? settings.agents as Record<string, AgentProfile> : {},
+    };
+  }
   async saveSettings(): Promise<void> { await this.saveData(this.settings); }
 }
 
@@ -154,8 +166,8 @@ class CreateNoteModal extends Modal {
 class AgentNoteSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app, plugin); }
   display(): void {
-    this.containerEl.empty(); this.containerEl.createEl("h2", { text: "agentNote" });
-    this.containerEl.createEl("h3", { text: "版本与更新" });
+    this.containerEl.empty(); new Setting(this.containerEl).setName("agentNote").setHeading();
+    new Setting(this.containerEl).setName("版本与更新").setHeading();
     const update = new Setting(this.containerEl)
       .setName(`当前版本 v${this.plugin.manifest.version} · 作者 Evan`)
       .setDesc("更新来自 GitHub Releases 的构建产物，更新后插件自动重载。")
@@ -179,7 +191,7 @@ class AgentNoteSettingTab extends PluginSettingTab {
           check.setButtonText("检查更新").setDisabled(false);
         }
       }));
-    this.containerEl.createEl("h3", { text: "本地服务" });
+    new Setting(this.containerEl).setName("本地服务").setHeading();
     new Setting(this.containerEl).setName("本地服务端口").setDesc("agent 通过此端口读取分享和写入笔记。").addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => { const port = Number(value); if (Number.isInteger(port) && port > 0 && port < 65536) { this.plugin.settings.port = port; await this.plugin.saveSettings(); } }));
     new Setting(this.containerEl).setName("启动 Obsidian 时运行服务").addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => { this.plugin.settings.autostartServer = value; await this.plugin.saveSettings(); }));
     this.containerEl.createEl("p", { text: "agent 的安装、提示词与接入状态在 agentNote 接入台中管理。" });
