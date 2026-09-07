@@ -40,7 +40,7 @@ agent 会把标题、正文、背景和标签整理成笔记，写回当前 vaul
 
 ### 3. 管理接入的 agent
 
-接入台会识别已安装的 Claude Code、Codex 和 WorkBuddy，并提供：
+接入台始终展示 Claude Code、Codex 和 WorkBuddy。未检测到安装时，可点击“前往官网安装”在浏览器中打开官网；已检测到安装时提供：
 
 - 接入或更新 agentNote 提示词
 - 为不同 agent 增加专属要求

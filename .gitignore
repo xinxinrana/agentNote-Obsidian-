@@ -4,3 +4,6 @@ test/core-bundle.cjs
 dist/
 *.log
 .learnings/
+.claude/
+codex-session-*.md
+draft_*/

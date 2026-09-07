@@ -149,7 +149,25 @@ try {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentName: "Codex" });
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
-    const [codex] = detectAgents(home); installSkill(codex.skillDir, { port }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); await fsp.rm(home, { recursive: true, force: true });
+    const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); await fsp.rm(home, { recursive: true, force: true });
+  });
+  await test("built-in agents remain visible regardless of local installation", async () => {
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-agents-"));
+    try {
+      const agents = detectAgents(home);
+      assert.deepEqual(agents.map((agent) => agent.id), ["claude-code", "codex", "workbuddy"]);
+      assert.ok(agents.every((agent) => !agent.available && !agent.installed));
+      assert.deepEqual(agents.map((agent) => agent.website), ["https://claude.com/product/claude-code", "https://openai.com/codex/", "https://www.workbuddy.cn/"]);
+      assert.deepEqual(await fsp.readdir(home), []);
+      await fsp.mkdir(path.join(home, ".codex"));
+      assert.deepEqual(detectAgents(home).map((agent) => agent.available), [false, true, false]);
+      const codex = detectAgents(home).find((agent) => agent.id === "codex");
+      assert.equal(codex.installed, false);
+      installSkill(codex.skillDir, { port });
+      assert.equal(detectAgents(home).find((agent) => agent.id === "codex").installed, true);
+    } finally {
+      await fsp.rm(home, { recursive: true, force: true });
+    }
   });
   await test("manual installation prompt is portable and asks the target agent to verify", async () => {
     const prompt = renderManualInstallPrompt({ port });

@@ -74,7 +74,6 @@ export class AgentNoteView extends ItemView {
     section.createEl("p", { text: "接入会在该 agent 的长期 skill 目录写入一份 agentNote 使用说明。" });
     const manual = section.createEl("button", { text: "手动接入任意 agent" });
     manual.onclick = () => new ManualInstallModal(this.app, this.plugin).open();
-    if (!agents.length) { section.createEl("p", { text: "尚未识别到内置 agent。可使用上方“手动接入任意 agent”。" }); return; }
     for (const agent of agents) {
       const profile = this.plugin.profile(agent.id);
       const card = section.createDiv({ cls: "agentnote-agent-card" });
@@ -83,7 +82,12 @@ export class AgentNoteView extends ItemView {
       icon.decoding = "async";
       const identity = header.createDiv();
       identity.createEl("strong", { text: agent.name });
-      identity.createEl("div", { cls: `agentnote-agent-status ${agent.installed && profile.enabled ? "is-connected" : ""}`, text: agent.installed && profile.enabled ? "已接入" : "未接入" });
+      identity.createEl("div", { cls: `agentnote-agent-status ${agent.installed && profile.enabled ? "is-connected" : ""}`, text: !agent.available ? "未检测到安装" : agent.installed && profile.enabled ? "已接入" : "未接入" });
+      if (!agent.available) {
+        const actions = card.createDiv({ cls: "agentnote-node-actions" });
+        actions.createEl("a", { text: "前往官网安装", cls: "external-link", attr: { href: agent.website, target: "_blank", rel: "noopener noreferrer", "aria-label": `在浏览器中打开 ${agent.name} 官网` } });
+        continue;
+      }
       card.createEl("div", { cls: "agentnote-agent-path", text: `安装位置：${agent.skillDir}` });
       const actions = card.createDiv({ cls: "agentnote-node-actions" });
       const install = actions.createEl("button", { text: agent.installed ? "更新接入" : "接入 agentNote", cls: "mod-cta" });

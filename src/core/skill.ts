@@ -1,21 +1,21 @@
 import * as fs from "fs";
 import * as path from "path";
 
-export interface AgentTarget { id: string; name: string; detectRel: string; skillsRel: string }
-export interface DetectedAgent extends AgentTarget { skillDir: string; installed: boolean }
+export interface AgentTarget { id: string; name: string; detectRel: string; skillsRel: string; website: string }
+export interface DetectedAgent extends AgentTarget { skillDir: string; available: boolean; installed: boolean }
 export interface AgentPromptOptions { port: number; instructions?: string; agentName?: string }
 
 export const KNOWN_AGENTS: AgentTarget[] = [
-  { id: "claude-code", name: "Claude Code", detectRel: ".claude", skillsRel: ".claude/skills" },
-  { id: "codex", name: "Codex", detectRel: ".codex", skillsRel: ".codex/skills" },
-  { id: "workbuddy", name: "WorkBuddy", detectRel: ".workbuddy", skillsRel: ".workbuddy/skills" },
+  { id: "claude-code", name: "Claude Code", detectRel: ".claude", skillsRel: ".claude/skills", website: "https://claude.com/product/claude-code" },
+  { id: "codex", name: "Codex", detectRel: ".codex", skillsRel: ".codex/skills", website: "https://openai.com/codex/" },
+  { id: "workbuddy", name: "WorkBuddy", detectRel: ".workbuddy", skillsRel: ".workbuddy/skills", website: "https://www.workbuddy.cn/" },
 ];
 const SKILL_NAME = "agentnote";
 
 export function detectAgents(home: string): DetectedAgent[] {
-  return KNOWN_AGENTS.filter((agent) => fs.existsSync(path.join(home, agent.detectRel))).map((agent) => {
+  return KNOWN_AGENTS.map((agent) => {
     const skillDir = path.join(home, agent.skillsRel, SKILL_NAME);
-    return { ...agent, skillDir, installed: fs.existsSync(path.join(skillDir, "SKILL.md")) };
+    return { ...agent, skillDir, available: fs.existsSync(path.join(home, agent.detectRel)), installed: fs.existsSync(path.join(skillDir, "SKILL.md")) };
   });
 }
 

@@ -1,9 +1,9 @@
 {
   "id": "agentnote",
   "name": "agentNote",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "minAppVersion": "1.5.0",
-  "description": "本地笔记和文件的中转系统：通过 HTTP 分享地址让 AI agent 直接读取内容，并一键接入本地 agent。",
+  "description": "Share local notes and files with AI agents through a private HTTP service.",
   "author": "Evan",
   "authorUrl": "https://github.com/xinxinrana",
   "isDesktopOnly": true
