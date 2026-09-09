@@ -51,10 +51,13 @@ export interface DashboardInsights {
   summary: { weekCreated: number; weekResolves: number; weekUsedNotes: number; monthResolves: number };
   weekly: InsightNote[];
   monthly: InsightNote[];
+  allTime: InsightNote[];
   activities: InsightEvent[];
   timeline: InsightEvent[];
   weeklyTrend: InsightTrendPoint[];
   monthlyTrend: InsightTrendPoint[];
+  allTimeTrend: InsightTrendPoint[];
+  startedAt: string;
   archiveCandidates: AgentNode[];
 }
 export interface AgentInsight { name: string; uses: number; created: number; updated: number; lastActive: string }
@@ -344,7 +347,7 @@ export class VaultStore {
     const archiveBefore = new Date(now); archiveBefore.setDate(archiveBefore.getDate() - 30);
     const inRange = (at: string, start: Date) => new Date(at) >= start && new Date(at) <= now;
     const resolveEvents = events.filter((event) => event.type === "share-resolved");
-    const buildRanking = (start: Date, monthly: boolean): InsightNote[] => {
+    const buildRanking = (start: Date, period: "week" | "month" | "all"): InsightNote[] => {
       const usage = new Map<string, InsightEvent[]>();
       for (const event of resolveEvents.filter((event) => event.nodeId && inRange(event.at, start))) {
         const items = usage.get(event.nodeId!) ?? []; items.push(event); usage.set(event.nodeId!, items);
@@ -355,9 +358,9 @@ export class VaultStore {
           const date = new Date(event.at); const monday = new Date(date); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); return monday.toISOString().slice(0, 10);
         })).size;
         const updated = inRange(node.updated, start);
-        const score = monthly ? distinctWeeks * 1000 + reads.length * 10 + (updated ? 1 : 0) : reads.length * 10 + (updated ? 1 : 0);
+        const score = period === "week" ? reads.length * 10 + (updated ? 1 : 0) : distinctWeeks * 1000 + reads.length * 10 + (updated ? 1 : 0);
         const lastRead = reads.map((event) => event.at).sort().at(-1);
-        const reason = monthly ? `本月被读取 ${reads.length} 次，跨 ${distinctWeeks} 周复用` : `本周被读取 ${reads.length} 次${updated ? "，并在本周更新" : ""}`;
+        const reason = period === "week" ? `本周被读取 ${reads.length} 次${updated ? "，并在本周更新" : ""}` : period === "month" ? `本月被读取 ${reads.length} 次，跨 ${distinctWeeks} 周复用` : `累计被读取 ${reads.length} 次，跨 ${distinctWeeks} 周复用`;
         return { node, reads: reads.length, lastRead, score, reason };
       }).sort((a, b) => b.score - a.score || (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).slice(0, 3);
     };
@@ -368,6 +371,11 @@ export class VaultStore {
       const until = new Date(from); until.setDate(until.getDate() + 1);
       return { label: label(from), count: resolveEvents.filter((event) => new Date(event.at) >= from && new Date(event.at) < until).length };
     });
+    const dateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const recordedAt = [...events.map((event) => event.at), ...nodes.map((node) => node.created)].map((at) => new Date(at).getTime()).filter(Number.isFinite);
+    const startedAt = new Date(recordedAt.length ? Math.min(...recordedAt) : now.getTime());
+    const contributionStart = new Date(startedAt); contributionStart.setHours(0, 0, 0, 0); contributionStart.setDate(contributionStart.getDate() - contributionStart.getDay());
+    const contributionDays = Math.max(1, Math.floor((now.getTime() - contributionStart.getTime()) / 86_400_000) + 1);
     const monthDays = Math.max(1, Math.ceil((now.getTime() - monthStart.getTime()) / 86_400_000) + 1);
     return {
       summary: {
@@ -376,12 +384,15 @@ export class VaultStore {
         weekUsedNotes: usedNodeIds.size,
         monthResolves: resolveEvents.filter((event) => inRange(event.at, monthStart)).length,
       },
-      weekly: buildRanking(weekStart, false),
-      monthly: buildRanking(monthStart, true),
+      weekly: buildRanking(weekStart, "week"),
+      monthly: buildRanking(monthStart, "month"),
+      allTime: buildRanking(contributionStart, "all"),
       activities: events.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
       timeline: [...events].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
       weeklyTrend: trend(weekStart, 7, (date) => ["日", "一", "二", "三", "四", "五", "六"][date.getDay()]),
       monthlyTrend: trend(monthStart, monthDays, (date) => String(date.getDate())),
+      allTimeTrend: trend(contributionStart, contributionDays, dateKey),
+      startedAt: startedAt.toISOString(),
       archiveCandidates: nodes.filter((node) => !node.archived && !node.pinned && new Date(node.created) <= archiveBefore && new Date(node.updated) <= archiveBefore && !everUsed.has(node.id)).sort((a, b) => a.updated.localeCompare(b.updated)),
     };
   }

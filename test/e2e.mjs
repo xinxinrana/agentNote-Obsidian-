@@ -65,6 +65,8 @@ try {
     assert.equal(insights.weekly[0].node.id, textId);
     assert.match(insights.weekly[0].reason, /本周被读取/);
     assert.equal(insights.weeklyTrend.length, 7);
+    assert.ok(insights.allTimeTrend.length >= 1);
+    assert.ok(insights.startedAt);
     assert.ok(insights.timeline.length >= 2);
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.name, "Codex");
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.sessionTitle, "发布流程验证");
