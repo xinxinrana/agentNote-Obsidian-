@@ -4,6 +4,7 @@ import { renderManualInstallPrompt, renderSkillMd, type DetectedAgent } from "..
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
+import { toBlob } from "html-to-image";
 import type { DashboardInsights, InsightEvent, InsightNote } from "../core/store";
 
 export const AGENTNOTE_VIEW = "agentnote-view";
@@ -102,16 +103,19 @@ export class AgentNoteView extends ItemView {
   }
 }
 
-type InsightTab = "week" | "month" | "agents" | "timeline" | "archive";
+type InsightTab = "overview" | "week" | "month" | "agents" | "timeline" | "archive";
 type TimelineFilter = "all" | "created" | "used" | "changed";
 
 class InsightsModal extends Modal {
-  private tab: InsightTab = "week";
+  private tab: InsightTab = "overview";
   private timelineFilter: TimelineFilter = "all";
   private bulkUndoIds: string[] | null = null;
+  private privateView = false;
   constructor(app: App, private plugin: AgentNotePlugin) { super(app); }
   onOpen(): void { this.modalEl.addClass("agentnote-insights-modal"); void this.render(); }
   private timeText(iso: string): string { return new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  private displayTitle(title: string): string { return this.privateView ? "已匿名资料" : title; }
+  private activeDays(trend: { count: number }[]): number { return trend.filter((point) => point.count > 0).length; }
   private activityText(event: InsightEvent): string {
     if (event.type === "node-created") return "创建笔记";
     if (event.type === "node-updated") return "更新笔记";
@@ -121,20 +125,80 @@ class InsightsModal extends Modal {
   }
   private async render(): Promise<void> {
     const insights = await this.plugin.store.getDashboardInsights();
+    const agents = await this.plugin.store.getAgentInsights();
     this.contentEl.empty();
     const header = this.contentEl.createDiv({ cls: "agentnote-modal-header" });
-    const title = header.createDiv(); title.createEl("span", { cls: "agentnote-eyebrow", text: "完整洞察" }); title.createEl("h2", { text: "知识使用看板" });
+    const title = header.createDiv(); title.createEl("span", { cls: "agentnote-eyebrow", text: "AGENTNOTE · LOCAL PROFILE" }); title.createEl("h2", { text: "我的知识工作档案" });
+    title.createEl("p", { text: "把本地资料真正投入工作流，并留下可回看的成果。" });
+    const actions = header.createDiv({ cls: "agentnote-profile-actions" });
+    const privacy = actions.createEl("button", { text: this.privateView ? "退出隐私展示" : "隐私展示" });
+    privacy.onclick = () => { this.privateView = !this.privateView; void this.render(); };
+    const share = actions.createEl("button", { text: "生成分享图", cls: "mod-cta" });
+    share.onclick = () => new InsightShareModal(this.app, insights, agents.length, this.privateView).open();
     const tabs = this.contentEl.createDiv({ cls: "agentnote-insight-tabs" });
-    for (const [tab, label] of [["week", "本周"], ["month", "本月"], ["agents", "Agent"], ["timeline", "时间线"], ["archive", "整理"]] as const) {
+    for (const [tab, label] of [["overview", "档案"], ["week", "本周"], ["month", "本月"], ["agents", "Agent"], ["timeline", "时间线"], ["archive", "整理"]] as const) {
       const button = tabs.createEl("button", { text: label, cls: this.tab === tab ? "is-active" : "" });
       button.onclick = () => { this.tab = tab; void this.render(); };
     }
     const body = this.contentEl.createDiv({ cls: "agentnote-modal-body" });
+    if (this.tab === "overview") this.renderOverview(body, insights, agents);
     if (this.tab === "week") this.renderPeriod(body, [[insights.summary.weekResolves, "本周使用"], [insights.summary.weekCreated, "本周创建"], [insights.summary.weekUsedNotes, "使用资料"]], insights.weekly, insights.weeklyTrend, false);
     if (this.tab === "month") this.renderPeriod(body, [[insights.summary.monthResolves, "本月使用"], [insights.monthly.length, "高价值资料"], [insights.archiveCandidates.length, "待整理资料"]], insights.monthly, insights.monthlyTrend, true);
     if (this.tab === "agents") await this.renderAgents(body);
     if (this.tab === "timeline") this.renderTimeline(body, insights);
     if (this.tab === "archive") this.renderArchive(body, insights);
+  }
+  private renderOverview(parent: HTMLElement, insights: DashboardInsights, agents: Awaited<ReturnType<AgentNotePlugin["store"]["getAgentInsights"]>>): void {
+    const activeDays = this.activeDays(insights.weeklyTrend);
+    const profile = parent.createDiv({ cls: "agentnote-profile-card" });
+    const summary = profile.createDiv({ cls: "agentnote-profile-summary" });
+    summary.createEl("span", { cls: "agentnote-profile-label", text: "近 7 天成果" });
+    summary.createEl("strong", { text: `${insights.summary.weekResolves} 次资料协作` });
+    summary.createEl("p", { text: insights.summary.weekResolves ? `已有 ${insights.summary.weekUsedNotes} 条资料被 agent 反复调用。` : "分享资料给 agent 后，这里会开始记录它们带来的工作成果。" });
+    const metrics = profile.createDiv({ cls: "agentnote-profile-metrics" });
+    for (const [value, label] of [[insights.summary.weekUsedNotes, "投入资料"], [activeDays, "活跃天数"], [agents.length, "协作 agent"]] as const) {
+      const metric = metrics.createDiv(); metric.createEl("strong", { text: String(value) }); metric.createEl("span", { text: label });
+    }
+
+    const grid = parent.createDiv({ cls: "agentnote-profile-grid" });
+    const rhythm = grid.createDiv({ cls: "agentnote-profile-section" });
+    const rhythmHeading = rhythm.createDiv({ cls: "agentnote-profile-section-heading" });
+    rhythmHeading.createEl("h3", { text: "本周工作节奏" });
+    rhythmHeading.createEl("span", { text: `${activeDays} / 7 天活跃` });
+    const days = rhythm.createDiv({ cls: "agentnote-profile-days" });
+    const max = Math.max(1, ...insights.weeklyTrend.map((point) => point.count));
+    for (const point of insights.weeklyTrend) {
+      const day = days.createDiv({ cls: `agentnote-profile-day${point.count ? " is-active" : ""}`, attr: { title: `${point.label}：${point.count} 次使用` } });
+      if (point.count) day.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.22 + point.count / max * 0.5) * 100)}%` });
+      day.createEl("strong", { text: point.label }); day.createEl("span", { text: String(point.count) });
+    }
+
+    const next = grid.createDiv({ cls: "agentnote-profile-section agentnote-profile-next" });
+    next.createEl("span", { cls: "agentnote-profile-label", text: "下一步" });
+    if (insights.archiveCandidates.length) {
+      next.createEl("h3", { text: `整理 ${insights.archiveCandidates.length} 条沉睡资料` });
+      next.createEl("p", { text: "把暂未复用的旧资料归档，让下一次检索更轻快。" });
+      const button = next.createEl("button", { text: "查看整理建议" });
+      button.onclick = () => { this.tab = "archive"; void this.render(); };
+    } else {
+      next.createEl("h3", { text: insights.summary.weekResolves ? "继续积累可复用上下文" : "分享第一条工作资料" });
+      next.createEl("p", { text: insights.summary.weekResolves ? "把高频资料固定下来，让每一次协作都从已有上下文开始。" : "从文件菜单选择“分享给 agent”，让资料立即进入工作流。" });
+    }
+
+    const highlights = parent.createDiv({ cls: "agentnote-profile-highlights" });
+    const heading = highlights.createDiv({ cls: "agentnote-profile-section-heading" });
+    heading.createEl("h3", { text: "本周高价值资料" });
+    heading.createEl("span", { text: "按实际复用次数排序" });
+    if (!insights.weekly.length) highlights.createEl("p", { cls: "agentnote-empty-copy", text: "资料被 agent 读取后，会在这里形成你的复用排行榜。" });
+    else {
+      const cards = highlights.createDiv({ cls: "agentnote-profile-note-list" });
+      for (const [index, entry] of insights.weekly.entries()) {
+        const card = cards.createDiv({ cls: "agentnote-profile-note" });
+        card.createEl("span", { cls: "agentnote-profile-rank", text: String(index + 1).padStart(2, "0") });
+        const detail = card.createDiv(); detail.createEl("strong", { text: this.displayTitle(entry.node.title) }); detail.createEl("small", { text: entry.reason });
+        card.createEl("span", { cls: "agentnote-profile-use-count", text: `${entry.reads} 次` });
+      }
+    }
   }
   private async renderAgents(parent: HTMLElement): Promise<void> {
     const agents = await this.plugin.store.getAgentInsights();
@@ -217,6 +281,76 @@ class InsightsModal extends Modal {
       const actions = card.createDiv({ cls: "agentnote-node-actions" });
       const keep = actions.createEl("button", { text: "固定并保留" }); keep.onclick = () => void (async () => { await this.plugin.store.updateNode(node.id, { pinned: true }); await this.render(); this.plugin.refreshPanels(); })();
       const archive = actions.createEl("button", { text: "归档", cls: "mod-warning" }); archive.onclick = () => void (async () => { await this.plugin.store.archiveNode(node.id, true); await this.render(); this.plugin.refreshPanels(); })();
+    }
+  }
+}
+
+class InsightShareModal extends Modal {
+  private imageBlob: Blob | null = null;
+  private imageUrl: string | null = null;
+  constructor(app: App, private insights: DashboardInsights, private agentCount: number, private privateView: boolean) { super(app); }
+  onOpen(): void { this.modalEl.addClass("agentnote-share-modal"); void this.render(); }
+  onClose(): void { if (this.imageUrl) URL.revokeObjectURL(this.imageUrl); }
+  private activeDays(): number { return this.insights.weeklyTrend.filter((point) => point.count > 0).length; }
+  private titleForShare(): string { return this.privateView ? "已匿名资料" : this.insights.weekly[0]?.node.title ?? "等待第一条资料被复用"; }
+  private renderShareCard(parent: HTMLElement): void {
+    const activeDays = this.activeDays();
+    const max = Math.max(1, ...this.insights.weeklyTrend.map((point) => point.count));
+    parent.createEl("span", { cls: "agentnote-share-brand", text: "agentNote · Local knowledge profile" });
+    parent.createEl("h2", { text: "我的知识工作档案" });
+    parent.createEl("p", { cls: "agentnote-share-subtitle", text: "让本地资料在每一次 AI 协作中持续发挥价值。" });
+    const metrics = parent.createDiv({ cls: "agentnote-share-metrics" });
+    for (const [value, label] of [[this.insights.summary.weekResolves, "资料协作"], [this.insights.summary.weekUsedNotes, "投入资料"], [activeDays, "活跃天数"]] as const) {
+      const metric = metrics.createDiv(); metric.createEl("strong", { text: String(value) }); metric.createEl("span", { text: label });
+    }
+    const rhythm = parent.createDiv({ cls: "agentnote-share-rhythm" });
+    const rhythmHeading = rhythm.createDiv(); rhythmHeading.createEl("strong", { text: "本周工作节奏" }); rhythmHeading.createEl("span", { text: `${this.agentCount} 个 agent 留下协作轨迹` });
+    const days = rhythm.createDiv({ cls: "agentnote-share-days" });
+    for (const point of this.insights.weeklyTrend) {
+      const day = days.createDiv({ cls: `agentnote-share-day${point.count ? " is-active" : ""}` });
+      if (point.count) day.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.22 + point.count / max * 0.5) * 100)}%` });
+      day.createEl("strong", { text: point.label }); day.createEl("span", { text: String(point.count) });
+    }
+    const top = parent.createDiv({ cls: "agentnote-share-top-note" });
+    top.createEl("span", { text: "本周高价值资料" });
+    top.createEl("strong", { text: this.titleForShare() });
+    top.createEl("small", { text: this.insights.weekly[0] ? `被复用 ${this.insights.weekly[0].reads} 次` : "从一次分享开始建立可复用上下文" });
+    parent.createEl("small", { cls: "agentnote-share-footer", text: "由 agentNote 在本地生成 · 内容不离开你的 vault" });
+  }
+  private async render(): Promise<void> {
+    this.contentEl.empty();
+    this.contentEl.createEl("h2", { text: "分享图预览" });
+    this.contentEl.createEl("p", { text: "确认预览后，点击按钮即可将 PNG 图片复制到剪贴板。" });
+    const preview = this.contentEl.createDiv({ cls: "agentnote-share-preview" });
+    const card = preview.createDiv({ cls: "agentnote-share-card" });
+    this.renderShareCard(card);
+    const actions = this.contentEl.createDiv({ cls: "agentnote-share-actions" });
+    const copy = actions.createEl("button", { text: "正在生成分享图…", cls: "mod-cta" });
+    copy.disabled = true;
+    actions.createEl("button", { text: "关闭" }).onclick = () => this.close();
+    try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      const blob = await toBlob(card, { cacheBust: true, pixelRatio: 2 });
+      if (!blob) throw new Error("未生成图片");
+      this.imageBlob = blob;
+      this.imageUrl = URL.createObjectURL(blob);
+      preview.empty();
+      preview.createEl("img", { cls: "agentnote-share-image", attr: { src: this.imageUrl, alt: "知识工作档案分享图预览" } });
+      copy.setText("复制图片到剪贴板");
+      copy.disabled = false;
+      copy.onclick = () => void this.copyImage();
+    } catch (error) {
+      copy.setText("分享图生成失败");
+      new Notice(`分享图生成失败：${(error as Error).message}`);
+    }
+  }
+  private async copyImage(): Promise<void> {
+    if (!this.imageBlob) return;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": this.imageBlob })]);
+      new Notice("分享图已复制到剪贴板，可直接粘贴发送。");
+    } catch {
+      new Notice("复制图片失败，请确认 Obsidian 已获得系统剪贴板权限。");
     }
   }
 }
