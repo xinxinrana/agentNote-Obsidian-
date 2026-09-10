@@ -4,6 +4,12 @@ Share local Obsidian notes and files with AI agents through a private, local-onl
 
 agentNote is an Obsidian desktop plugin that connects your vault with agents such as Claude Code, Codex, and WorkBuddy. You choose what an agent can read, and the plugin creates a live local URL that always resolves to the current content.
 
+<p align="center">
+  <img src="docs/img/整体页面展示.png" alt="agentNote running inside Obsidian with the local knowledge dashboard and agent connection panel" width="920">
+  <br>
+  <sub>Local knowledge activity and agent connections, inside Obsidian.</sub>
+</p>
+
 ## Features
 
 - Share a note, file, folder, or selected text with an agent.
@@ -12,7 +18,20 @@ agentNote is an Obsidian desktop plugin that connects your vault with agents suc
 - Keep share links live: updated files resolve to their latest content.
 - Show Claude Code, Codex, and WorkBuddy in the connection panel even when they are not installed.
 - Open the official website for an agent that is not detected locally.
-- Track sharing activity and manage archived agentNote memories.
+- Explore a local knowledge profile with reuse rankings, contribution history, activity, and archive suggestions.
+- Generate a privacy-aware PNG summary of your knowledge activity for sharing.
+
+## See it in action
+
+### Knowledge activity, made visible
+
+See which notes are entering agent workflows, how often they are reused, and what deserves to be kept or organized next.
+
+<p align="center">
+  <img src="docs/img/使用看板.png" alt="agentNote knowledge profile with weekly activity, reusable notes, and sharing controls" width="800">
+  <br>
+  <sub>See what is being reused, what is active, and what to organize next.</sub>
+</p>
 
 ## Installation
 
@@ -68,6 +87,21 @@ Open the agentNote connection panel. Detected agents can be connected or updated
 - [中文功能与使用说明](docs/功能与使用.md)
 - [核心产品设计](docs/product-design.md)
 - [官方社区市场上架流程](docs/官方社区市场上架流程.md)
+
+<details>
+<summary><strong>Product visual overview (Chinese)</strong></summary>
+
+<br>
+
+<p align="center">
+  <img src="docs/img/一图看懂agentNote.png" alt="Chinese visual overview of agentNote's local knowledge and agent workflow" width="520">
+</p>
+
+<p align="center">
+  <img src="docs/img/主视觉概念图.jpg" alt="agentNote concept artwork showing local knowledge connected to AI agents" width="260">
+</p>
+
+</details>
 
 ## Development
 
