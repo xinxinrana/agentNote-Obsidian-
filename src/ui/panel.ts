@@ -243,17 +243,17 @@ class InsightsModal extends Modal {
       }
     }
     const ranking = parent.createDiv({ cls: "agentnote-detail-section agentnote-period-ranking" });
-    const rankingHeading = ranking.createDiv({ cls: "agentnote-section-heading" }); rankingHeading.createEl("h3", { text: header.rankingTitle }); rankingHeading.createEl("span", { text: "按实际复用次数排序" });
+    const rankingHeading = ranking.createDiv({ cls: "agentnote-section-heading" }); rankingHeading.createEl("h3", { text: header.rankingTitle }); rankingHeading.createEl("span", { text: "按实际复用排序 · 保护后不参与归档建议" });
     if (!notes.length) ranking.createEl("p", { cls: "agentnote-empty-copy", text: "这一周期还没有被读取的分享笔记。" });
     for (const [index, entry] of notes.entries()) {
       const card = ranking.createDiv({ cls: "agentnote-value-card" });
       card.createEl("span", { cls: "agentnote-value-rank", text: String(index + 1).padStart(2, "0") });
       const row = card.createDiv({ cls: "agentnote-value-title" }); row.createEl("strong", { text: this.displayTitle(entry.node.title) });
-      if (entry.node.pinned) row.createEl("span", { cls: "agentnote-pin-badge", text: "已固定" });
+      if (entry.node.pinned) row.createEl("span", { cls: "agentnote-pin-badge", text: "已保护", attr: { title: "这条资料不会出现在“整理”中的归档建议里。" } });
       card.createEl("p", { text: entry.reason });
       if (entry.lastRead) card.createEl("small", { text: `最近使用：${this.timeText(entry.lastRead)}` });
-      const pin = card.createEl("button", { text: entry.node.pinned ? "取消固定" : "固定" });
-      pin.onclick = () => void (async () => { pin.disabled = true; await this.plugin.store.updateNode(entry.node.id, { pinned: !entry.node.pinned }); await this.render(); this.plugin.refreshPanels(); })();
+      const pin = card.createEl("button", { text: entry.node.pinned ? "取消保护" : "保护不归档", attr: { title: entry.node.pinned ? "允许这条资料再次进入归档建议。" : "保护后，这条资料不会出现在“整理”中的归档建议里；不会修改内容或分享地址。" } });
+      pin.onclick = () => void (async () => { pin.disabled = true; const pinned = !entry.node.pinned; await this.plugin.store.updateNode(entry.node.id, { pinned }); new Notice(pinned ? `已保护「${entry.node.title}」：它不会进入归档建议。` : `已取消保护「${entry.node.title}」。`); await this.render(); this.plugin.refreshPanels(); })();
     }
   }
   private renderContributionGraph(parent: HTMLElement, trend: { label: string; count: number }[], max: number): void {
@@ -305,12 +305,12 @@ class InsightsModal extends Modal {
       const undo = parent.createDiv({ cls: "agentnote-undo" }); undo.createSpan({ text: `刚刚归档了 ${this.bulkUndoIds.length} 条笔记。` });
       const button = undo.createEl("button", { text: "撤销" }); button.onclick = () => void (async () => { await this.plugin.store.archiveNodes(this.bulkUndoIds!, false); this.bulkUndoIds = null; await this.render(); this.plugin.refreshPanels(); })();
     }
-    if (!insights.archiveCandidates.length) { parent.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: "没有需要整理的低使用笔记。固定资料不会被推荐归档。" }); return; }
+    if (!insights.archiveCandidates.length) { parent.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: "没有需要整理的低使用笔记。已保护资料不会被推荐归档。" }); return; }
     const list = parent.createDiv({ cls: "agentnote-archive-list" });
     for (const node of insights.archiveCandidates) {
       const card = list.createDiv({ cls: "agentnote-archive-card" }); card.createEl("strong", { text: node.title }); card.createEl("span", { text: "创建满 30 天，未被读取，且近 30 天未更新。" });
       const actions = card.createDiv({ cls: "agentnote-node-actions" });
-      const keep = actions.createEl("button", { text: "固定并保留" }); keep.onclick = () => void (async () => { await this.plugin.store.updateNode(node.id, { pinned: true }); await this.render(); this.plugin.refreshPanels(); })();
+      const keep = actions.createEl("button", { text: "保护，不归档", attr: { title: "保护后，这条资料不会再出现在归档建议里；不会修改内容或分享地址。" } }); keep.onclick = () => void (async () => { await this.plugin.store.updateNode(node.id, { pinned: true }); new Notice(`已保护「${node.title}」：它不会进入归档建议。`); await this.render(); this.plugin.refreshPanels(); })();
       const archive = actions.createEl("button", { text: "归档", cls: "mod-warning" }); archive.onclick = () => void (async () => { await this.plugin.store.archiveNode(node.id, true); await this.render(); this.plugin.refreshPanels(); })();
     }
   }
