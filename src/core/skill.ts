@@ -3,7 +3,7 @@ import * as path from "path";
 
 export interface AgentTarget { id: string; name: string; detectRel: string; skillsRel: string; website: string }
 export interface DetectedAgent extends AgentTarget { skillDir: string; available: boolean; installed: boolean }
-export interface AgentPromptOptions { port: number; instructions?: string; agentName?: string }
+export interface AgentPromptOptions { port: number; instructions?: string; agentId?: string; agentName?: string }
 
 export const KNOWN_AGENTS: AgentTarget[] = [
   { id: "claude-code", name: "Claude Code", detectRel: ".claude", skillsRel: ".claude/skills", website: "https://claude.com/product/claude-code" },
@@ -19,7 +19,7 @@ export function detectAgents(home: string): DetectedAgent[] {
   });
 }
 
-export function renderSkillMd({ port, instructions = "", agentName = "未命名 agent" }: AgentPromptOptions): string {
+export function renderSkillMd({ port, instructions = "", agentId = "agentnote", agentName = "未命名 agent" }: AgentPromptOptions): string {
   const base = `http://127.0.0.1:${port}`;
   return `---
 name: agentnote
@@ -60,11 +60,14 @@ POST ${base}/api/nodes
 
 追加 \`?raw=1\` 只获取内容文本。不要要求用户复制原文件或重新粘贴正文。
 
-## 工作轨迹（必须携带）
+## 固定身份与工作轨迹（必须携带）
+
+此 skill 目录中的 \`agentnote.identity.json\` 是当前 agent 的默认身份配置。每次调用前先读取它，并始终使用其中的 \`id\` 与 \`name\`；不要根据模型、任务或会话自行改名。服务端会优先采用已登记的固定身份，以保证同一 agent 的工作轨迹连续一致。
 
 每次调用 agentNote HTTP API 都携带以下请求头，让用户能在本地工作台看到哪一个 agent 在什么时间使用或修改了哪份资料：
 
 \`\`\`
+X-AgentNote-Agent-Id: ${encodeURIComponent(agentId)}
 X-AgentNote-Agent-Name: ${encodeURIComponent(agentName)}
 X-AgentNote-Session-Title: <encodeURIComponent(根据当前具体工作填写的简短标题)>
 \`\`\`
@@ -100,6 +103,7 @@ ${instructions.trim() ? `\n## 此 agent 的附加要求\n\n${instructions.trim()
 export function installSkill(dir: string, options: AgentPromptOptions): void {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "SKILL.md"), renderSkillMd(options), "utf8");
+  fs.writeFileSync(path.join(dir, "agentnote.identity.json"), JSON.stringify({ version: 1, id: options.agentId ?? "agentnote", name: options.agentName ?? "未命名 agent" }, null, 2), "utf8");
 }
 
 /** A portable task for agents outside the built-in registry. */

@@ -94,6 +94,15 @@ try {
       await fsp.rm(scoringVault, { recursive: true, force: true });
     }
   });
+  await test("registered agent identity overrides a changing self-reported name", async () => {
+    await store.registerAgent({ id: "codex", name: "Codex" });
+    const result = await api("POST", "/api/nodes", { title: "身份稳定性", content: "固定配置优先于请求中的显示名称。" }, { "x-agentnote-agent-id": "codex", "x-agentnote-agent-name": encodeURIComponent("随机名称"), "x-agentnote-session-title": encodeURIComponent("身份验证") });
+    assert.equal(result.status, 201);
+    const created = (await store.listActivity({ nodeId: result.data.id })).find((event) => event.type === "node-created");
+    assert.equal(created?.actor?.id, "codex");
+    assert.equal(created?.actor?.name, "Codex");
+    assert.equal(created?.actor?.sessionTitle, "身份验证");
+  });
   await test("workstation insight APIs expose agent, document, and activity attribution", async () => {
     const activity = await api("GET", "/api/insights/activity?agent=Codex");
     assert.equal(activity.ok, true); assert.ok(activity.data.every((event) => event.actor?.name === "Codex"));
@@ -171,10 +180,10 @@ try {
   });
 
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
-    const prompt = renderSkillMd({ port, instructions: "使用中文。", agentName: "Codex" });
-    assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
+    const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
+    assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
-    const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); await fsp.rm(home, { recursive: true, force: true });
+    const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); assert.deepEqual(JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")), { version: 1, id: "codex", name: "Codex" }); await fsp.rm(home, { recursive: true, force: true });
   });
   await test("built-in agents remain visible regardless of local installation", async () => {
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-agents-"));

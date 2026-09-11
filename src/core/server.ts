@@ -14,9 +14,10 @@ async function readBody(req: http.IncomingMessage): Promise<unknown> {
 }
 function activityContext(req: http.IncomingMessage): ActivityContext {
   const decodeHeader = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
+  const id = decodeHeader(req.headers["x-agentnote-agent-id"]?.toString() ?? "").trim().toLowerCase().slice(0, 80);
   const name = decodeHeader(req.headers["x-agentnote-agent-name"]?.toString() ?? req.headers["x-agentnote-agent"]?.toString() ?? "").trim().slice(0, 80);
   const sessionTitle = decodeHeader(req.headers["x-agentnote-session-title"]?.toString() ?? req.headers["x-agentnote-session"]?.toString() ?? "").trim().slice(0, 160);
-  return name ? { actor: { name, sessionTitle: sessionTitle || undefined } } : {};
+  return name || id ? { actor: { id: id || undefined, name: name || id, sessionTitle: sessionTitle || undefined } } : {};
 }
 
 export class AgentServer {
@@ -43,7 +44,7 @@ export class AgentServer {
     const method = req.method ?? "GET";
     if (url.pathname === "/api/health" && method === "GET") return send(res, 200, { ok: true, data: { status: "up", version: 2, vault: this.store.root } });
     if (parts[0] !== "api") return send(res, 404, { ok: false, error: "接口不存在" });
-    const context = activityContext(req);
+    const context = await this.store.resolveActivityContext(activityContext(req));
 
     if (parts[1] === "nodes" && parts.length === 2) {
       if (method === "GET") return send(res, 200, { ok: true, data: (await this.store.listNodes({ q: url.searchParams.get("q") ?? undefined, type: url.searchParams.get("type") as NodeType ?? undefined, archived: url.searchParams.has("archived") ? url.searchParams.get("archived") === "true" : undefined })).map(nodeView) });

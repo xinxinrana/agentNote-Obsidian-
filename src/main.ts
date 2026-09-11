@@ -70,7 +70,8 @@ export default class AgentNotePlugin extends Plugin {
   async installAgent(agent: DetectedAgent): Promise<void> {
     const profile = this.profile(agent.id);
     try {
-      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentName: agent.name });
+      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name });
+      await this.store.registerAgent({ id: agent.id, name: agent.name });
       await this.saveProfile(agent.id, { ...profile, enabled: true });
       new Notice(`${agent.name} 已接入 agentNote；重启 agent 后生效。`);
     } catch (error) {

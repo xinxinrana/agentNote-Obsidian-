@@ -36,6 +36,7 @@ export interface UpdateNodeInput {
 export type InsightEventType = "node-created" | "node-updated" | "node-archived" | "node-restored" | "share-created" | "share-resolved";
 export interface ActivityActor { name: string; sessionTitle?: string; id?: string }
 export interface ActivityContext { actor?: ActivityActor }
+interface RegisteredAgent { id: string; name: string }
 export interface InsightEvent {
   at: string;
   type: InsightEventType;
@@ -289,6 +290,29 @@ export class VaultStore {
   }
   private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
   async listShares(): Promise<Share[]> { return this.readShares(); }
+  private async readRegisteredAgents(): Promise<RegisteredAgent[]> {
+    try {
+      const agents: unknown = JSON.parse(await fsp.readFile(this.p("data", "agents.json"), "utf8")) as unknown;
+      if (!Array.isArray(agents)) return [];
+      return agents.filter((agent): agent is RegisteredAgent => isRecord(agent) && typeof agent.id === "string" && typeof agent.name === "string" && !!agent.id.trim() && !!agent.name.trim());
+    } catch { return []; }
+  }
+  async registerAgent(agent: RegisteredAgent): Promise<void> {
+    const id = agent.id.trim().toLowerCase().slice(0, 80);
+    const name = agent.name.trim().slice(0, 80);
+    if (!id || !name) throw new StoreError(400, "agent 身份不完整");
+    const agents = await this.readRegisteredAgents();
+    const index = agents.findIndex((item) => item.id === id);
+    if (index === -1) agents.push({ id, name }); else agents[index] = { id, name };
+    await fsp.writeFile(this.p("data", "agents.json"), JSON.stringify(agents, null, 2), "utf8");
+  }
+  async resolveActivityContext(context: ActivityContext): Promise<ActivityContext> {
+    const actor = context.actor;
+    const id = actor?.id?.trim().toLowerCase();
+    if (!actor || !id) return context;
+    const registered = (await this.readRegisteredAgents()).find((agent) => agent.id === id);
+    return registered ? { actor: { id: registered.id, name: registered.name, sessionTitle: actor.sessionTitle } } : context;
+  }
   private async appendShare(target: ShareTarget, selection?: string, background?: string, context: ActivityContext = {}, title?: string): Promise<Share> {
     const share: Share = { id: newId("s-x"), target, selection, background: background?.trim() || undefined, created: new Date().toISOString() };
     const shares = await this.readShares(); shares.push(share); await this.writeShares(shares);
