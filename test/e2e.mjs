@@ -102,6 +102,7 @@ try {
     assert.equal(created?.actor?.id, "codex");
     assert.equal(created?.actor?.name, "Codex");
     assert.equal(created?.actor?.sessionTitle, "身份验证");
+    assert.equal(created?.title, "身份稳定性");
   });
   await test("workstation insight APIs expose agent, document, and activity attribution", async () => {
     const activity = await api("GET", "/api/insights/activity?agent=Codex");

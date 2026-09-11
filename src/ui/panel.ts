@@ -30,10 +30,10 @@ export class AgentNoteView extends ItemView {
     this.renderAgents(this.plugin.detectedAgents());
   }
   private activityText(event: InsightEvent): string {
-    if (event.type === "node-created") return "新建了一条笔记";
-    if (event.type === "node-updated") return "更新了一条笔记";
-    if (event.type === "node-archived") return "归档了一条笔记";
-    if (event.type === "node-restored") return "恢复了一条笔记";
+    if (event.type === "node-created") return `创建「${event.title ?? "未命名资料"}」`;
+    if (event.type === "node-updated") return `更新「${event.title ?? "未命名资料"}」`;
+    if (event.type === "node-archived") return `归档「${event.title ?? "未命名资料"}」`;
+    if (event.type === "node-restored") return `恢复「${event.title ?? "未命名资料"}」`;
     if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
     return `读取「${event.title ?? "分享资料"}」`;
   }
@@ -119,10 +119,10 @@ class InsightsModal extends Modal {
   private displayTitle(title: string): string { return this.privateView ? "已匿名资料" : title; }
   private activeDays(trend: { count: number }[]): number { return trend.filter((point) => point.count > 0).length; }
   private activityText(event: InsightEvent): string {
-    if (event.type === "node-created") return "创建笔记";
-    if (event.type === "node-updated") return "更新笔记";
-    if (event.type === "node-archived") return "归档笔记";
-    if (event.type === "node-restored") return "恢复笔记";
+    if (event.type === "node-created") return `创建「${this.displayTitle(event.title ?? "未命名资料")}」`;
+    if (event.type === "node-updated") return `更新「${this.displayTitle(event.title ?? "未命名资料")}」`;
+    if (event.type === "node-archived") return `归档「${this.displayTitle(event.title ?? "未命名资料")}」`;
+    if (event.type === "node-restored") return `恢复「${this.displayTitle(event.title ?? "未命名资料")}」`;
     if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
     return `读取「${event.title ?? "分享资料"}」`;
   }
