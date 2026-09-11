@@ -269,7 +269,7 @@ class InsightsModal extends Modal {
         const label = months.createEl("span", { text: `${date.getMonth() + 1}月` });
         label.setCssProps({ "--agentnote-month-offset": `${Math.floor(index / 7) * 17}px` });
       }
-      const cell = grid.createEl("span", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { title: `${point.label}：${point.count} 次协作`, "aria-label": `${point.label}：${point.count} 次协作` } });
+      const cell = grid.createEl("span", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": `${point.label}：${point.count} 次协作` } });
       if (point.count) cell.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.18 + point.count / max * 0.58) * 100)}%` });
     }
   }
