@@ -34,6 +34,7 @@ export class AgentNoteView extends ItemView {
     if (event.type === "node-updated") return "更新了一条笔记";
     if (event.type === "node-archived") return "归档了一条笔记";
     if (event.type === "node-restored") return "恢复了一条笔记";
+    if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
     return `读取「${event.title ?? "分享资料"}」`;
   }
   private timeText(iso: string): string { return new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
@@ -42,10 +43,10 @@ export class AgentNoteView extends ItemView {
     const dashboard = this.contentEl.createDiv({ cls: "agentnote-dashboard" });
     const overview = dashboard.createDiv({ cls: "agentnote-dashboard-hero" });
     overview.createEl("span", { cls: "agentnote-eyebrow", text: "本地知识洞察" });
-    overview.createEl("h4", { text: "资料正在为 agent 工作" });
-    overview.createEl("p", { text: `本周有 ${insights.summary.weekUsedNotes} 条笔记通过 ${insights.summary.weekResolves} 次链接解析进入工作流。` });
+    overview.createEl("h4", { text: "知识正在持续进入工作流" });
+    overview.createEl("p", { text: insights.summary.weekActivityCount ? `本周完成 ${insights.summary.weekActivityCount} 次有效操作：新建 ${insights.summary.weekCreated}、更新 ${insights.summary.weekUpdated}、分享 ${insights.summary.weekSharesCreated}、复用 ${insights.summary.weekResolves}。` : "新建、维护、分享或复用资料后，这里会记录完整的知识活动。" });
     const stats = overview.createDiv({ cls: "agentnote-metric-strip" });
-    for (const [value, label] of [[insights.summary.weekCreated, "本周创建"], [insights.summary.weekResolves, "本周使用"], [insights.summary.weekUsedNotes, "使用资料"]] as const) {
+    for (const [value, label] of [[insights.summary.weekActivityScore, "知识活跃分"], [insights.summary.weekUpdated, "本周更新"], [insights.summary.weekResolves, "本周复用"]] as const) {
       const stat = stats.createDiv({ cls: "agentnote-metric" }); stat.createEl("strong", { text: String(value) }); stat.createEl("span", { text: label });
     }
     const activity = dashboard.createDiv({ cls: "agentnote-home-activity" });
@@ -122,6 +123,7 @@ class InsightsModal extends Modal {
     if (event.type === "node-updated") return "更新笔记";
     if (event.type === "node-archived") return "归档笔记";
     if (event.type === "node-restored") return "恢复笔记";
+    if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
     return `读取「${event.title ?? "分享资料"}」`;
   }
   private async render(): Promise<void> {
@@ -143,8 +145,8 @@ class InsightsModal extends Modal {
     }
     const body = this.contentEl.createDiv({ cls: "agentnote-modal-body" });
     if (this.tab === "overview") this.renderOverview(body, insights, agents);
-    if (this.tab === "week") this.renderPeriod(body, { eyebrow: "WEEKLY REVIEW", title: "本周知识复用报告", description: "看看哪些资料真正进入了协作，并持续产生价值。", trendTitle: "每日协作节奏", rankingTitle: "本周最常复用的资料" }, [[insights.summary.weekResolves, "资料协作"], [insights.summary.weekCreated, "新建资料"], [insights.summary.weekUsedNotes, "投入资料"]], insights.weekly, insights.weeklyTrend, "weekly");
-    if (this.tab === "month") this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: "开始以来的知识贡献", description: `从 ${this.dateText(insights.startedAt)} 的第一条记录开始，持续回看本地知识如何进入协作。`, trendTitle: "知识贡献", rankingTitle: "开始以来高价值资料" }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, "活跃天数"], [insights.allTime.reduce((total, entry) => total + entry.reads, 0), "累计复用"], [insights.allTime.length, "高价值资料"]], insights.allTime, insights.allTimeTrend, "contributions");
+    if (this.tab === "week") this.renderPeriod(body, { eyebrow: "WEEKLY REVIEW", title: "本周知识活跃报告", description: "新建、更新、分享与复用共同构成真实的知识工作节奏。", trendTitle: "每日知识活跃度", rankingTitle: "本周最常复用的资料" }, [[insights.summary.weekActivityScore, "知识活跃分"], [insights.summary.weekCreated, "新建资料"], [insights.summary.weekUpdated, "更新资料"], [insights.summary.weekResolves, "资料复用"]], insights.weekly, insights.weeklyTrend, "weekly");
+    if (this.tab === "month") this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: "开始以来的知识贡献", description: `从 ${this.dateText(insights.startedAt)} 的第一条记录开始，持续回看本地知识如何被创建、维护、分享与复用。`, trendTitle: "知识贡献", rankingTitle: "开始以来高价值资料" }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, "活跃天数"], [insights.summary.allTimeActivityScore, "知识活跃分"], [insights.allTime.reduce((total, entry) => total + entry.reads, 0), "累计复用"], [insights.allTime.length, "高价值资料"]], insights.allTime, insights.allTimeTrend, "contributions");
     if (this.tab === "agents") this.renderAgents(body, agents);
     if (this.tab === "timeline") this.renderTimeline(body, insights);
     if (this.tab === "archive") this.renderArchive(body, insights);
@@ -154,10 +156,10 @@ class InsightsModal extends Modal {
     const profile = parent.createDiv({ cls: "agentnote-profile-card" });
     const summary = profile.createDiv({ cls: "agentnote-profile-summary" });
     summary.createEl("span", { cls: "agentnote-profile-label", text: "近 7 天成果" });
-    summary.createEl("strong", { text: `${insights.summary.weekResolves} 次资料协作` });
-    summary.createEl("p", { text: insights.summary.weekResolves ? `已有 ${insights.summary.weekUsedNotes} 条资料被 agent 反复调用。` : "分享资料给 agent 后，这里会开始记录它们带来的工作成果。" });
+    summary.createEl("strong", { text: `${insights.summary.weekActivityScore} 知识活跃分` });
+    summary.createEl("p", { text: insights.summary.weekActivityCount ? `新建 ${insights.summary.weekCreated} · 更新 ${insights.summary.weekUpdated} · 分享 ${insights.summary.weekSharesCreated} · 复用 ${insights.summary.weekResolves}` : "开始新建、维护、分享或复用资料后，这里会记录完整的知识工作成果。" });
     const metrics = profile.createDiv({ cls: "agentnote-profile-metrics" });
-    for (const [value, label] of [[insights.summary.weekUsedNotes, "投入资料"], [activeDays, "活跃天数"], [agents.length, "协作 agent"]] as const) {
+    for (const [value, label] of [[insights.summary.weekActivityCount, "有效操作"], [activeDays, "活跃天数"], [agents.length, "协作 agent"]] as const) {
       const metric = metrics.createDiv(); metric.createEl("strong", { text: String(value) }); metric.createEl("span", { text: label });
     }
 
@@ -169,7 +171,7 @@ class InsightsModal extends Modal {
     const days = rhythm.createDiv({ cls: "agentnote-profile-days" });
     const max = Math.max(1, ...insights.weeklyTrend.map((point) => point.count));
     for (const point of insights.weeklyTrend) {
-      const day = days.createDiv({ cls: `agentnote-profile-day${point.count ? " is-active" : ""}`, attr: { title: `${point.label}：${point.count} 次使用` } });
+      const day = days.createDiv({ cls: `agentnote-profile-day${point.count ? " is-active" : ""}`, attr: { title: `${point.label}：${point.count} 知识活跃分` } });
       if (point.count) day.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.22 + point.count / max * 0.5) * 100)}%` });
       day.createEl("strong", { text: point.label }); day.createEl("span", { text: String(point.count) });
     }
@@ -182,8 +184,8 @@ class InsightsModal extends Modal {
       const button = next.createEl("button", { text: "查看整理建议" });
       button.onclick = () => { this.tab = "archive"; void this.render(); };
     } else {
-      next.createEl("h3", { text: insights.summary.weekResolves ? "继续积累可复用上下文" : "分享第一条工作资料" });
-      next.createEl("p", { text: insights.summary.weekResolves ? "把高频资料固定下来，让每一次协作都从已有上下文开始。" : "从文件菜单选择“分享给 agent”，让资料立即进入工作流。" });
+      next.createEl("h3", { text: insights.summary.weekActivityCount ? "继续积累可复用上下文" : "分享第一条工作资料" });
+      next.createEl("p", { text: insights.summary.weekActivityCount ? "把高频资料固定下来，让每一次协作都从已有上下文开始。" : "从文件菜单选择“分享给 agent”，让资料立即进入工作流。" });
     }
 
     const highlights = parent.createDiv({ cls: "agentnote-profile-highlights" });
@@ -229,14 +231,14 @@ class InsightsModal extends Modal {
   private renderPeriod(parent: HTMLElement, header: { eyebrow: string; title: string; description: string; trendTitle: string; rankingTitle: string }, metricsData: readonly (readonly [number, string])[], notes: InsightNote[], trend: { label: string; count: number }[], mode: "weekly" | "contributions"): void {
     this.renderTabHero(parent, header.eyebrow, header.title, header.description, metricsData);
     const trendSection = parent.createDiv({ cls: "agentnote-detail-section agentnote-period-trend" });
-    const trendHeading = trendSection.createDiv({ cls: "agentnote-section-heading" }); trendHeading.createEl("h3", { text: header.trendTitle }); if (mode === "weekly") trendHeading.createEl("span", { text: "每根柱代表当天的资料协作次数" });
+    const trendHeading = trendSection.createDiv({ cls: "agentnote-section-heading" }); trendHeading.createEl("h3", { text: header.trendTitle }); if (mode === "weekly") trendHeading.createEl("span", { text: "新建 1 分 · 更新 2 分 · 分享 0.5 分 · 复用 1.5 分" });
     const max = Math.max(1, ...trend.map((point) => point.count));
     if (mode === "contributions") this.renderContributionGraph(trendSection, trend, max);
     else {
       const bars = trendSection.createDiv({ cls: "agentnote-trend" });
       for (const point of trend) {
         const item = bars.createDiv({ cls: "agentnote-trend-item" });
-        const bar = item.createDiv({ cls: "agentnote-trend-bar" }); bar.setCssProps({ "--agentnote-trend-height": `${Math.max(4, point.count / max * 100)}%` }); bar.setAttribute("aria-label", `${point.label}：${point.count} 次使用`);
+        const bar = item.createDiv({ cls: "agentnote-trend-bar" }); bar.setCssProps({ "--agentnote-trend-height": `${Math.max(4, point.count / max * 100)}%` }); bar.setAttribute("aria-label", `${point.label}：${point.count} 知识活跃分`);
         item.createEl("span", { text: point.label });
       }
     }
@@ -269,7 +271,7 @@ class InsightsModal extends Modal {
         const label = months.createEl("span", { text: `${date.getMonth() + 1}月` });
         label.setCssProps({ "--agentnote-month-offset": `${Math.floor(index / 7) * 17}px` });
       }
-      const cell = grid.createEl("span", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": `${point.label}：${point.count} 次协作` } });
+      const cell = grid.createEl("span", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": `${point.label}：${point.count} 知识活跃分` } });
       if (point.count) cell.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.18 + point.count / max * 0.58) * 100)}%` });
     }
   }
@@ -281,13 +283,13 @@ class InsightsModal extends Modal {
       const button = filters.createEl("button", { text: label, cls: this.timelineFilter === filter ? "is-active" : "" });
       button.onclick = () => { this.timelineFilter = filter; void this.render(); };
     }
-    const visible = insights.timeline.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "created" && event.type === "node-created") || (this.timelineFilter === "used" && event.type === "share-resolved") || (this.timelineFilter === "changed" && ["node-updated", "node-archived", "node-restored"].includes(event.type)));
+    const visible = insights.timeline.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "created" && event.type === "node-created") || (this.timelineFilter === "used" && ["share-created", "share-resolved"].includes(event.type)) || (this.timelineFilter === "changed" && ["node-updated", "node-archived", "node-restored"].includes(event.type)));
     if (!visible.length) { parent.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: "还没有符合条件的活动。换一个筛选条件，或开始一次新的资料协作。" }); return; }
     const list = parent.createEl("ul", { cls: "agentnote-timeline" });
     for (const event of visible) {
       const item = list.createEl("li");
       const detail = item.createDiv();
-      const title = detail.createDiv({ cls: "agentnote-timeline-title" }); title.createEl("strong", { text: this.activityText(event) }); title.createEl("span", { cls: `agentnote-event-chip is-${event.type}`, text: event.type === "share-resolved" ? "使用" : event.type === "node-created" ? "创建" : event.type === "node-updated" ? "更新" : event.type === "node-archived" ? "归档" : "恢复" });
+      const title = detail.createDiv({ cls: "agentnote-timeline-title" }); title.createEl("strong", { text: this.activityText(event) }); title.createEl("span", { cls: `agentnote-event-chip is-${event.type}`, text: event.type === "share-resolved" ? "使用" : event.type === "share-created" ? "分享" : event.type === "node-created" ? "创建" : event.type === "node-updated" ? "更新" : event.type === "node-archived" ? "归档" : "恢复" });
       detail.createEl("span", { text: [event.actor?.name ?? event.actor?.id ?? "未申报 agent", event.actor?.sessionTitle, event.targetKind === "folder" ? "文件夹" : event.targetKind === "node" ? "笔记" : "文件"].filter(Boolean).join(" · ") });
       item.createEl("time", { text: this.timeText(event.at) });
     }

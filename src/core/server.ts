@@ -32,8 +32,8 @@ export class AgentServer {
   async stop(): Promise<void> { if (this.server) await new Promise<void>((resolve) => this.server!.close(() => resolve())); this.server = null; }
   private shareLink(shareId: string): string { return `http://127.0.0.1:${this.port ?? this.opts.port}/api/shares/${shareId}/resolve`; }
   private notifyActivity(): void { try { this.opts.onActivity?.(); } catch { /* UI notifications never affect API responses */ } }
-  private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated") {
-    const share = await this.store.ensureShareForNode(node.id);
+  private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated", context: ActivityContext) {
+    const share = await this.store.ensureShareForNode(node.id, context);
     return { status, link: this.shareLink(share.id), ...nodeView(node) };
   }
 
@@ -52,7 +52,7 @@ export class AgentServer {
         const idempotencyKey = req.headers["idempotency-key"]?.toString() ?? body.idempotencyKey;
         const node = await this.store.createNode(body, idempotencyKey, context);
         this.notifyActivity();
-        return send(res, 201, { ok: true, data: await this.withLink(node, "created") });
+        return send(res, 201, { ok: true, data: await this.withLink(node, "created", context) });
       }
     }
     if (parts[1] === "nodes" && parts.length === 3) {
@@ -61,7 +61,7 @@ export class AgentServer {
       if (method === "PUT" || method === "PATCH") {
         const node = await this.store.updateNode(id, await readBody(req) as UpdateNodeInput, context);
         this.notifyActivity();
-        return send(res, 200, { ok: true, data: await this.withLink(node, "updated") });
+        return send(res, 200, { ok: true, data: await this.withLink(node, "updated", context) });
       }
     }
     if (parts[1] === "nodes" && parts.length === 4 && parts[3] === "archive" && method === "POST") {
@@ -72,8 +72,8 @@ export class AgentServer {
     }
     if (parts[1] === "shares" && parts.length === 2 && method === "POST") {
       const body = await readBody(req) as { nodeId?: string; path?: string; background?: string; selection?: string };
-      if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection) });
-      if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection) });
+      if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context) });
+      if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context) });
       throw new StoreError(400, "nodeId 或 path 至少提供一个");
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {

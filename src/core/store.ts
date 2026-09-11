@@ -33,7 +33,7 @@ export interface UpdateNodeInput {
   pinned?: boolean;
 }
 
-export type InsightEventType = "node-created" | "node-updated" | "node-archived" | "node-restored" | "share-resolved";
+export type InsightEventType = "node-created" | "node-updated" | "node-archived" | "node-restored" | "share-created" | "share-resolved";
 export interface ActivityActor { name: string; sessionTitle?: string; id?: string }
 export interface ActivityContext { actor?: ActivityActor }
 export interface InsightEvent {
@@ -48,7 +48,17 @@ export interface InsightEvent {
 export interface InsightNote { node: AgentNode; reads: number; lastRead?: string; score: number; reason: string }
 export interface InsightTrendPoint { label: string; count: number }
 export interface DashboardInsights {
-  summary: { weekCreated: number; weekResolves: number; weekUsedNotes: number; monthResolves: number };
+  summary: {
+    weekActivityScore: number;
+    allTimeActivityScore: number;
+    weekActivityCount: number;
+    weekCreated: number;
+    weekUpdated: number;
+    weekSharesCreated: number;
+    weekResolves: number;
+    weekUsedNotes: number;
+    monthResolves: number;
+  };
   weekly: InsightNote[];
   monthly: InsightNote[];
   allTime: InsightNote[];
@@ -71,6 +81,12 @@ export type ShareResult =
 /** Tells the receiving agent how to use filePath: the link stays the read
  *  entry; local file access (when available) is the edit entry. */
 const SHARE_HINT = "优先通过本链接读取：它是活引用，始终返回当前内容。需要修改时，具备本地文件能力的 agent 可直接编辑 filePath 指向的本地文件，无需全量重写。";
+const ACTIVITY_WEIGHTS: Partial<Record<InsightEventType, number>> = {
+  "node-created": 1,
+  "node-updated": 2,
+  "share-created": 0.5,
+  "share-resolved": 1.5,
+};
 
 function newId(prefix: string): string { return `${prefix}-${randomBytes(6).toString("hex")}`; }
 function safeFileBase(title: string, fallback: string): string {
@@ -273,34 +289,37 @@ export class VaultStore {
   }
   private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
   async listShares(): Promise<Share[]> { return this.readShares(); }
-  private async appendShare(target: ShareTarget, selection?: string, background?: string): Promise<Share> {
+  private async appendShare(target: ShareTarget, selection?: string, background?: string, context: ActivityContext = {}, title?: string): Promise<Share> {
     const share: Share = { id: newId("s-x"), target, selection, background: background?.trim() || undefined, created: new Date().toISOString() };
-    const shares = await this.readShares(); shares.push(share); await this.writeShares(shares); return share;
+    const shares = await this.readShares(); shares.push(share); await this.writeShares(shares);
+    await this.recordEvent({ type: "share-created", shareId: share.id, nodeId: target.kind === "node" ? target.nodeId : undefined, targetKind: target.kind, title, actor: context.actor }).catch(() => undefined);
+    return share;
   }
-  async createShare(nodeId: string, selection?: string): Promise<Share> {
+  async createShare(nodeId: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
     const node = await this.getNode(nodeId);
     if (selection && node.type !== "snippet") throw new StoreError(400, "只有文本笔记能分享选段");
     if (selection && !node.content.includes(selection)) throw new StoreError(400, "选段已不在当前正文中");
-    return this.appendShare({ kind: "node", nodeId }, selection);
+    return this.appendShare({ kind: "node", nodeId }, selection, undefined, context, node.title);
   }
   /** Every written node gets a whole-note share link; reuse the existing one
    *  so the link returned at write time stays the canonical address. */
-  async ensureShareForNode(nodeId: string): Promise<Share> {
+  async ensureShareForNode(nodeId: string, context: ActivityContext = {}): Promise<Share> {
     const existing = (await this.readShares()).find((share) => share.target.kind === "node" && share.target.nodeId === nodeId && !share.selection);
-    return existing ?? this.createShare(nodeId);
+    return existing ?? this.createShare(nodeId, undefined, context);
   }
   private vaultPath(relPath: string): { rel: string; abs: string } {
     const rel = relPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
     if (!rel || rel.split("/").includes("..")) throw new StoreError(400, "必须提供 vault 内相对路径");
     return { rel, abs: path.join(this.root, ...rel.split("/")) };
   }
-  async createPathShare(relPath: string, background?: string, selection?: string): Promise<Share> {
+  async createPathShare(relPath: string, background?: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
     const { rel, abs } = this.vaultPath(relPath);
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat) throw new StoreError(404, `找不到内容: ${rel}`);
-    if (stat.isDirectory()) { if (selection) throw new StoreError(400, "文件夹不能分享选段"); return this.appendShare({ kind: "folder", path: rel }, undefined, background); }
+    const title = path.basename(rel).replace(/\.md$/i, "");
+    if (stat.isDirectory()) { if (selection) throw new StoreError(400, "文件夹不能分享选段"); return this.appendShare({ kind: "folder", path: rel }, undefined, background, context, title); }
     if (selection && !(await fsp.readFile(abs, "utf8")).includes(selection)) throw new StoreError(400, "选段已不在当前文件中");
-    return this.appendShare({ kind: "file", path: rel }, selection, background);
+    return this.appendShare({ kind: "file", path: rel }, selection, background, context, title);
   }
 
   async resolveShare(id: string, context: ActivityContext = {}): Promise<ShareResult> {
@@ -342,11 +361,23 @@ export class VaultStore {
   async getDashboardInsights(now = new Date()): Promise<DashboardInsights> {
     const nodes = await this.listNodes();
     const events = await this.readEvents();
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const recordedShareIds = new Set(events.filter((event) => event.type === "share-created" && event.shareId).map((event) => event.shareId));
+    const legacyShareEvents: InsightEvent[] = (await this.readShares()).filter((share) => !recordedShareIds.has(share.id) && !Number.isNaN(new Date(share.created).getTime())).map((share) => ({
+      at: share.created,
+      type: "share-created",
+      shareId: share.id,
+      nodeId: share.target.kind === "node" ? share.target.nodeId : undefined,
+      targetKind: share.target.kind,
+      title: share.target.kind === "node" ? nodesById.get(share.target.nodeId)?.title : path.basename(share.target.path).replace(/\.md$/i, ""),
+    }));
+    const activityEvents = [...events, ...legacyShareEvents];
     const weekStart = new Date(now); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const archiveBefore = new Date(now); archiveBefore.setDate(archiveBefore.getDate() - 30);
     const inRange = (at: string, start: Date) => new Date(at) >= start && new Date(at) <= now;
-    const resolveEvents = events.filter((event) => event.type === "share-resolved");
+    const resolveEvents = activityEvents.filter((event) => event.type === "share-resolved");
+    const activityScore = (items: InsightEvent[]): number => items.reduce((total, event) => total + (ACTIVITY_WEIGHTS[event.type] ?? 0), 0);
     const buildRanking = (start: Date, period: "week" | "month" | "all"): InsightNote[] => {
       const usage = new Map<string, InsightEvent[]>();
       for (const event of resolveEvents.filter((event) => event.nodeId && inRange(event.at, start))) {
@@ -369,17 +400,22 @@ export class VaultStore {
     const trend = (start: Date, days: number, label: (date: Date) => string): InsightTrendPoint[] => Array.from({ length: days }, (_, index) => {
       const from = new Date(start); from.setDate(from.getDate() + index);
       const until = new Date(from); until.setDate(until.getDate() + 1);
-      return { label: label(from), count: resolveEvents.filter((event) => new Date(event.at) >= from && new Date(event.at) < until).length };
+      return { label: label(from), count: activityScore(activityEvents.filter((event) => new Date(event.at) >= from && new Date(event.at) < until)) };
     });
     const dateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    const recordedAt = [...events.map((event) => event.at), ...nodes.map((node) => node.created)].map((at) => new Date(at).getTime()).filter(Number.isFinite);
+    const recordedAt = [...activityEvents.map((event) => event.at), ...nodes.map((node) => node.created)].map((at) => new Date(at).getTime()).filter(Number.isFinite);
     const startedAt = new Date(recordedAt.length ? Math.min(...recordedAt) : now.getTime());
     const contributionStart = new Date(startedAt); contributionStart.setHours(0, 0, 0, 0); contributionStart.setDate(contributionStart.getDate() - contributionStart.getDay());
     const contributionDays = Math.max(1, Math.floor((now.getTime() - contributionStart.getTime()) / 86_400_000) + 1);
     const monthDays = Math.max(1, Math.ceil((now.getTime() - monthStart.getTime()) / 86_400_000) + 1);
     return {
       summary: {
+        weekActivityScore: activityScore(activityEvents.filter((event) => inRange(event.at, weekStart))),
+        allTimeActivityScore: activityScore(activityEvents),
+        weekActivityCount: activityEvents.filter((event) => inRange(event.at, weekStart) && ACTIVITY_WEIGHTS[event.type] !== undefined).length,
         weekCreated: nodes.filter((node) => inRange(node.created, weekStart)).length,
+        weekUpdated: activityEvents.filter((event) => event.type === "node-updated" && inRange(event.at, weekStart)).length,
+        weekSharesCreated: activityEvents.filter((event) => event.type === "share-created" && inRange(event.at, weekStart)).length,
         weekResolves: resolveEvents.filter((event) => inRange(event.at, weekStart)).length,
         weekUsedNotes: usedNodeIds.size,
         monthResolves: resolveEvents.filter((event) => inRange(event.at, monthStart)).length,
@@ -387,8 +423,8 @@ export class VaultStore {
       weekly: buildRanking(weekStart, "week"),
       monthly: buildRanking(monthStart, "month"),
       allTime: buildRanking(contributionStart, "all"),
-      activities: events.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
-      timeline: [...events].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
+      activities: activityEvents.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
+      timeline: [...activityEvents].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
       weeklyTrend: trend(weekStart, 7, (date) => ["日", "一", "二", "三", "四", "五", "六"][date.getDay()]),
       monthlyTrend: trend(monthStart, monthDays, (date) => String(date.getDate())),
       allTimeTrend: trend(contributionStart, contributionDays, dateKey),

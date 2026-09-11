@@ -71,6 +71,29 @@ try {
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.name, "Codex");
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.sessionTitle, "发布流程验证");
   });
+  await test("dashboard counts creation, updates, sharing, and reuse with transparent weights", async () => {
+    const scoringVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-score-"));
+    const scoringStore = new VaultStore(scoringVault);
+    try {
+      await scoringStore.init();
+      const node = await scoringStore.createNode({ title: "统计样本", content: "用于验证知识活跃分。" });
+      await scoringStore.updateNode(node.id, { content: "用于验证知识活跃分与维护行为。" });
+      const share = await scoringStore.createShare(node.id);
+      await scoringStore.resolveShare(share.id);
+      const insights = await scoringStore.getDashboardInsights();
+      assert.equal(insights.summary.weekActivityScore, 5);
+      assert.equal(insights.summary.allTimeActivityScore, 5);
+      assert.equal(insights.summary.weekActivityCount, 4);
+      assert.equal(insights.summary.weekCreated, 1);
+      assert.equal(insights.summary.weekUpdated, 1);
+      assert.equal(insights.summary.weekSharesCreated, 1);
+      assert.equal(insights.summary.weekResolves, 1);
+      assert.ok(insights.timeline.some((event) => event.type === "share-created" && event.title === "统计样本"));
+      assert.equal(insights.weeklyTrend.reduce((total, point) => total + point.count, 0), 5);
+    } finally {
+      await fsp.rm(scoringVault, { recursive: true, force: true });
+    }
+  });
   await test("workstation insight APIs expose agent, document, and activity attribution", async () => {
     const activity = await api("GET", "/api/insights/activity?agent=Codex");
     assert.equal(activity.ok, true); assert.ok(activity.data.every((event) => event.actor?.name === "Codex"));
