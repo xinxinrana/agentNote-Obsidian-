@@ -65,9 +65,15 @@ export class AgentNoteView extends ItemView {
   private renderServer(): void {
     const section = this.contentEl.createDiv({ cls: "agentnote-section" });
     section.createEl("h4", { text: "本地服务" });
+    const running = !!this.plugin.server?.port;
     const port = this.plugin.server?.port ?? this.plugin.settings.port;
-    section.createEl("p", { text: this.plugin.server ? `● 正在运行 · http://127.0.0.1:${port}` : "○ 未运行：agent 暂时无法读取或写入" });
-    const button = section.createEl("button", { text: this.plugin.server ? "停止服务" : "启动服务" });
+    const status = section.createDiv({ cls: `agentnote-service-status${running ? " is-running" : ""}`, attr: { role: "status", "aria-live": "polite" } });
+    status.createSpan({ cls: "agentnote-service-indicator", attr: { "aria-hidden": "true" } });
+    const copy = status.createDiv();
+    copy.createEl("strong", { text: running ? "服务正在运行" : "服务未运行" });
+    copy.createEl("span", { text: running ? "agent 可以读取分享和写入笔记" : "启动后，agent 才能读取分享和写入笔记" });
+    if (running) status.createEl("code", { text: `127.0.0.1:${port}`, attr: { "aria-label": `本地服务地址 127.0.0.1:${port}` } });
+    const button = section.createEl("button", { text: running ? "停止服务" : "启动服务", cls: running ? "mod-warning" : "mod-cta" });
     button.onclick = () => void (this.plugin.server ? this.plugin.stopServer() : this.plugin.startServer());
   }
   private renderAgents(agents: DetectedAgent[]): void {

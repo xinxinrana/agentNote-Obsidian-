@@ -1035,6 +1035,38 @@
   font-size: 0.86em;
 }
 
+.agentnote-service-status {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  background: var(--background-primary);
+}
+
+.agentnote-service-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.agentnote-service-status.is-running .agentnote-service-indicator {
+  background: var(--text-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-success) 16%, transparent);
+}
+
+.agentnote-service-status strong,
+.agentnote-service-status span {
+  display: block;
+}
+
+.agentnote-service-status strong { font-size: 0.86em; }
+.agentnote-service-status span { margin-top: 2px; color: var(--text-muted); font-size: 0.76em; }
+.agentnote-service-status code { color: var(--text-muted); font-size: 0.72em; white-space: nowrap; }
+
 .agentnote-agent-card {
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
