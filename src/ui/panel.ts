@@ -24,7 +24,6 @@ export class AgentNoteView extends ItemView {
 
   async refresh(): Promise<void> {
     this.contentEl.empty(); this.contentEl.addClass("agentnote-panel");
-    this.contentEl.createEl("h3", { text: "agentNote 接入台" });
     await this.renderDashboard();
     this.renderServer();
     this.renderAgents(this.plugin.detectedAgents());
