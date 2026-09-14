@@ -35,6 +35,82 @@
   background: var(--background-secondary);
 }
 
+.agentnote-quick-start {
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 36%, var(--background-modifier-border));
+  border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--interactive-accent) 9%, var(--background-secondary)), var(--background-secondary));
+}
+
+.agentnote-quick-start .agentnote-section-heading { align-items: flex-start; }
+.agentnote-quick-start h4 { margin: 0; font-size: 1em; }
+.agentnote-quick-start .agentnote-eyebrow { margin-bottom: 4px; }
+
+.agentnote-quick-start-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agentnote-quick-start-step {
+  display: flex;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--background-primary);
+}
+
+.agentnote-quick-start-step > span {
+  color: var(--interactive-accent);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.agentnote-quick-start-step strong,
+.agentnote-quick-start-step small { display: block; }
+.agentnote-quick-start-step strong { font-size: 0.84em; }
+.agentnote-quick-start-step small { margin-top: 3px; color: var(--text-muted); font-size: 0.74em; line-height: 1.35; }
+
+.agentnote-quick-start-modal .modal-content { max-width: 600px; }
+.agentnote-quick-start-modal h2 { margin: 4px 0 8px; }
+.agentnote-quick-start-modal > .modal-content > p { margin: 0; color: var(--text-muted); line-height: 1.55; }
+
+.agentnote-guide-steps {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+  padding: 0;
+  list-style-position: inside;
+}
+
+.agentnote-guide-steps li {
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.agentnote-guide-steps p { margin: 5px 0 0; color: var(--text-muted); font-size: 0.88em; line-height: 1.5; }
+
+.agentnote-guide-example,
+.agentnote-guide-help {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.agentnote-guide-example code { white-space: normal; line-height: 1.5; }
+.agentnote-guide-help { margin-top: 10px; color: var(--text-muted); font-size: 0.86em; }
+
+@media (max-width: 520px) {
+  .agentnote-quick-start-steps { grid-template-columns: 1fr; }
+}
+
 .agentnote-dashboard-hero,
 .agentnote-value-section,
 .agentnote-activity-section,

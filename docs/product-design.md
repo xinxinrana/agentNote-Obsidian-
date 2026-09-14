@@ -1,5 +1,7 @@
 # agentNote 核心产品设计
 
+> English copy: [Product Design](Product%20Design.md)
+
 > **agentNote 是一个让 Obsidian 本地第二大脑中的知识，在用户指定的范围和背景下，跨会话、跨 agent、跨时间流动的本地知识中转插件。**
 
 ## 1. 产品定位
