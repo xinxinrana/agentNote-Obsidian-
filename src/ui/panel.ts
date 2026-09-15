@@ -25,7 +25,7 @@ export class AgentNoteView extends ItemView {
   async refresh(): Promise<void> {
     this.contentEl.empty(); this.contentEl.addClass("agentnote-panel");
     await this.renderDashboard();
-    this.renderQuickStart();
+    if (this.plugin.settings.showQuickStart) this.renderQuickStart();
     this.renderServer();
     this.renderAgents(this.plugin.detectedAgents());
   }
@@ -33,8 +33,16 @@ export class AgentNoteView extends ItemView {
     const guide = this.contentEl.createDiv({ cls: "agentnote-quick-start" });
     const heading = guide.createDiv({ cls: "agentnote-section-heading" });
     const title = heading.createDiv(); title.createEl("span", { cls: "agentnote-eyebrow", text: "FIRST WORKFLOW" }); title.createEl("h4", { text: "第一次使用？三步开始" });
-    const open = heading.createEl("button", { text: "查看教程", cls: "mod-cta" });
+    const actions = heading.createDiv({ cls: "agentnote-quick-start-actions" });
+    const open = actions.createEl("button", { text: "查看教程", cls: "mod-cta" });
     open.onclick = () => new QuickStartModal(this.app).open();
+    const dismiss = actions.createEl("button", { text: "暂时隐藏", attr: { "aria-label": "隐藏快速教程" } });
+    dismiss.onclick = async () => {
+      this.plugin.settings.showQuickStart = false;
+      await this.plugin.saveSettings();
+      this.plugin.refreshPanels();
+      new Notice("快速教程已隐藏；可在“设置 → 插件设置 → 使用教程”中重新显示。", 5000);
+    };
     const steps = guide.createDiv({ cls: "agentnote-quick-start-steps" });
     for (const [number, titleText, description] of [["01", "接入一个 agent", "在下方选择已安装的 agent 并完成接入。"], ["02", "分享一份资料", "右键文件或文件夹，复制 agentNote 地址。"], ["03", "直接开始对话", "把地址发给 agent，或说“写到 Obsidian”。"]] as const) {
       const step = steps.createDiv({ cls: "agentnote-quick-start-step" }); step.createEl("span", { text: number }); const copy = step.createDiv(); copy.createEl("strong", { text: titleText }); copy.createEl("small", { text: description });

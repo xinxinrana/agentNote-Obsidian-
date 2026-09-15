@@ -10,8 +10,8 @@ import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
 import { AGENTNOTE_VIEW, AgentNoteView } from "./ui/panel";
 
 export interface AgentProfile { enabled: boolean; instructions: string }
-interface AgentNoteSettings { port: number; autostartServer: boolean; agents: Record<string, AgentProfile> }
-const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, agents: {} };
+interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; agents: Record<string, AgentProfile> }
+const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, agents: {} };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -143,6 +143,7 @@ export default class AgentNotePlugin extends Plugin {
     this.settings = {
       port: typeof settings.port === "number" ? settings.port : DEFAULT_SETTINGS.port,
       autostartServer: typeof settings.autostartServer === "boolean" ? settings.autostartServer : DEFAULT_SETTINGS.autostartServer,
+      showQuickStart: typeof settings.showQuickStart === "boolean" ? settings.showQuickStart : DEFAULT_SETTINGS.showQuickStart,
       agents: isRecord(settings.agents) ? settings.agents as Record<string, AgentProfile> : {},
     };
   }
@@ -191,6 +192,16 @@ class AgentNoteSettingTab extends PluginSettingTab {
         } finally {
           check.setButtonText("检查更新").setDisabled(false);
         }
+      }));
+    new Setting(this.containerEl).setName("使用教程").setHeading();
+    new Setting(this.containerEl)
+      .setName("在接入台显示快速教程")
+      .setDesc("关闭后，可随时在这里重新显示。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.showQuickStart).onChange(async (value) => {
+        this.plugin.settings.showQuickStart = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshPanels();
+        if (value) new Notice("快速教程已重新显示在接入台顶部。");
       }));
     new Setting(this.containerEl).setName("本地服务").setHeading();
     new Setting(this.containerEl).setName("本地服务端口").setDesc("agent 通过此端口读取分享和写入笔记。").addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => { const port = Number(value); if (Number.isInteger(port) && port > 0 && port < 65536) { this.plugin.settings.port = port; await this.plugin.saveSettings(); } }));

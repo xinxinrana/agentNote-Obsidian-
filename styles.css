@@ -45,6 +45,8 @@
 .agentnote-quick-start .agentnote-section-heading { align-items: flex-start; }
 .agentnote-quick-start h4 { margin: 0; font-size: 1em; }
 .agentnote-quick-start .agentnote-eyebrow { margin-bottom: 4px; }
+.agentnote-quick-start-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.agentnote-quick-start-actions button { white-space: nowrap; }
 
 .agentnote-quick-start-steps {
   display: grid;
@@ -109,6 +111,8 @@
 
 @media (max-width: 520px) {
   .agentnote-quick-start-steps { grid-template-columns: 1fr; }
+  .agentnote-quick-start .agentnote-section-heading { gap: 10px; }
+  .agentnote-quick-start-actions { justify-content: flex-start; }
 }
 
 .agentnote-dashboard-hero,
