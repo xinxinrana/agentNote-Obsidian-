@@ -79,9 +79,8 @@ export type ShareResult =
   | { shareId: string; kind: "file"; title: string; background: string; address: string; content: string; updated: string; filePath: string; hint: string }
   | { shareId: string; kind: "folder"; title: string; background: string; address: string; entries: string[]; updated: string; filePath: string; hint: string };
 
-/** Tells the receiving agent how to use filePath: the link stays the read
- *  entry; local file access (when available) is the edit entry. */
-const SHARE_HINT = "优先通过本链接读取：它是活引用，始终返回当前内容。需要修改时，具备本地文件能力的 agent 可直接编辑 filePath 指向的本地文件，无需全量重写。";
+/** Tells the receiving agent how to update the explicitly shared content. */
+const SHARE_HINT = "优先通过本链接读取。更新已分享内容时，PATCH /api/shares/<shareId>，请求体为 { content: 更新后的完整内容 }。";
 const ACTIVITY_WEIGHTS: Partial<Record<InsightEventType, number>> = {
   "node-created": 1,
   "node-updated": 2,
@@ -359,6 +358,50 @@ export class VaultStore {
     }
     await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, targetKind: share.target.kind, title: result.title, actor: context.actor }).catch(() => undefined);
     return result;
+  }
+
+  async updateShareContent(id: string, content: string, context: ActivityContext = {}): Promise<ShareResult> {
+    const share = (await this.readShares()).find((candidate) => candidate.id === id);
+    if (!share) throw new StoreError(404, `分享不存在: ${id}`);
+    if (share.target.kind === "folder") throw new StoreError(400, "文件夹分享不支持通过接口直接修改");
+
+    if (share.target.kind === "node") {
+      const node = await this.getNode(share.target.nodeId);
+      if (node.type === "snippet") {
+        const nextContent = share.selection ? this.replaceSelection(node.content, share.selection, content) : content;
+        if (share.selection) { share.selection = content; await this.replaceShare(share); }
+        return this.resolveNodeShare(share, await this.updateNode(node.id, { content: nextContent }, context));
+      }
+      if (!node.path) throw new StoreError(410, "笔记缺少文件地址");
+      return this.updateSharedFile(share, node.path, node.path, content, context, node.id, node.background, node.title);
+    }
+
+    const { rel, abs } = this.vaultPath(share.target.path);
+    return this.updateSharedFile(share, rel, abs, content, context);
+  }
+
+  private replaceSelection(current: string, selection: string, replacement: string): string {
+    if (!current.includes(selection)) throw new StoreError(410, "分享选段已不在当前文件中");
+    return current.replace(selection, replacement);
+  }
+
+  private async replaceShare(share: Share): Promise<void> {
+    const shares = await this.readShares();
+    const index = shares.findIndex((candidate) => candidate.id === share.id);
+    if (index === -1) throw new StoreError(404, `分享不存在: ${share.id}`);
+    shares[index] = share;
+    await this.writeShares(shares);
+  }
+
+  private async updateSharedFile(share: Share, address: string, abs: string, content: string, context: ActivityContext, nodeId?: string, background?: string, title?: string): Promise<ShareResult> {
+    const stat = await fsp.stat(abs).catch(() => null);
+    if (!stat?.isFile()) throw new StoreError(400, "只有文本文件分享支持通过接口直接修改");
+    const current = await fsp.readFile(abs, "utf8");
+    const nextContent = share.selection ? this.replaceSelection(current, share.selection, content) : content;
+    if (share.selection) { share.selection = content; await this.replaceShare(share); }
+    await fsp.writeFile(abs, nextContent, "utf8");
+    await this.recordEvent({ type: "node-updated", shareId: share.id, nodeId, targetKind: share.target.kind, title: title ?? path.basename(address).replace(/\.md$/i, ""), actor: context.actor }).catch(() => undefined);
+    return this.resolveFileShare(share, address, abs, background, title);
   }
 
   private async readEvents(): Promise<InsightEvent[]> {

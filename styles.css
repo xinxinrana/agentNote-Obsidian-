@@ -47,6 +47,7 @@
 .agentnote-quick-start .agentnote-eyebrow { margin-bottom: 4px; }
 .agentnote-quick-start-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .agentnote-quick-start-actions button { white-space: nowrap; }
+.agentnote-quick-start-dismiss { width: 30px; min-width: 30px; padding: 0; font-size: 1.3em; line-height: 1; }
 
 .agentnote-quick-start-steps {
   display: grid;
@@ -926,7 +927,8 @@
 .agentnote-contribution-calendar {
   display: grid;
   grid-template-rows: 19px auto;
-  min-width: max-content;
+  width: var(--agentnote-contribution-width);
+  min-width: var(--agentnote-contribution-width);
 }
 
 .agentnote-contribution-months {
@@ -960,6 +962,10 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: 3px;
   background: var(--background-primary-alt);
+}
+
+.agentnote-contribution-cell.is-empty {
+  visibility: hidden;
 }
 
 .agentnote-contribution-cell.is-active {

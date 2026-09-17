@@ -52,7 +52,7 @@ POST ${base}/api/nodes
 
 ## 分享地址
 
-用户提供 \`${base}/api/shares/s-x-.../resolve\` 时，直接 GET 并使用返回内容。它是活引用：每次读取都是当前内容。
+用户提供 \`${base}/api/shares/s-x-.../resolve\` 时，直接 GET 并使用返回内容。
 
 - \`kind: text\`：正文和背景。
 - \`kind: file\`：文件地址、背景和当前文件内容。
@@ -79,8 +79,7 @@ X-AgentNote-Session-Title: <encodeURIComponent(根据当前具体工作填写的
 分享返回中的 \`filePath\` 是内容在本机的真实路径，\`hint\` 是使用规则：
 
 - 读取始终优先通过链接，它返回当前内容和背景。
-- 需要修改时，如果你有本地文件能力，直接对 \`filePath\` 做局部编辑，不要通过接口全量重写。笔记文件是带 frontmatter 的 Markdown：正文可以直接改，frontmatter 中的 \`id\`、\`type\`、\`source\` 等字段保持不变。
-- 没有本地文件能力时，GET 链接拿到当前内容，再 PATCH \`/api/nodes/<id>\`。
+- 更新已分享内容时，PATCH \`/api/shares/<shareId>\`，请求体为 \`{ "content": "更新后的完整内容" }\`。
 
 ## 可用接口
 
@@ -91,13 +90,14 @@ GET  ${base}/api/nodes/<id>
 POST ${base}/api/nodes
 PATCH ${base}/api/nodes/<id>
 POST ${base}/api/shares
+PATCH ${base}/api/shares/<shareId>
 GET  ${base}/api/shares/<id>/resolve
 GET  ${base}/api/insights/overview
 GET  ${base}/api/insights/activity?agent=&nodeId=&action=
 GET  ${base}/api/insights/agents
 GET  ${base}/api/insights/documents
 \`\`\`
-${instructions.trim() ? `\n## 此 agent 的附加要求\n\n${instructions.trim()}\n` : ""}`;
+${instructions.trim() ? `\n## 此 agent 的人工附加要求（更高优先级）\n\n${instructions.trim()}\n` : ""}`;
 }
 
 export function installSkill(dir: string, options: AgentPromptOptions): void {
@@ -109,22 +109,20 @@ export function installSkill(dir: string, options: AgentPromptOptions): void {
 /** A portable task for agents outside the built-in registry. */
 export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "port">): string {
   const base = `http://127.0.0.1:${port}`;
+  const skill = renderSkillMd({ port });
   return `请把 agentNote 安装为你自己可持久化使用的一项 skill、instruction 或工具说明。不要假设你必须使用某个固定目录；先识别你当前运行环境中用于保存长期技能/系统指令的正确机制，再自行创建或更新名为 agentnote 的条目。
 
 安装前先验证服务：GET ${base}/api/health。若连接失败，不要伪造安装成功；请告诉用户需要打开 Obsidian 或启动 agentNote 本地服务。
 
-写入以下能力说明，并按你的运行环境采用可在后续会话自动加载的格式：
+以下是内置 agent 使用的完整默认提示词。按你的运行环境采用可在后续会话自动加载的格式保存它：
 
-1. agentNote 是用户的 Obsidian 本地笔记和文件中转系统，服务地址是 ${base}，仅本机可访问。
-2. 当用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”或语义等价的话时，调用 POST ${base}/api/nodes 创建笔记。根据用户表达整理 title、content、background、tags 和 source: "agent"；background 要说明这是什么、从哪来、为什么保存。
-3. 写入成功的响应包含 status 和 link：link 是这条笔记的永久地址。写入后立即把 link 发给用户，并在后续对话中用它指代这条笔记；用户说“修改刚才那篇”时直接用这条 link，不要重新搜索。
-4. 用户给出 ${base}/api/shares/s-x-.../resolve 形式的地址时，直接 GET。它是活引用：每次都读当前内容，不要求用户重新复制文件。
-5. 分享返回三种形态：kind=text 表示正文+背景；kind=file 表示文件地址+背景+当前内容；kind=folder 表示文件夹地址+背景+第一层文件名称。追加 ?raw=1 只获得内容文本。
-6. 分享返回中的 filePath 是内容在本机的真实路径。读取始终优先通过链接；需要修改时，如果你有本地文件能力，直接对 filePath 做局部编辑（笔记文件是带 frontmatter 的 Markdown，正文可改，id/type/source 等字段保持不变），不要全量重写；没有本地文件能力时，GET 链接后 PATCH /api/nodes/<id>。
-7. 每次调用 agentNote HTTP API 都发送 X-AgentNote-Agent-Name（你的 agent 名称）和 X-AgentNote-Session-Title（根据当前具体工作填写的会话标题）请求头，让用户能查看本地工作轨迹。
-8. 服务不可用只表示 Obsidian 或本地服务未运行，不表示用户文件丢失。
+\`\`\`markdown
+${skill}
+\`\`\`
 
-完成后请自行验证：读取刚创建的 skill/instruction，确认其中包含 ${base} 和“写到 Obsidian”的触发语义；再 GET ${base}/api/health。最后向用户简短报告你把它安装在什么机制/位置，以及验证结果。`;
+同时创建 \`agentnote.identity.json\`，保存你自己的固定 \`id\` 与 \`name\`。将提示词中的请求头示例替换为该身份信息，并在每次 API 调用时使用它。
+
+完成后请自行验证：读取刚创建的 skill/instruction，确认内容完整；再 GET ${base}/api/health。最后向用户简短报告你把它安装在什么机制/位置，以及验证结果。`;
 }
 
 export function uninstallSkill(dir: string): void {

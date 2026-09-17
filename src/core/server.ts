@@ -77,6 +77,13 @@ export class AgentServer {
       if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context) });
       throw new StoreError(400, "nodeId 或 path 至少提供一个");
     }
+    if (parts[1] === "shares" && parts.length === 3 && (method === "PUT" || method === "PATCH")) {
+      const body = await readBody(req) as { content?: unknown };
+      if (typeof body.content !== "string") throw new StoreError(400, "content 必须是字符串");
+      const data = await this.store.updateShareContent(parts[2], body.content, context);
+      this.notifyActivity();
+      return send(res, 200, { ok: true, data });
+    }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
       const data = await this.store.resolveShare(parts[2], context);
       this.notifyActivity();

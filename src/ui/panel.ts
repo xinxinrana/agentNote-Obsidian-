@@ -16,15 +16,20 @@ const AGENT_ICONS: Record<string, string> = {
 };
 
 export class AgentNoteView extends ItemView {
+  private refreshVersion = 0;
   constructor(leaf: WorkspaceLeaf, private plugin: AgentNotePlugin) { super(leaf); }
   getViewType(): string { return AGENTNOTE_VIEW; }
   getDisplayText(): string { return "agentNote 接入台"; }
   getIcon(): string { return "bot"; }
   async onOpen(): Promise<void> { await this.refresh(); }
+  async onClose(): Promise<void> { this.refreshVersion++; this.contentEl.empty(); }
 
   async refresh(): Promise<void> {
+    const version = ++this.refreshVersion;
+    const insights = await this.plugin.store.getDashboardInsights();
+    if (version !== this.refreshVersion) return;
     this.contentEl.empty(); this.contentEl.addClass("agentnote-panel");
-    await this.renderDashboard();
+    this.renderDashboard(insights);
     if (this.plugin.settings.showQuickStart) this.renderQuickStart();
     this.renderServer();
     this.renderAgents(this.plugin.detectedAgents());
@@ -36,12 +41,12 @@ export class AgentNoteView extends ItemView {
     const actions = heading.createDiv({ cls: "agentnote-quick-start-actions" });
     const open = actions.createEl("button", { text: "查看教程", cls: "mod-cta" });
     open.onclick = () => new QuickStartModal(this.app).open();
-    const dismiss = actions.createEl("button", { text: "暂时隐藏", attr: { "aria-label": "隐藏快速教程" } });
+    const dismiss = actions.createEl("button", { text: "×", cls: "clickable-icon agentnote-quick-start-dismiss", attr: { "aria-label": "隐藏快速教程", title: "隐藏教程" } });
     dismiss.onclick = async () => {
       this.plugin.settings.showQuickStart = false;
       await this.plugin.saveSettings();
       this.plugin.refreshPanels();
-      new Notice("快速教程已隐藏；可在“设置 → 插件设置 → 使用教程”中重新显示。", 5000);
+      new Notice("快速教程已隐藏；可在“设置 → 插件设置 → 使用教程”中直接查看。", 5000);
     };
     const steps = guide.createDiv({ cls: "agentnote-quick-start-steps" });
     for (const [number, titleText, description] of [["01", "接入一个 agent", "在下方选择已安装的 agent 并完成接入。"], ["02", "分享一份资料", "右键文件或文件夹，复制 agentNote 地址。"], ["03", "直接开始对话", "把地址发给 agent，或说“写到 Obsidian”。"]] as const) {
@@ -57,8 +62,7 @@ export class AgentNoteView extends ItemView {
     return `读取「${event.title ?? "分享资料"}」`;
   }
   private timeText(iso: string): string { return new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
-  private async renderDashboard(): Promise<void> {
-    const insights = await this.plugin.store.getDashboardInsights();
+  private renderDashboard(insights: DashboardInsights): void {
     const dashboard = this.contentEl.createDiv({ cls: "agentnote-dashboard" });
     const overview = dashboard.createDiv({ cls: "agentnote-dashboard-hero" });
     overview.createEl("span", { cls: "agentnote-eyebrow", text: "本地知识洞察" });
@@ -129,7 +133,7 @@ export class AgentNoteView extends ItemView {
   }
 }
 
-class QuickStartModal extends Modal {
+export class QuickStartModal extends Modal {
   onOpen(): void {
     this.modalEl.addClass("agentnote-quick-start-modal");
     this.contentEl.empty();
@@ -298,19 +302,25 @@ class InsightsModal extends Modal {
     }
   }
   private renderContributionGraph(parent: HTMLElement, trend: { label: string; count: number }[], max: number): void {
-    const weeks = Math.ceil(trend.length / 7);
+    const firstDate = new Date(`${trend[0]?.label ?? "1970-01-01"}T00:00:00`);
+    const leadingDays = firstDate.getDay();
+    const weeks = Math.ceil((leadingDays + trend.length) / 7);
     const chart = parent.createDiv({ cls: "agentnote-contribution-chart" });
     const weekdays = chart.createDiv({ cls: "agentnote-contribution-weekdays" });
     for (const label of ["日", "", "二", "", "四", "", "六"]) weekdays.createEl("span", { text: label });
     const calendar = chart.createDiv({ cls: "agentnote-contribution-calendar" });
-    calendar.setCssProps({ "--agentnote-contribution-weeks": String(weeks), "--agentnote-contribution-width": `${weeks * 17}px` });
+    calendar.setCssProps({ "--agentnote-contribution-weeks": String(weeks), "--agentnote-contribution-width": `${Math.max(13, weeks * 17 - 4)}px` });
     const months = calendar.createDiv({ cls: "agentnote-contribution-months" });
     const grid = calendar.createDiv({ cls: "agentnote-contribution-grid" });
+    for (let index = 0; index < leadingDays; index++) grid.createEl("span", { cls: "agentnote-contribution-cell is-empty", attr: { "aria-hidden": "true" } });
+    let lastMonthColumn = -2;
     for (const [index, point] of trend.entries()) {
       const date = new Date(`${point.label}T00:00:00`);
-      if (index === 0 || date.getDate() === 1) {
+      const column = Math.floor((leadingDays + index) / 7);
+      if ((index === 0 || date.getDate() === 1) && column - lastMonthColumn >= 2) {
         const label = months.createEl("span", { text: `${date.getMonth() + 1}月` });
-        label.setCssProps({ "--agentnote-month-offset": `${Math.floor(index / 7) * 17}px` });
+        label.setCssProps({ "--agentnote-month-offset": `${column * 17}px` });
+        lastMonthColumn = column;
       }
       const cell = grid.createEl("span", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": `${point.label}：${point.count} 知识活跃分` } });
       if (point.count) cell.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.18 + point.count / max * 0.58) * 100)}%` });

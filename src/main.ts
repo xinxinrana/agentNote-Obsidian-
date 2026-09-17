@@ -7,7 +7,7 @@ import { isNewerVersion } from "./core/version";
 import { VaultStore } from "./core/store";
 import { isNodeFile } from "./core/nodeFile";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
-import { AGENTNOTE_VIEW, AgentNoteView } from "./ui/panel";
+import { AGENTNOTE_VIEW, AgentNoteView, QuickStartModal } from "./ui/panel";
 
 export interface AgentProfile { enabled: boolean; instructions: string }
 interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; agents: Record<string, AgentProfile> }
@@ -196,13 +196,14 @@ class AgentNoteSettingTab extends PluginSettingTab {
     new Setting(this.containerEl).setName("使用教程").setHeading();
     new Setting(this.containerEl)
       .setName("在接入台显示快速教程")
-      .setDesc("关闭后，可随时在这里重新显示。")
+      .setDesc("控制接入台顶部的教程卡片；需要回看时可直接打开教程。")
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.showQuickStart).onChange(async (value) => {
         this.plugin.settings.showQuickStart = value;
         await this.plugin.saveSettings();
         this.plugin.refreshPanels();
         if (value) new Notice("快速教程已重新显示在接入台顶部。");
-      }));
+      }))
+      .addButton((button) => button.setButtonText("打开教程").onClick(() => new QuickStartModal(this.app).open()));
     new Setting(this.containerEl).setName("本地服务").setHeading();
     new Setting(this.containerEl).setName("本地服务端口").setDesc("agent 通过此端口读取分享和写入笔记。").addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => { const port = Number(value); if (Number.isInteger(port) && port > 0 && port < 65536) { this.plugin.settings.port = port; await this.plugin.saveSettings(); } }));
     new Setting(this.containerEl).setName("启动 Obsidian 时运行服务").addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => { this.plugin.settings.autostartServer = value; await this.plugin.saveSettings(); }));

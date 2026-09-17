@@ -122,6 +122,12 @@ try {
     assert.equal(result.data.status, "updated"); assert.equal(result.data.link, textLink);
     const resolved = await api("GET", textLink.replace(base, "")); assert.match(resolved.data.content, /周五全天/);
   });
+  await test("PATCH updates shared text through its scoped share API", async () => {
+    const shareId = textLink.split("/").at(-2);
+    const result = await api("PATCH", `/api/shares/${shareId}`, { content: "周五至周日不发布生产版本。" });
+    assert.equal(result.status, 200); assert.equal(result.data.kind, "text"); assert.match(result.data.content, /周五至周日/);
+    const resolved = await api("GET", textLink.replace(base, "")); assert.match(resolved.data.content, /周五至周日/);
+  });
   await test("PATCH updates the archived state and returns the complete node", async () => {
     const result = await api("PATCH", `/api/nodes/${textId}`, { archived: true });
     assert.equal(result.status, 200); assert.equal(result.ok, true); assert.equal(result.data.archived, true); assert.equal(result.data.id, textId); assert.ok(result.data.updated);
@@ -161,6 +167,9 @@ try {
     const created = await api("POST", "/api/shares", { path: "plain.md" });
     const result = await api("GET", `/api/shares/${created.data.id}/resolve`);
     assert.equal(result.data.kind, "file"); assert.equal(result.data.address, "plain.md"); assert.equal(result.data.background, "");
+    const updated = await api("PATCH", `/api/shares/${created.data.id}`, { content: "updated through the share API" });
+    assert.equal(updated.status, 200); assert.equal(updated.data.content, "updated through the share API");
+    assert.equal(await fsp.readFile(path.join(vault, "plain.md"), "utf8"), "updated through the share API");
   });
   await test("legacy activity records recover their document title from the share", async () => {
     const created = await api("POST", "/api/shares", { path: "plain.md" });
@@ -206,7 +215,7 @@ try {
   });
   await test("manual installation prompt is portable and asks the target agent to verify", async () => {
     const prompt = renderManualInstallPrompt({ port });
-    assert.match(prompt, /不要假设/); assert.match(prompt, /GET http:\/\/127\.0\.0\.1/); assert.match(prompt, /自行验证/); assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /filePath/);
+    assert.match(prompt, /不要假设/); assert.match(prompt, /GET http:\/\/127\.0\.0\.1/); assert.match(prompt, /自行验证/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /filePath/); assert.match(prompt, /PATCH .*\/api\/shares/);
   });
 
   await test("version comparison drives self-update decisions", async () => {

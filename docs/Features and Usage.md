@@ -42,7 +42,7 @@ Please read this material and summarize it:
 http://127.0.0.1:27182/api/shares/s-xxxx/resolve
 ```
 
-The address is live: changes to the original file appear on the same link. Responses include the local `filePath`; agents should read through the link first, then make focused edits to the original file when they have local file access.
+The address is live: changes to the original file appear on the same link. Agents read through the link first, then update the shared content through the share API.
 
 ## 2. Let an agent write notes
 

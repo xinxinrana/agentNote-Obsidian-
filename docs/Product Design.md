@@ -42,7 +42,7 @@ agentNote removes repetitive copying and uploading while preserving the user's d
 | File | Address, background, and current content | Read current material and locate the original |
 | Folder | Address, background, and first-level entries | Understand the entry point without expanding the vault |
 
-Background answers: what is this, where did it come from, and why is it being shared now? Every share also includes a local `filePath` and a simple rule: read through the link, then edit the original file directly when local file access is available.
+Background answers: what is this, where did it come from, and why is it being shared now? Every share also includes a local `filePath`: read through the link, then update the shared content through the share API.
 
 ### Writing
 
