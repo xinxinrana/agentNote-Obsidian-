@@ -1,6 +1,6 @@
 import * as os from "os";
 import * as path from "path";
-import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile } from "obsidian";
 import { AgentServer } from "./core/server";
 import { detectAgents, DetectedAgent, installSkill, uninstallSkill } from "./core/skill";
 import { isNewerVersion } from "./core/version";
@@ -22,6 +22,9 @@ export default class AgentNotePlugin extends Plugin {
   store!: VaultStore;
   server: AgentServer | null = null;
   private panelRefreshTimer: number | null = null;
+  private localEditTimers = new Map<string, number>();
+  private localReadTimer: number | null = null;
+  private referenceBaselineReady = false;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -43,13 +46,24 @@ export default class AgentNotePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
-    this.registerEvent(this.app.vault.on("create", (file) => this.refreshForAgentNotePath(file.path)));
-    this.registerEvent(this.app.vault.on("modify", (file) => this.refreshForAgentNotePath(file.path)));
-    this.registerEvent(this.app.vault.on("delete", (file) => this.refreshForAgentNotePath(file.path)));
-    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => { this.refreshForAgentNotePath(oldPath); this.refreshForAgentNotePath(file.path); }));
+    this.registerEvent(this.app.vault.on("create", (file) => this.trackCreatedFile(file)));
+    this.registerEvent(this.app.vault.on("modify", (file) => this.trackModifiedFile(file)));
+    this.registerEvent(this.app.vault.on("delete", (file) => this.trackDeletedFile(file)));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => this.trackMovedFile(file, oldPath)));
+    this.registerEvent(this.app.workspace.on("file-open", (file) => this.trackReadFile(file)));
+    this.registerEvent(this.app.metadataCache.on("resolved", () => {
+      if (this.referenceBaselineReady) return;
+      this.referenceBaselineReady = true;
+      void this.seedDocumentReferences();
+    }));
     if (this.settings.autostartServer) await this.startServer(true);
   }
-  onunload(): void { if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer); void this.stopServer(true); }
+  onunload(): void {
+    if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer);
+    if (this.localReadTimer !== null) window.clearTimeout(this.localReadTimer);
+    for (const timer of this.localEditTimers.values()) window.clearTimeout(timer);
+    void this.stopServer(true);
+  }
   async activatePanel(): Promise<void> {
     let leaf = this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)[0];
     if (!leaf) { leaf = this.app.workspace.getRightLeaf(false)!; await leaf.setViewState({ type: AGENTNOTE_VIEW, active: true }); }
@@ -60,9 +74,63 @@ export default class AgentNotePlugin extends Plugin {
     if (this.panelRefreshTimer !== null) return;
     this.panelRefreshTimer = window.setTimeout(() => { this.panelRefreshTimer = null; this.refreshPanels(); }, 500);
   }
-  private refreshForAgentNotePath(filePath: string): void {
-    const normalized = filePath.replace(/\\/g, "/");
-    if (normalized === "agentNote" || normalized.startsWith("agentNote/nodes/") || normalized.startsWith("agentNote/data/")) this.schedulePanelRefresh();
+  private isTrackedMarkdown(file: TAbstractFile | null): file is TFile {
+    return file instanceof TFile && file.extension.toLowerCase() === "md" && !file.path.startsWith(".obsidian/") && !file.path.startsWith("agentNote/data/");
+  }
+  private recordLocalActivity(type: "local-created" | "local-edited" | "local-read" | "local-moved" | "local-deleted", filePath: string, oldPath?: string): void {
+    void this.store.recordLocalActivity(type, filePath, oldPath)
+      .then((recorded) => { if (recorded) this.schedulePanelRefresh(); })
+      .catch(() => undefined);
+  }
+  private trackCreatedFile(file: TAbstractFile): void {
+    if (this.isTrackedMarkdown(file)) {
+      this.recordLocalActivity("local-created", file.path);
+      window.setTimeout(() => this.trackDocumentReferences(file, true), 500);
+    }
+  }
+  private trackModifiedFile(file: TAbstractFile): void {
+    if (!this.isTrackedMarkdown(file)) return;
+    const previous = this.localEditTimers.get(file.path);
+    if (previous !== undefined) window.clearTimeout(previous);
+    this.localEditTimers.set(file.path, window.setTimeout(() => {
+      this.localEditTimers.delete(file.path);
+      this.recordLocalActivity("local-edited", file.path);
+      this.trackDocumentReferences(file, true);
+    }, 20_000));
+  }
+  private trackDeletedFile(file: TAbstractFile): void {
+    if (!this.isTrackedMarkdown(file)) return;
+    const pending = this.localEditTimers.get(file.path);
+    if (pending !== undefined) { window.clearTimeout(pending); this.localEditTimers.delete(file.path); }
+    this.recordLocalActivity("local-deleted", file.path);
+  }
+  private trackMovedFile(file: TAbstractFile, oldPath: string): void {
+    if (!this.isTrackedMarkdown(file) || !oldPath.toLowerCase().endsWith(".md")) return;
+    const pending = this.localEditTimers.get(oldPath);
+    if (pending !== undefined) { window.clearTimeout(pending); this.localEditTimers.delete(oldPath); }
+    this.recordLocalActivity("local-moved", file.path, oldPath);
+  }
+  private trackReadFile(file: TFile | null): void {
+    if (this.localReadTimer !== null) window.clearTimeout(this.localReadTimer);
+    this.localReadTimer = null;
+    if (!this.isTrackedMarkdown(file)) return;
+    const filePath = file.path;
+    this.localReadTimer = window.setTimeout(() => {
+      this.localReadTimer = null;
+      if (this.app.workspace.getActiveFile()?.path === filePath) this.recordLocalActivity("local-read", filePath);
+    }, 20_000);
+  }
+  private referenceTargets(file: TFile): string[] {
+    return [...new Set((this.app.metadataCache.getFileCache(file)?.links ?? []).map((link) => this.app.metadataCache.getFirstLinkpathDest(link.link, file.path)?.path).filter((target): target is string => !!target && target.toLowerCase().endsWith(".md")))];
+  }
+  private trackDocumentReferences(file: TFile, recordAdditions: boolean): void {
+    if (!this.isTrackedMarkdown(file)) return;
+    void this.store.recordDocumentReferences(file.path, this.referenceTargets(file), recordAdditions)
+      .then(() => { if (recordAdditions) this.schedulePanelRefresh(); })
+      .catch(() => undefined);
+  }
+  private async seedDocumentReferences(): Promise<void> {
+    for (const file of this.app.vault.getMarkdownFiles()) await this.store.recordDocumentReferences(file.path, this.referenceTargets(file), false);
   }
   detectedAgents(): DetectedAgent[] { return detectAgents(os.homedir()); }
   profile(agentId: string): AgentProfile { return this.settings.agents[agentId] ?? { enabled: true, instructions: "" }; }

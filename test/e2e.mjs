@@ -81,15 +81,15 @@ try {
       const share = await scoringStore.createShare(node.id);
       await scoringStore.resolveShare(share.id);
       const insights = await scoringStore.getDashboardInsights();
-      assert.equal(insights.summary.weekActivityScore, 5);
-      assert.equal(insights.summary.allTimeActivityScore, 5);
+      assert.equal(insights.summary.weekActivityScore, 12);
+      assert.equal(insights.summary.allTimeActivityScore, 12);
       assert.equal(insights.summary.weekActivityCount, 4);
       assert.equal(insights.summary.weekCreated, 1);
       assert.equal(insights.summary.weekUpdated, 1);
       assert.equal(insights.summary.weekSharesCreated, 1);
       assert.equal(insights.summary.weekResolves, 1);
       assert.ok(insights.timeline.some((event) => event.type === "share-created" && event.title === "统计样本"));
-      assert.equal(insights.weeklyTrend.reduce((total, point) => total + point.count, 0), 5);
+      assert.equal(insights.weeklyTrend.reduce((total, point) => total + point.count, 0), 12);
     } finally {
       await fsp.rm(scoringVault, { recursive: true, force: true });
     }
@@ -187,6 +187,34 @@ try {
     assert.ok(fs.existsSync(path.join(vault, "agentNote", "nodes", "归档", "发布窗口.md")));
     const resolved = await api("GET", `/api/shares/${share.data.id}/resolve`); assert.equal(resolved.status, 200);
     const restored = await api("POST", `/api/nodes/${textId}/archive`, { archived: false }); assert.equal(restored.data.archived, false);
+  });
+
+  await test("local document activity keeps a stable history through organization and deletion", async () => {
+    const localPath = "工作/协作记录.md";
+    assert.equal(await store.recordLocalActivity("local-created", localPath), true);
+    assert.equal(await store.recordLocalActivity("local-edited", localPath), true);
+    assert.equal(await store.recordLocalActivity("local-read", localPath), true);
+    const movedPath = "工作/已完成/协作记录.md";
+    assert.equal(await store.recordLocalActivity("local-moved", movedPath, localPath), true);
+    assert.equal(await store.recordLocalActivity("local-deleted", movedPath), true);
+    const events = await store.listActivity();
+    const localEvents = events.filter((event) => event.path === movedPath || event.path === localPath);
+    assert.deepEqual(new Set(localEvents.map((event) => event.type)), new Set(["local-created", "local-edited", "local-read", "local-moved", "local-deleted"]));
+    assert.equal(new Set(localEvents.map((event) => event.documentId)).size, 1);
+    const insights = await store.getDashboardInsights();
+    assert.equal(insights.documents.some((document) => document.document.path === movedPath), false);
+    assert.ok(insights.summary.weekActivityScore >= 15);
+  });
+  await test("new document references contribute to the referenced document", async () => {
+    const sourcePath = "研究/项目索引.md";
+    const targetPath = "研究/项目复盘.md";
+    await store.recordLocalActivity("local-created", sourcePath);
+    await store.recordLocalActivity("local-created", targetPath);
+    await store.recordDocumentReferences(sourcePath, [targetPath]);
+    const insights = await store.getDashboardInsights();
+    const target = insights.documents.find((document) => document.document.path === targetPath);
+    assert.equal(target?.connection, 4);
+    assert.ok((await store.listActivity()).some((event) => event.type === "document-linked" && event.sourcePath === sourcePath && event.path === targetPath));
   });
 
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {

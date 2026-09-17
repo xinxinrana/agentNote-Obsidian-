@@ -58,6 +58,12 @@ export class AgentNoteView extends ItemView {
     if (event.type === "node-updated") return `更新「${event.title ?? "未命名资料"}」`;
     if (event.type === "node-archived") return `归档「${event.title ?? "未命名资料"}」`;
     if (event.type === "node-restored") return `恢复「${event.title ?? "未命名资料"}」`;
+    if (event.type === "local-created") return `新建「${event.title ?? "未命名文档"}」`;
+    if (event.type === "local-edited") return `编辑「${event.title ?? "未命名文档"}」`;
+    if (event.type === "local-read") return `查看「${event.title ?? "未命名文档"}」`;
+    if (event.type === "local-moved") return `整理「${event.title ?? "未命名文档"}」`;
+    if (event.type === "local-deleted") return `删除「${event.title ?? "未命名文档"}」`;
+    if (event.type === "document-linked") return `连接「${event.title ?? "未命名文档"}」`;
     if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
     return `读取「${event.title ?? "分享资料"}」`;
   }
@@ -67,7 +73,7 @@ export class AgentNoteView extends ItemView {
     const overview = dashboard.createDiv({ cls: "agentnote-dashboard-hero" });
     overview.createEl("span", { cls: "agentnote-eyebrow", text: "本地知识洞察" });
     overview.createEl("h4", { text: "知识正在持续进入工作流" });
-    overview.createEl("p", { text: insights.summary.weekActivityCount ? `本周完成 ${insights.summary.weekActivityCount} 次有效操作：新建 ${insights.summary.weekCreated}、更新 ${insights.summary.weekUpdated}、分享 ${insights.summary.weekSharesCreated}、复用 ${insights.summary.weekResolves}。` : "新建、维护、分享或复用资料后，这里会记录完整的知识活动。" });
+    overview.createEl("p", { text: insights.summary.weekActivityCount ? `本周完成 ${insights.summary.weekActivityCount} 次知识活动：建设 ${insights.summary.weekCreated}、维护与整理 ${insights.summary.weekUpdated}、分享 ${insights.summary.weekSharesCreated}、使用 ${insights.summary.weekResolves}。` : "创建、维护、使用或整理资料后，这里会留下完整的知识活动。" });
     const stats = overview.createDiv({ cls: "agentnote-metric-strip" });
     for (const [value, label] of [[insights.summary.weekActivityScore, "知识活跃分"], [insights.summary.weekUpdated, "本周更新"], [insights.summary.weekResolves, "本周复用"]] as const) {
       const stat = stats.createDiv({ cls: "agentnote-metric" }); stat.createEl("strong", { text: String(value) }); stat.createEl("span", { text: label });
@@ -158,7 +164,7 @@ export class QuickStartModal extends Modal {
 }
 
 type InsightTab = "overview" | "week" | "month" | "agents" | "timeline" | "archive";
-type TimelineFilter = "all" | "created" | "used" | "changed";
+type TimelineFilter = "all" | "construction" | "reuse" | "connection" | "organization";
 
 class InsightsModal extends Modal {
   private tab: InsightTab = "overview";
@@ -176,6 +182,12 @@ class InsightsModal extends Modal {
     if (event.type === "node-updated") return `更新「${this.displayTitle(event.title ?? "未命名资料")}」`;
     if (event.type === "node-archived") return `归档「${this.displayTitle(event.title ?? "未命名资料")}」`;
     if (event.type === "node-restored") return `恢复「${this.displayTitle(event.title ?? "未命名资料")}」`;
+    if (event.type === "local-created") return `新建「${this.displayTitle(event.title ?? "未命名文档")}」`;
+    if (event.type === "local-edited") return `编辑「${this.displayTitle(event.title ?? "未命名文档")}」`;
+    if (event.type === "local-read") return `查看「${this.displayTitle(event.title ?? "未命名文档")}」`;
+    if (event.type === "local-moved") return `整理「${this.displayTitle(event.title ?? "未命名文档")}」`;
+    if (event.type === "local-deleted") return `删除「${this.displayTitle(event.title ?? "未命名文档")}」`;
+    if (event.type === "document-linked") return `连接「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
     return `读取「${event.title ?? "分享资料"}」`;
   }
@@ -198,8 +210,11 @@ class InsightsModal extends Modal {
     }
     const body = this.contentEl.createDiv({ cls: "agentnote-modal-body" });
     if (this.tab === "overview") this.renderOverview(body, insights, agents);
-    if (this.tab === "week") this.renderPeriod(body, { eyebrow: "WEEKLY REVIEW", title: "本周知识活跃报告", description: "新建、更新、分享与复用共同构成真实的知识工作节奏。", trendTitle: "每日知识活跃度", rankingTitle: "本周最常复用的资料" }, [[insights.summary.weekActivityScore, "知识活跃分"], [insights.summary.weekCreated, "新建资料"], [insights.summary.weekUpdated, "更新资料"], [insights.summary.weekResolves, "资料复用"]], insights.weekly, insights.weeklyTrend, "weekly");
-    if (this.tab === "month") this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: "开始以来的知识贡献", description: `从 ${this.dateText(insights.startedAt)} 的第一条记录开始，持续回看本地知识如何被创建、维护、分享与复用。`, trendTitle: "知识贡献", rankingTitle: "开始以来高价值资料" }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, "活跃天数"], [insights.summary.allTimeActivityScore, "知识活跃分"], [insights.allTime.reduce((total, entry) => total + entry.reads, 0), "累计复用"], [insights.allTime.length, "高价值资料"]], insights.allTime, insights.allTimeTrend, "contributions");
+    if (this.tab === "week") this.renderPeriod(body, { eyebrow: "WEEKLY REVIEW", title: "本周知识活动报告", description: "建设、使用、连接与整理共同构成真实的知识工作节奏。", trendTitle: "每日知识活动", rankingTitle: "本周协作资料" }, [[insights.summary.weekActivityScore, "知识活动值"], [insights.summary.weekCreated, "内容建设"], [insights.summary.weekUpdated, "维护整理"], [insights.summary.weekResolves, "资料使用"]], insights.weekly, insights.weeklyTrend, "weekly");
+    if (this.tab === "month") {
+      this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: "开始以来的知识贡献", description: `从 ${this.dateText(insights.startedAt)} 的第一条记录开始，持续回看本地知识如何被建设、使用、连接与整理。`, trendTitle: "知识贡献", rankingTitle: "开始以来协作资料" }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, "活跃天数"], [insights.summary.allTimeActivityScore, "知识活动值"], [insights.documents.reduce((total, entry) => total + entry.reuse, 0), "累计使用"], [insights.documents.length, "参与资料"]], insights.allTime, insights.allTimeTrend, "contributions");
+      this.renderDocumentContributions(body, insights.documents);
+    }
     if (this.tab === "agents") this.renderAgents(body, agents);
     if (this.tab === "timeline") this.renderTimeline(body, insights);
     if (this.tab === "archive") this.renderArchive(body, insights);
@@ -209,8 +224,8 @@ class InsightsModal extends Modal {
     const profile = parent.createDiv({ cls: "agentnote-profile-card" });
     const summary = profile.createDiv({ cls: "agentnote-profile-summary" });
     summary.createEl("span", { cls: "agentnote-profile-label", text: "近 7 天成果" });
-    summary.createEl("strong", { text: `${insights.summary.weekActivityScore} 知识活跃分` });
-    summary.createEl("p", { text: insights.summary.weekActivityCount ? `新建 ${insights.summary.weekCreated} · 更新 ${insights.summary.weekUpdated} · 分享 ${insights.summary.weekSharesCreated} · 复用 ${insights.summary.weekResolves}` : "开始新建、维护、分享或复用资料后，这里会记录完整的知识工作成果。" });
+    summary.createEl("strong", { text: `${insights.summary.weekActivityScore} 知识活动值` });
+    summary.createEl("p", { text: insights.summary.weekActivityCount ? `建设 ${insights.summary.weekCreated} · 维护整理 ${insights.summary.weekUpdated} · 分享 ${insights.summary.weekSharesCreated} · 使用 ${insights.summary.weekResolves}` : "开始建设、使用或整理资料后，这里会记录完整的知识工作成果。" });
     const metrics = profile.createDiv({ cls: "agentnote-profile-metrics" });
     for (const [value, label] of [[insights.summary.weekActivityCount, "有效操作"], [activeDays, "活跃天数"], [agents.length, "协作 agent"]] as const) {
       const metric = metrics.createDiv(); metric.createEl("strong", { text: String(value) }); metric.createEl("span", { text: label });
@@ -243,9 +258,9 @@ class InsightsModal extends Modal {
 
     const highlights = parent.createDiv({ cls: "agentnote-profile-highlights" });
     const heading = highlights.createDiv({ cls: "agentnote-profile-section-heading" });
-    heading.createEl("h3", { text: "本周高价值资料" });
-    heading.createEl("span", { text: "按实际复用次数排序" });
-    if (!insights.weekly.length) highlights.createEl("p", { cls: "agentnote-empty-copy", text: "资料被 agent 读取后，会在这里形成你的复用排行榜。" });
+    heading.createEl("h3", { text: "本周协作资料" });
+    heading.createEl("span", { text: "按实际使用次数排序" });
+    if (!insights.weekly.length) highlights.createEl("p", { cls: "agentnote-empty-copy", text: "本地查看或被 agent 使用后，资料会在这里形成协作记录。" });
     else {
       const cards = highlights.createDiv({ cls: "agentnote-profile-note-list" });
       for (const [index, entry] of insights.weekly.entries()) {
@@ -284,7 +299,7 @@ class InsightsModal extends Modal {
   private renderPeriod(parent: HTMLElement, header: { eyebrow: string; title: string; description: string; trendTitle: string; rankingTitle: string }, metricsData: readonly (readonly [number, string])[], notes: InsightNote[], trend: { label: string; count: number }[], mode: "weekly" | "contributions"): void {
     this.renderTabHero(parent, header.eyebrow, header.title, header.description, metricsData);
     const trendSection = parent.createDiv({ cls: "agentnote-detail-section agentnote-period-trend" });
-    const trendHeading = trendSection.createDiv({ cls: "agentnote-section-heading" }); trendHeading.createEl("h3", { text: header.trendTitle }); if (mode === "weekly") trendHeading.createEl("span", { text: "新建 1 分 · 更新 2 分 · 分享 0.5 分 · 复用 1.5 分" });
+    const trendHeading = trendSection.createDiv({ cls: "agentnote-section-heading" }); trendHeading.createEl("h3", { text: header.trendTitle }); if (mode === "weekly") trendHeading.createEl("span", { text: "建设 4/3 · 使用 1/3 · 整理 2/3" });
     const max = Math.max(1, ...trend.map((point) => point.count));
     if (mode === "contributions") this.renderContributionGraph(trendSection, trend, max);
     else {
@@ -307,6 +322,18 @@ class InsightsModal extends Modal {
       if (entry.lastRead) card.createEl("small", { text: `最近使用：${this.timeText(entry.lastRead)}` });
       const pin = card.createEl("button", { text: entry.node.pinned ? "取消保护" : "保护不归档", attr: { title: entry.node.pinned ? "允许这条资料再次进入归档建议。" : "保护后，这条资料不会出现在“整理”中的归档建议里；不会修改内容或分享地址。" } });
       pin.onclick = () => void (async () => { pin.disabled = true; const pinned = !entry.node.pinned; await this.plugin.store.updateNode(entry.node.id, { pinned }); new Notice(pinned ? `已保护「${entry.node.title}」：它不会进入归档建议。` : `已取消保护「${entry.node.title}」。`); await this.render(); this.plugin.refreshPanels(); })();
+    }
+  }
+  private renderDocumentContributions(parent: HTMLElement, documents: DashboardInsights["documents"]): void {
+    const section = parent.createDiv({ cls: "agentnote-detail-section agentnote-period-ranking" });
+    const heading = section.createDiv({ cls: "agentnote-section-heading" }); heading.createEl("h3", { text: "文档贡献档案" }); heading.createEl("span", { text: "分值由文档自身的操作记录构成" });
+    if (!documents.length) { section.createEl("p", { cls: "agentnote-empty-copy", text: "开始创建、使用或整理资料后，这里会形成可追溯的文档贡献档案。" }); return; }
+    for (const [index, entry] of documents.slice(0, 8).entries()) {
+      const card = section.createDiv({ cls: "agentnote-value-card" });
+      card.createEl("span", { cls: "agentnote-value-rank", text: String(index + 1).padStart(2, "0") });
+      const row = card.createDiv({ cls: "agentnote-value-title" }); row.createEl("strong", { text: this.displayTitle(entry.document.title) }); row.createEl("span", { cls: "agentnote-profile-use-count", text: `${entry.score}` });
+      card.createEl("p", { text: `内容建设 ${entry.construction} · 协作复用 ${entry.reuse} · 知识连接 ${entry.connection} · 知识整理 ${entry.organization}` });
+      if (entry.lastActive) card.createEl("small", { text: `最近活动：${this.timeText(entry.lastActive)}` });
     }
   }
   private renderContributionGraph(parent: HTMLElement, trend: { label: string; count: number }[], max: number): void {
@@ -338,18 +365,19 @@ class InsightsModal extends Modal {
     const agents = new Set(insights.timeline.map((event) => event.actor?.name ?? event.actor?.id).filter(Boolean));
     this.renderTabHero(parent, "ACTIVITY LOG", "协作时间线", "用连续活动回看资料何时被创建、调用、更新和整理。", [[insights.timeline.length, "记录活动"], [agents.size, "参与 agent"], [insights.summary.weekResolves, "本周读取"]]);
     const filters = parent.createDiv({ cls: "agentnote-timeline-filters" });
-    for (const [filter, label] of [["all", "全部"], ["created", "创建"], ["used", "使用"], ["changed", "变更"]] as const) {
+    for (const [filter, label] of [["all", "全部"], ["construction", "建设"], ["reuse", "使用"], ["connection", "连接"], ["organization", "整理"]] as const) {
       const button = filters.createEl("button", { text: label, cls: this.timelineFilter === filter ? "is-active" : "" });
       button.onclick = () => { this.timelineFilter = filter; void this.render(); };
     }
-    const visible = insights.timeline.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "created" && event.type === "node-created") || (this.timelineFilter === "used" && ["share-created", "share-resolved"].includes(event.type)) || (this.timelineFilter === "changed" && ["node-updated", "node-archived", "node-restored"].includes(event.type)));
+    const visible = insights.timeline.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "construction" && ["node-created", "node-updated", "local-created", "local-edited"].includes(event.type)) || (this.timelineFilter === "reuse" && ["share-created", "share-resolved", "local-read"].includes(event.type)) || (this.timelineFilter === "connection" && event.type === "document-linked") || (this.timelineFilter === "organization" && ["node-archived", "node-restored", "local-moved", "local-deleted"].includes(event.type)));
     if (!visible.length) { parent.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: "还没有符合条件的活动。换一个筛选条件，或开始一次新的资料协作。" }); return; }
     const list = parent.createEl("ul", { cls: "agentnote-timeline" });
     for (const event of visible) {
       const item = list.createEl("li");
       const detail = item.createDiv();
-      const title = detail.createDiv({ cls: "agentnote-timeline-title" }); title.createEl("strong", { text: this.activityText(event) }); title.createEl("span", { cls: `agentnote-event-chip is-${event.type}`, text: event.type === "share-resolved" ? "使用" : event.type === "share-created" ? "分享" : event.type === "node-created" ? "创建" : event.type === "node-updated" ? "更新" : event.type === "node-archived" ? "归档" : "恢复" });
-      detail.createEl("span", { text: [event.actor?.name ?? event.actor?.id ?? "未申报 agent", event.actor?.sessionTitle, event.targetKind === "folder" ? "文件夹" : event.targetKind === "node" ? "笔记" : "文件"].filter(Boolean).join(" · ") });
+      const chip = event.type === "document-linked" ? "连接" : ["share-resolved", "local-read"].includes(event.type) ? "使用" : event.type === "share-created" ? "分享" : ["node-created", "local-created"].includes(event.type) ? "创建" : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? "整理" : "维护";
+      const title = detail.createDiv({ cls: "agentnote-timeline-title" }); title.createEl("strong", { text: this.activityText(event) }); title.createEl("span", { cls: `agentnote-event-chip is-${event.type}`, text: chip });
+      detail.createEl("span", { text: [event.actor?.name ?? event.actor?.id ?? (event.origin === "local" ? "本地操作" : "未申报 agent"), event.actor?.sessionTitle, event.targetKind === "folder" ? "文件夹" : event.targetKind === "node" ? "笔记" : event.targetKind === "file" ? "文件" : undefined].filter(Boolean).join(" · ") });
       item.createEl("time", { text: this.timeText(event.at) });
     }
   }

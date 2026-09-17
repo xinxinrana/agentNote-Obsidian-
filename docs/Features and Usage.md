@@ -87,10 +87,16 @@ Archiving moves a note into the vault's archive folder. It is not deletion: the 
 
 Select **View full insights** in the connection panel to review local activity. The profile includes recent work, weekly rhythm, all-time contributions, agent activity, a timeline, and cleanup suggestions. All data stays in the vault.
 
+### Knowledge contribution records
+
+agentNote records local actions that put knowledge to work: creating a note, completing an edit session, reading for more than 20 seconds, agent use, adding a new note link, moving, renaming, archiving, and deleting. It does not rate people or upload activity. A day's knowledge activity value is simply the combined value of those actions.
+
+Each document has a reviewable contribution breakdown: construction, reuse, connection, and organization. Deletion records remain in the local ledger, while the timeline displays only the most recent 30 days so recent cleanup remains visible without making the history endless.
+
 - **Profile**: a seven-day overview and reusable-note ranking.
 - **This week**: daily knowledge activity and the most reused material.
-- **All time**: contribution history from the first record onward.
-- **Agent and timeline**: local reads, writes, updates, sharing, and attribution.
+- **All time**: contribution history from the first record onward; deeper color represents more knowledge work that day.
+- **Agent and timeline**: filter local and agent activity by construction, reuse, connection, and organization.
 - **Cleanup**: low-use notes that may be archived; protected notes never appear here.
 
 Use **Generate sharing image** in the profile to preview and copy a PNG summary. Enable **Privacy view** first to anonymize note titles.
