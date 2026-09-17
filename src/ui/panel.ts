@@ -1,6 +1,6 @@
 import { App, ItemView, Modal, Notice, Setting, WorkspaceLeaf } from "obsidian";
 import type AgentNotePlugin from "../main";
-import { renderManualInstallPrompt, renderSkillMd, type DetectedAgent } from "../core/skill";
+import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, type DetectedAgent } from "../core/skill";
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
@@ -130,6 +130,14 @@ export class AgentNoteView extends ItemView {
         disable.onclick = () => new RemoveAgentModal(this.app, this.plugin, agent, () => this.refresh()).open();
       }
     }
+    this.renderFooter(section);
+  }
+  private renderFooter(parent: HTMLElement): void {
+    const footer = parent.createDiv({ cls: "agentnote-panel-footer" });
+    footer.createEl("small", { text: "作者 Evan" });
+    footer.createEl("span", { text: "·", attr: { "aria-hidden": "true" } });
+    const feedback = footer.createEl("button", { text: "反馈" });
+    feedback.onclick = () => new FeedbackModal(this.app, this.plugin).open();
   }
 }
 
@@ -475,18 +483,60 @@ class AgentPromptModal extends Modal {
   onOpen(): void {
     const profile = this.plugin.profile(this.agent.id);
     this.contentEl.empty(); this.contentEl.createEl("h2", { text: `${this.agent.name} 的提示词` });
-    this.contentEl.createEl("p", { text: "基础提示词会教 agent 识别“写到 Obsidian / agent 笔记 / 笔记里”并调用本地服务。这里填写该 agent 专属的附加要求。" });
-    let instructions = profile.instructions;
-    new Setting(this.contentEl).setName("附加要求").addTextArea((input) => { input.setValue(instructions); input.inputEl.addClass("agentnote-full-width"); input.onChange((value) => instructions = value); });
-    new Setting(this.contentEl).addButton((button) => button.setButtonText("预览基础提示词").onClick(() => {
-      const existing = this.contentEl.querySelector(".agentnote-prompt-preview");
-      if (existing) existing.remove();
-      this.contentEl.createEl("pre", { cls: "agentnote-prompt-preview", text: renderSkillMd({ port: this.plugin.server?.port ?? this.plugin.settings.port, instructions }) });
-    }));
-    new Setting(this.contentEl).addButton((button) => button.setButtonText("保存并更新安装").setCta().onClick(async () => {
-      await this.plugin.saveProfile(this.agent.id, { enabled: true, instructions });
-      await this.plugin.installAgent(this.agent);
-      await this.done(); this.close();
-    }));
+    this.contentEl.createEl("p", { text: "先查看当前完整提示词；确认需要调整后再解锁编辑。" });
+    const source = renderSkillSource({ template: profile.template, instructions: profile.instructions });
+    const rendered = renderSkillMd({ port: this.plugin.server?.port ?? this.plugin.settings.port, template: profile.template, instructions: profile.instructions, agentId: this.agent.id, agentName: this.agent.name });
+    const prompt = this.contentEl.createEl("textarea", { cls: "agentnote-manual-prompt agentnote-prompt-editor" });
+    prompt.value = rendered; prompt.readOnly = true;
+    const actions = new Setting(this.contentEl);
+    actions.addButton((button) => button.setButtonText("解锁编辑").setCta().onClick(() => new UnlockPromptModal(this.app, () => {
+      prompt.value = source; prompt.readOnly = false; prompt.focus(); actions.controlEl.empty();
+      actions.addButton((save) => save.setButtonText("保存并更新安装").setCta().onClick(async () => {
+        if (!prompt.value.trim()) { new Notice("提示词不能为空。"); return; }
+        await this.plugin.saveProfile(this.agent.id, { enabled: true, instructions: "", template: prompt.value });
+        await this.plugin.installAgent(this.agent);
+        await this.done(); this.close();
+      })).addButton((cancel) => cancel.setButtonText("取消修改").onClick(() => this.close()));
+    }).open())).addButton((button) => button.setButtonText("关闭").onClick(() => this.close()));
+  }
+}
+
+class UnlockPromptModal extends Modal {
+  constructor(app: App, private done: () => void) { super(app); }
+  onOpen(): void {
+    this.contentEl.empty(); this.contentEl.createEl("h2", { text: "解锁提示词编辑？" });
+    this.contentEl.createEl("p", { cls: "agentnote-prompt-risk", text: "修改后可能导致接入失效。不同 agent 的缓存机制不同，保存并更新安装后，可能需要重启 agent 或新开对话才会生效。理解 skill 机制后再继续。" });
+    new Setting(this.contentEl).addButton((button) => button.setButtonText("取消").onClick(() => this.close())).addButton((button) => button.setButtonText("我理解，继续编辑").setWarning().onClick(() => { this.done(); this.close(); }));
+  }
+}
+
+export class FeedbackModal extends Modal {
+  private type = "问题反馈";
+  private title = "";
+  private details = "";
+  constructor(app: App, private plugin: AgentNotePlugin) { super(app); }
+  onOpen(): void {
+    this.contentEl.empty(); this.contentEl.createEl("h2", { text: "发送反馈" });
+    this.contentEl.createEl("p", { text: "反馈会先复制到剪贴板，再在系统默认浏览器打开 GitHub Issue。GitHub 登录由你的浏览器账户处理。" });
+    new Setting(this.contentEl).setName("类型").addDropdown((dropdown) => dropdown.addOptions({ "问题反馈": "问题反馈", "功能建议": "功能建议", "使用体验": "使用体验" }).setValue(this.type).onChange((value) => this.type = value));
+    new Setting(this.contentEl).setName("标题").addText((input) => input.setPlaceholder("一句话说明反馈").onChange((value) => this.title = value));
+    new Setting(this.contentEl).setName("详情").addTextArea((input) => { input.setPlaceholder("发生了什么、你的预期是什么、如何复现（如适用）。"); input.inputEl.addClass("agentnote-full-width"); input.onChange((value) => this.details = value); });
+    new Setting(this.contentEl).addButton((button) => button.setButtonText("复制反馈").onClick(() => void this.copy())).addButton((button) => button.setButtonText("复制并在浏览器提交").setCta().onClick(() => void this.submit()));
+  }
+  private report(): string { return `## ${this.type}\n\n${this.details.trim() || "请补充具体情况。"}\n\n---\nagentNote ${this.plugin.manifest.version}`; }
+  private valid(): boolean { if (this.title.trim()) return true; new Notice("请填写反馈标题。"); return false; }
+  private async copy(): Promise<boolean> {
+    if (!this.valid()) return false;
+    await navigator.clipboard.writeText(`# [${this.type}] ${this.title.trim()}\n\n${this.report()}`);
+    new Notice("反馈内容已复制。"); return true;
+  }
+  private async submit(): Promise<void> {
+    if (!await this.copy()) return;
+    const params = new URLSearchParams({ title: `[${this.type}] ${this.title.trim()}`, body: this.report() });
+    try {
+      const { shell } = require("electron") as { shell: { openExternal(url: string): Promise<void> } };
+      await shell.openExternal(`https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`);
+      this.close();
+    } catch (error) { new Notice(`无法打开系统浏览器：${(error as Error).message}`); }
   }
 }

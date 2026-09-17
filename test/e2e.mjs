@@ -195,6 +195,13 @@ try {
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
     const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); assert.deepEqual(JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")), { version: 1, id: "codex", name: "Codex" }); await fsp.rm(home, { recursive: true, force: true });
   });
+  await test("editable prompt templates retain dynamic service and identity values", async () => {
+    const template = "为 {{agentName}} 配置 {{baseUrl}}，身份是 {{agentId}}。";
+    const prompt = renderSkillMd({ port, template, agentId: "codex", agentName: "Codex" });
+    assert.equal(prompt, `为 Codex 配置 http://127.0.0.1:${port}，身份是 codex。\n`);
+    const manual = renderManualInstallPrompt({ port, template });
+    assert.match(manual, new RegExp(`为 未命名 agent 配置 http://127\\.0\\.0\\.1:${port}，身份是 agentnote。`));
+  });
   await test("built-in agents remain visible regardless of local installation", async () => {
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-agents-"));
     try {

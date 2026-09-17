@@ -9,7 +9,7 @@ import { isNodeFile } from "./core/nodeFile";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
 import { AGENTNOTE_VIEW, AgentNoteView, QuickStartModal } from "./ui/panel";
 
-export interface AgentProfile { enabled: boolean; instructions: string }
+export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; agents: Record<string, AgentProfile> }
 const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, agents: {} };
 
@@ -70,7 +70,7 @@ export default class AgentNotePlugin extends Plugin {
   async installAgent(agent: DetectedAgent): Promise<void> {
     const profile = this.profile(agent.id);
     try {
-      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name });
+      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name, template: profile.template });
       await this.store.registerAgent({ id: agent.id, name: agent.name });
       await this.saveProfile(agent.id, { ...profile, enabled: true });
       new Notice(`${agent.name} 已接入 agentNote；重启 agent 后生效。`);

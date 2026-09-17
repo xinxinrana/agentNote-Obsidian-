@@ -3,7 +3,7 @@ import * as path from "path";
 
 export interface AgentTarget { id: string; name: string; detectRel: string; skillsRel: string; website: string }
 export interface DetectedAgent extends AgentTarget { skillDir: string; available: boolean; installed: boolean }
-export interface AgentPromptOptions { port: number; instructions?: string; agentId?: string; agentName?: string }
+export interface AgentPromptOptions { port: number; instructions?: string; agentId?: string; agentName?: string; template?: string }
 
 export const KNOWN_AGENTS: AgentTarget[] = [
   { id: "claude-code", name: "Claude Code", detectRel: ".claude", skillsRel: ".claude/skills", website: "https://claude.com/product/claude-code" },
@@ -19,23 +19,29 @@ export function detectAgents(home: string): DetectedAgent[] {
   });
 }
 
-export function renderSkillMd({ port, instructions = "", agentId = "agentnote", agentName = "未命名 agent" }: AgentPromptOptions): string {
-  const base = `http://127.0.0.1:${port}`;
-  return `---
+const TEMPLATE_TOKENS = {
+  baseUrl: "{{baseUrl}}",
+  agentId: "{{agentId}}",
+  agentName: "{{agentName}}",
+  encodedAgentId: "{{encodedAgentId}}",
+  encodedAgentName: "{{encodedAgentName}}",
+} as const;
+
+export const DEFAULT_SKILL_TEMPLATE = `---
 name: agentnote
 description: 用户的 Obsidian 本地笔记和文件中转系统。用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”时，使用它把内容写入笔记；用户给出 agentNote 分享地址时，直接读取地址。
 ---
 
 # agentNote
 
-agentNote 让用户 vault 中的内容通过本地 HTTP 流向 agent。服务地址：${base}。仅本机可访问；连接被拒绝表示 Obsidian 未启动。
+agentNote 让用户 vault 中的内容通过本地 HTTP 流向 agent。服务地址：{{baseUrl}}。仅本机可访问；连接被拒绝表示 Obsidian 未启动。
 
 ## 自然语言写入
 
 当用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”或语义等价的话时，创建一条笔记，不要求用户提供文件路径或 API 参数。
 
 \`\`\`json
-POST ${base}/api/nodes
+POST {{baseUrl}}/api/nodes
 {
   "title": "简短主题",
   "content": "整理后的正文",
@@ -52,7 +58,7 @@ POST ${base}/api/nodes
 
 ## 分享地址
 
-用户提供 \`${base}/api/shares/s-x-.../resolve\` 时，直接 GET 并使用返回内容。
+用户提供 \`{{baseUrl}}/api/shares/s-x-.../resolve\` 时，直接 GET 并使用返回内容。
 
 - \`kind: text\`：正文和背景。
 - \`kind: file\`：文件地址、背景和当前文件内容。
@@ -67,8 +73,8 @@ POST ${base}/api/nodes
 每次调用 agentNote HTTP API 都携带以下请求头，让用户能在本地工作台看到哪一个 agent 在什么时间使用或修改了哪份资料：
 
 \`\`\`
-X-AgentNote-Agent-Id: ${encodeURIComponent(agentId)}
-X-AgentNote-Agent-Name: ${encodeURIComponent(agentName)}
+X-AgentNote-Agent-Id: {{encodedAgentId}}
+X-AgentNote-Agent-Name: {{encodedAgentName}}
 X-AgentNote-Session-Title: <encodeURIComponent(根据当前具体工作填写的简短标题)>
 \`\`\`
 
@@ -84,20 +90,34 @@ X-AgentNote-Session-Title: <encodeURIComponent(根据当前具体工作填写的
 ## 可用接口
 
 \`\`\`
-GET  ${base}/api/health
-GET  ${base}/api/nodes?q=
-GET  ${base}/api/nodes/<id>
-POST ${base}/api/nodes
-PATCH ${base}/api/nodes/<id>
-POST ${base}/api/shares
-PATCH ${base}/api/shares/<shareId>
-GET  ${base}/api/shares/<id>/resolve
-GET  ${base}/api/insights/overview
-GET  ${base}/api/insights/activity?agent=&nodeId=&action=
-GET  ${base}/api/insights/agents
-GET  ${base}/api/insights/documents
+GET  {{baseUrl}}/api/health
+GET  {{baseUrl}}/api/nodes?q=
+GET  {{baseUrl}}/api/nodes/<id>
+POST {{baseUrl}}/api/nodes
+PATCH {{baseUrl}}/api/nodes/<id>
+POST {{baseUrl}}/api/shares
+PATCH {{baseUrl}}/api/shares/<shareId>
+GET  {{baseUrl}}/api/shares/<id>/resolve
+GET  {{baseUrl}}/api/insights/overview
+GET  {{baseUrl}}/api/insights/activity?agent=&nodeId=&action=
+GET  {{baseUrl}}/api/insights/agents
+GET  {{baseUrl}}/api/insights/documents
 \`\`\`
-${instructions.trim() ? `\n## 此 agent 的人工附加要求（更高优先级）\n\n${instructions.trim()}\n` : ""}`;
+`;
+
+export function renderSkillSource({ instructions = "", template = DEFAULT_SKILL_TEMPLATE }: Pick<AgentPromptOptions, "instructions" | "template">): string {
+  return `${template.trimEnd()}${instructions.trim() ? `\n\n## 此 agent 的人工附加要求（更高优先级）\n\n${instructions.trim()}\n` : "\n"}`;
+}
+
+export function renderSkillMd({ port, instructions = "", agentId = "agentnote", agentName = "未命名 agent", template = DEFAULT_SKILL_TEMPLATE }: AgentPromptOptions): string {
+  const base = `http://127.0.0.1:${port}`;
+  const resolved = renderSkillSource({ template, instructions })
+    .replaceAll(TEMPLATE_TOKENS.baseUrl, base)
+    .replaceAll(TEMPLATE_TOKENS.agentId, agentId)
+    .replaceAll(TEMPLATE_TOKENS.agentName, agentName)
+    .replaceAll(TEMPLATE_TOKENS.encodedAgentId, encodeURIComponent(agentId))
+    .replaceAll(TEMPLATE_TOKENS.encodedAgentName, encodeURIComponent(agentName));
+  return resolved;
 }
 
 export function installSkill(dir: string, options: AgentPromptOptions): void {
@@ -107,9 +127,9 @@ export function installSkill(dir: string, options: AgentPromptOptions): void {
 }
 
 /** A portable task for agents outside the built-in registry. */
-export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "port">): string {
+export function renderManualInstallPrompt({ port, template }: Pick<AgentPromptOptions, "port" | "template">): string {
   const base = `http://127.0.0.1:${port}`;
-  const skill = renderSkillMd({ port });
+  const skill = renderSkillMd({ port, template });
   return `请把 agentNote 安装为你自己可持久化使用的一项 skill、instruction 或工具说明。不要假设你必须使用某个固定目录；先识别你当前运行环境中用于保存长期技能/系统指令的正确机制，再自行创建或更新名为 agentnote 的条目。
 
 安装前先验证服务：GET ${base}/api/health。若连接失败，不要伪造安装成功；请告诉用户需要打开 Obsidian 或启动 agentNote 本地服务。

@@ -67,11 +67,15 @@ When Claude Code, Codex, or WorkBuddy is detected:
 3. Restart the agent once.
 4. Share a link or ask it to write a note naturally.
 
-Use **Manage prompt** to add agent-specific instructions, and **Remove connection** to remove only agentNote's skill. No other skills, settings, conversations, or files are deleted.
+Use **Manage prompt** to review the complete installed prompt. Select **Unlock editing**, acknowledge the risk, then make changes in the same editor. Saving and updating the installation locks the prompt again. Existing agent-specific instructions remain part of the complete prompt. Changes may require restarting the agent or opening a new conversation. **Remove connection** removes only agentNote's skill. No other skills, settings, conversations, or files are deleted.
 
 ### Any other agent
 
 Select **Connect any agent manually**, copy the generated task, and send it to the target agent. It is instructed to find its own persistent instruction mechanism, install agentNote, and verify the local service.
+
+### Feedback
+
+Select **Author Evan · Feedback** at the bottom of the connection panel. Complete the structured form in agentNote; it copies the report and opens a pre-filled GitHub Issue in the system default browser. GitHub authentication is handled by that browser account.
 
 ## 4. Archive and protect notes
 

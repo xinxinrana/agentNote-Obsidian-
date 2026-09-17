@@ -777,6 +777,52 @@
   width: 100%;
 }
 
+.agentnote-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  color: var(--text-faint);
+  font-size: 0.76em;
+  letter-spacing: 0.01em;
+}
+
+.agentnote-panel-footer button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--interactive-accent);
+  font-size: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.agentnote-panel-footer button:hover {
+  color: var(--interactive-accent);
+  text-decoration: underline;
+}
+
+.agentnote-prompt-editor {
+  min-height: 340px;
+  resize: vertical;
+  font-family: var(--font-monospace);
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+
+.agentnote-prompt-risk {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-yellow);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--color-yellow) 10%, transparent);
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
 .agentnote-trend-item span {
   color: var(--text-muted);
   font-size: 0.68em;
