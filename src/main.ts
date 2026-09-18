@@ -24,7 +24,6 @@ export default class AgentNotePlugin extends Plugin {
   private panelRefreshTimer: number | null = null;
   private localEditTimers = new Map<string, number>();
   private localReadTimer: number | null = null;
-  private referenceBaselineReady = false;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -46,16 +45,7 @@ export default class AgentNotePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
-    this.registerEvent(this.app.vault.on("create", (file) => this.trackCreatedFile(file)));
-    this.registerEvent(this.app.vault.on("modify", (file) => this.trackModifiedFile(file)));
-    this.registerEvent(this.app.vault.on("delete", (file) => this.trackDeletedFile(file)));
-    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => this.trackMovedFile(file, oldPath)));
-    this.registerEvent(this.app.workspace.on("file-open", (file) => this.trackReadFile(file)));
-    this.registerEvent(this.app.metadataCache.on("resolved", () => {
-      if (this.referenceBaselineReady) return;
-      this.referenceBaselineReady = true;
-      void this.seedDocumentReferences();
-    }));
+    this.app.workspace.onLayoutReady(() => this.registerLocalActivityTracking());
     if (this.settings.autostartServer) await this.startServer(true);
   }
   onunload(): void {
@@ -73,6 +63,13 @@ export default class AgentNotePlugin extends Plugin {
   schedulePanelRefresh(): void {
     if (this.panelRefreshTimer !== null) return;
     this.panelRefreshTimer = window.setTimeout(() => { this.panelRefreshTimer = null; this.refreshPanels(); }, 500);
+  }
+  private registerLocalActivityTracking(): void {
+    this.registerEvent(this.app.vault.on("create", (file) => this.trackCreatedFile(file)));
+    this.registerEvent(this.app.vault.on("modify", (file) => this.trackModifiedFile(file)));
+    this.registerEvent(this.app.vault.on("delete", (file) => this.trackDeletedFile(file)));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => this.trackMovedFile(file, oldPath)));
+    this.registerEvent(this.app.workspace.on("file-open", (file) => this.trackReadFile(file)));
   }
   private isTrackedMarkdown(file: TAbstractFile | null): file is TFile {
     return file instanceof TFile && file.extension.toLowerCase() === "md" && !file.path.startsWith(".obsidian/") && !file.path.startsWith("agentNote/data/");
@@ -114,6 +111,7 @@ export default class AgentNotePlugin extends Plugin {
     if (this.localReadTimer !== null) window.clearTimeout(this.localReadTimer);
     this.localReadTimer = null;
     if (!this.isTrackedMarkdown(file)) return;
+    this.trackDocumentReferences(file, false);
     const filePath = file.path;
     this.localReadTimer = window.setTimeout(() => {
       this.localReadTimer = null;
@@ -128,9 +126,6 @@ export default class AgentNotePlugin extends Plugin {
     void this.store.recordDocumentReferences(file.path, this.referenceTargets(file), recordAdditions)
       .then(() => { if (recordAdditions) this.schedulePanelRefresh(); })
       .catch(() => undefined);
-  }
-  private async seedDocumentReferences(): Promise<void> {
-    for (const file of this.app.vault.getMarkdownFiles()) await this.store.recordDocumentReferences(file.path, this.referenceTargets(file), false);
   }
   detectedAgents(): DetectedAgent[] { return detectAgents(os.homedir()); }
   profile(agentId: string): AgentProfile { return this.settings.agents[agentId] ?? { enabled: true, instructions: "" }; }

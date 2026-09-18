@@ -205,16 +205,38 @@ try {
     assert.equal(insights.documents.some((document) => document.document.path === movedPath), false);
     assert.ok(insights.summary.weekActivityScore >= 15);
   });
-  await test("new document references contribute to the referenced document", async () => {
+  await test("new document references contribute after their first observed baseline", async () => {
     const sourcePath = "研究/项目索引.md";
     const targetPath = "研究/项目复盘.md";
     await store.recordLocalActivity("local-created", sourcePath);
     await store.recordLocalActivity("local-created", targetPath);
+    await store.recordDocumentReferences(sourcePath, []);
     await store.recordDocumentReferences(sourcePath, [targetPath]);
     const insights = await store.getDashboardInsights();
     const target = insights.documents.find((document) => document.document.path === targetPath);
     assert.equal(target?.connection, 4);
     assert.ok((await store.listActivity()).some((event) => event.type === "document-linked" && event.sourcePath === sourcePath && event.path === targetPath));
+  });
+  await test("contribution insights retain genuine activity recorded before startup", async () => {
+    const historicVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-history-"));
+    try {
+      const dataDir = path.join(historicVault, "agentNote", "data");
+      await fsp.mkdir(dataDir, { recursive: true });
+      await fsp.writeFile(path.join(dataDir, "events.json"), JSON.stringify([{ at: "2025-01-01T00:00:00.000Z", type: "local-created", documentId: "d-old", path: "旧资料.md", title: "旧资料", origin: "local" }]), "utf8");
+      await fsp.writeFile(path.join(dataDir, "documents.json"), JSON.stringify([{ id: "d-old", path: "旧资料.md", title: "旧资料", created: "2025-01-01T00:00:00.000Z", updated: "2025-01-01T00:00:00.000Z" }]), "utf8");
+      const historicStore = new VaultStore(historicVault);
+      await historicStore.init();
+      const before = await historicStore.getDashboardInsights();
+      assert.equal(before.summary.allTimeActivityScore, 4);
+      assert.equal(before.documents.length, 1);
+      assert.equal(before.timeline.length, 1);
+      await historicStore.recordLocalActivity("local-created", "新资料.md");
+      const after = await historicStore.getDashboardInsights();
+      assert.equal(after.summary.allTimeActivityScore, 8);
+      assert.equal(after.documents.length, 2);
+    } finally {
+      await fsp.rm(historicVault, { recursive: true, force: true });
+    }
   });
 
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {

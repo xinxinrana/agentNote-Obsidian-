@@ -89,7 +89,7 @@ Select **View full insights** in the connection panel to review local activity. 
 
 ### Knowledge contribution records
 
-agentNote records local actions that put knowledge to work: creating a note, completing an edit session, reading for more than 20 seconds, agent use, adding a new note link, moving, renaming, archiving, and deleting. It does not rate people or upload activity. A day's knowledge activity value is simply the combined value of those actions.
+agentNote records local actions that put knowledge to work: user-created files, completed edit sessions, reading for more than 20 seconds, agent use, adding a new note link, moving, renaming, archiving, and deleting. Existing genuine collaboration records remain available; the plugin starts listening only after initialization, so it does not treat pre-existing files as newly created. It does not rate people or upload activity. A day's knowledge activity value is simply the combined value of those actions.
 
 Each document has a reviewable contribution breakdown: construction, reuse, connection, and organization. Deletion records remain in the local ledger, while the timeline displays only the most recent 30 days so recent cleanup remains visible without making the history endless.
 

@@ -257,10 +257,11 @@ export class VaultStore {
     const targets = [...new Set(targetPaths.filter((target) => target.toLowerCase().endsWith(".md")).map((target) => this.normalizeVaultPath(target)).filter((target) => target !== source))].sort();
     const task = this.referenceWriteQueue.then(async () => {
       const references = await this.readReferences();
+      const hasBaseline = Object.hasOwn(references, source);
       const previous = new Set(references[source] ?? []);
       references[source] = targets;
       await fsp.writeFile(this.p("data", "references.json"), JSON.stringify(references, null, 2), "utf8");
-      if (!recordAdditions) return;
+      if (!recordAdditions || !hasBaseline) return;
       for (const target of targets.filter((candidate) => !previous.has(candidate))) {
         const document = await this.ensureDocument(target, false);
         await this.recordEvent({ type: "document-linked", documentId: document.id, path: document.path, sourcePath: source, title: document.title, origin: "local" });
@@ -578,13 +579,17 @@ export class VaultStore {
     return this.resolveFileShare(share, address, abs, background, title);
   }
 
-  private async readEvents(): Promise<InsightEvent[]> {
+  private async readStoredEvents(): Promise<InsightEvent[]> {
     try {
       const events: unknown = JSON.parse(await fsp.readFile(this.p("data", "events.json"), "utf8")) as unknown;
       if (!Array.isArray(events)) return [];
-      const valid = events.filter((event: unknown): event is InsightEvent => isRecord(event) && typeof event.at === "string" && typeof event.type === "string");
-      const shares = new Map((await this.readShares()).map((share) => [share.id, share]));
-      return Promise.all(valid.map(async (event) => {
+      return events.filter((event: unknown): event is InsightEvent => isRecord(event) && typeof event.at === "string" && typeof event.type === "string");
+    } catch { return []; }
+  }
+  private async readEvents(): Promise<InsightEvent[]> {
+    const events = await this.readStoredEvents();
+    const shares = new Map((await this.readShares()).map((share) => [share.id, share]));
+    return Promise.all(events.map(async (event) => {
         if (event.title || !event.shareId) return event;
         const share = shares.get(event.shareId);
         if (!share) return event;
@@ -592,11 +597,10 @@ export class VaultStore {
         try { return { ...event, title: (await this.getNode(share.target.nodeId)).title }; }
         catch { return event; }
       }));
-    } catch { return []; }
   }
   private async recordEvent(event: Omit<InsightEvent, "at">): Promise<void> {
     const task = this.eventWriteQueue.then(async () => {
-      const events = await this.readEvents();
+      const events = await this.readStoredEvents();
       events.push({ ...event, at: new Date().toISOString() });
       await fsp.writeFile(this.p("data", "events.json"), JSON.stringify(events, null, 2), "utf8");
     });
@@ -604,25 +608,7 @@ export class VaultStore {
     await task;
   }
   async getDashboardInsights(now = new Date()): Promise<DashboardInsights> {
-    const nodes = await this.listNodes();
-    const nodeDocumentIds = new Map<string, string>();
-    for (const node of nodes) {
-      const documentId = await this.documentIdForNode(node.id);
-      if (documentId) nodeDocumentIds.set(node.id, documentId);
-    }
-    const documents = await this.readDocuments();
-    const events = await this.readEvents();
-    const nodesById = new Map(nodes.map((node) => [node.id, node]));
-    const recordedShareIds = new Set(events.filter((event) => event.type === "share-created" && event.shareId).map((event) => event.shareId));
-    const legacyShareEvents: InsightEvent[] = (await this.readShares()).filter((share) => !recordedShareIds.has(share.id) && !Number.isNaN(new Date(share.created).getTime())).map((share) => ({
-      at: share.created,
-      type: "share-created",
-      shareId: share.id,
-      nodeId: share.target.kind === "node" ? share.target.nodeId : undefined,
-      targetKind: share.target.kind,
-      title: share.target.kind === "node" ? nodesById.get(share.target.nodeId)?.title : path.basename(share.target.path).replace(/\.md$/i, ""),
-    }));
-    const activityEvents = [...events, ...legacyShareEvents];
+    const [nodes, documents, activityEvents] = await Promise.all([this.listNodes(), this.readDocuments(), this.readStoredEvents()]);
     const weekStart = new Date(now); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const archiveBefore = new Date(now); archiveBefore.setDate(archiveBefore.getDate() - 30);
@@ -630,7 +616,7 @@ export class VaultStore {
     const inRange = (at: string, start: Date) => new Date(at) >= start && new Date(at) <= now;
     const resolveEvents = activityEvents.filter((event) => event.type === "share-resolved");
     const activityScore = (items: InsightEvent[]): number => items.reduce((total, event) => total + (ACTIVITY_WEIGHTS[event.type] ?? 0), 0);
-    const documentIdForEvent = (event: InsightEvent): string | undefined => event.documentId ?? (event.nodeId ? nodeDocumentIds.get(event.nodeId) : undefined);
+    const documentIdForEvent = (event: InsightEvent): string | undefined => event.documentId;
     const documentContributions = documents.filter((document) => !document.deletedAt).map((document) => {
       const documentEvents = activityEvents.filter((event) => documentIdForEvent(event) === document.id);
       const categories: Record<ContributionCategory, number> = { construction: 0, reuse: 0, connection: 0, organization: 0 };
@@ -672,7 +658,7 @@ export class VaultStore {
     const dateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     const recordedAt = [...activityEvents.map((event) => event.at), ...documents.map((document) => document.created)].map((at) => new Date(at).getTime()).filter(Number.isFinite);
     const startedAt = new Date(recordedAt.length ? Math.min(...recordedAt) : now.getTime());
-    const contributionStart = new Date(startedAt); contributionStart.setHours(0, 0, 0, 0); contributionStart.setDate(contributionStart.getDate() - contributionStart.getDay());
+    const contributionStart = new Date(startedAt); contributionStart.setHours(0, 0, 0, 0);
     const contributionDays = Math.max(1, Math.floor((now.getTime() - contributionStart.getTime()) / 86_400_000) + 1);
     const monthDays = Math.max(1, Math.ceil((now.getTime() - monthStart.getTime()) / 86_400_000) + 1);
     return {
@@ -705,7 +691,7 @@ export class VaultStore {
   }
   async getAgentInsights(): Promise<AgentInsight[]> {
     const grouped = new Map<string, AgentInsight>();
-    for (const event of await this.readEvents()) {
+    for (const event of await this.readStoredEvents()) {
       if (!event.actor) continue;
       const name = event.actor.name ?? event.actor.id ?? "未申报 agent";
       const row = grouped.get(name) ?? { name, uses: 0, created: 0, updated: 0, lastActive: event.at };
@@ -719,7 +705,7 @@ export class VaultStore {
   }
   async getDocumentInsights(): Promise<DocumentInsight[]> {
     const grouped = new Map<string, DocumentInsight>();
-    for (const event of (await this.readEvents()).filter((event) => event.type === "share-resolved")) {
+    for (const event of (await this.readStoredEvents()).filter((event) => event.type === "share-resolved")) {
       const key = event.nodeId ?? `${event.targetKind}:${event.title ?? event.shareId}`;
       const row = grouped.get(key) ?? { nodeId: event.nodeId, title: event.title ?? "未命名资料", uses: 0, agents: [], lastUsed: event.at };
       row.uses++;
