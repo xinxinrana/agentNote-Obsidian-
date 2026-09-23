@@ -48,7 +48,7 @@ export interface VaultDocument {
 export interface InsightEvent {
   at: string;
   type: InsightEventType;
-  origin?: "local" | "agent";
+  origin?: "local" | "agent" | "link";
   documentId?: string;
   path?: string;
   sourcePath?: string;
@@ -530,7 +530,7 @@ export class VaultStore {
       const { rel, abs } = this.vaultPath(target.path);
       result = target.kind === "file" ? await this.resolveFileShare(share, rel, abs) : await this.resolveFolderShare(share, rel, abs);
     }
-    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId: await this.documentIdForTarget(share.target), targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
+    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId: await this.documentIdForTarget(share.target), targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link" }).catch(() => undefined);
     return result;
   }
 
@@ -650,16 +650,23 @@ export class VaultStore {
     };
     const usedNodeIds = new Set(activityEvents.filter((event) => ["share-resolved", "local-read"].includes(event.type) && inRange(event.at, weekStart)).map(documentIdForEvent).filter(Boolean));
     const everUsed = new Set(resolveEvents.flatMap((event) => event.nodeId ? [event.nodeId] : []));
+    const dateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const dailyScores = new Map<string, number>();
+    for (const event of activityEvents) {
+      const date = new Date(event.at);
+      if (Number.isNaN(date.getTime())) continue;
+      const key = dateKey(date);
+      dailyScores.set(key, (dailyScores.get(key) ?? 0) + (ACTIVITY_WEIGHTS[event.type] ?? 0));
+    }
     const trend = (start: Date, days: number, label: (date: Date) => string): InsightTrendPoint[] => Array.from({ length: days }, (_, index) => {
       const from = new Date(start); from.setDate(from.getDate() + index);
-      const until = new Date(from); until.setDate(until.getDate() + 1);
-      return { label: label(from), count: activityScore(activityEvents.filter((event) => new Date(event.at) >= from && new Date(event.at) < until)) };
+      return { label: label(from), count: dailyScores.get(dateKey(from)) ?? 0 };
     });
-    const dateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     const recordedAt = [...activityEvents.map((event) => event.at), ...documents.map((document) => document.created)].map((at) => new Date(at).getTime()).filter(Number.isFinite);
     const startedAt = new Date(recordedAt.length ? Math.min(...recordedAt) : now.getTime());
-    const contributionStart = new Date(startedAt); contributionStart.setHours(0, 0, 0, 0);
-    const contributionDays = Math.max(1, Math.floor((now.getTime() - contributionStart.getTime()) / 86_400_000) + 1);
+    const contributionStart = new Date(now); contributionStart.setHours(0, 0, 0, 0);
+    contributionStart.setDate(contributionStart.getDate() - contributionStart.getDay() - 51 * 7);
+    const contributionDays = 51 * 7 + now.getDay() + 1;
     const monthDays = Math.max(1, Math.ceil((now.getTime() - monthStart.getTime()) / 86_400_000) + 1);
     return {
       summary: {
@@ -675,7 +682,7 @@ export class VaultStore {
       },
       weekly: buildRanking(weekStart, "week"),
       monthly: buildRanking(monthStart, "month"),
-      allTime: buildRanking(contributionStart, "all"),
+      allTime: buildRanking(startedAt, "all"),
       activities: activityEvents.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
       timeline: activityEvents.filter((event) => event.type !== "local-deleted" || new Date(event.at) >= deletionVisibleAfter).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
       weeklyTrend: trend(weekStart, 7, (date) => ["日", "一", "二", "三", "四", "五", "六"][date.getDay()]),

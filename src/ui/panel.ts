@@ -1,5 +1,6 @@
 import { App, ItemView, Modal, Notice, Setting, WorkspaceLeaf } from "obsidian";
 import type AgentNotePlugin from "../main";
+import type { LiveAgentActivity } from "../main";
 import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, type DetectedAgent } from "../core/skill";
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
@@ -17,12 +18,16 @@ const AGENT_ICONS: Record<string, string> = {
 
 export class AgentNoteView extends ItemView {
   private refreshVersion = 0;
+  private recentActivityContainer: HTMLElement | null = null;
+  private recentActivityList: HTMLElement | null = null;
+  private recentActivityEmpty: HTMLElement | null = null;
+  private pendingAgentActivity: { surface: HTMLElement; copy: HTMLElement; time: HTMLElement; agentName: string; title: string; operations: LiveAgentActivity["operation"][]; receivedAt: number } | null = null;
   constructor(leaf: WorkspaceLeaf, private plugin: AgentNotePlugin) { super(leaf); }
   getViewType(): string { return AGENTNOTE_VIEW; }
   getDisplayText(): string { return "agentNote 接入台"; }
   getIcon(): string { return "bot"; }
   async onOpen(): Promise<void> { await this.refresh(); }
-  async onClose(): Promise<void> { this.refreshVersion++; this.contentEl.empty(); }
+  async onClose(): Promise<void> { this.refreshVersion++; this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null; this.pendingAgentActivity = null; this.contentEl.empty(); }
 
   async refresh(): Promise<void> {
     const version = ++this.refreshVersion;
@@ -60,15 +65,56 @@ export class AgentNoteView extends ItemView {
     if (event.type === "node-restored") return `恢复「${event.title ?? "未命名资料"}」`;
     if (event.type === "local-created") return `新建「${event.title ?? "未命名文档"}」`;
     if (event.type === "local-edited") return `编辑「${event.title ?? "未命名文档"}」`;
-    if (event.type === "local-read") return `查看「${event.title ?? "未命名文档"}」`;
+    if (event.type === "local-read") return `本地阅读「${event.title ?? "未命名文档"}」`;
     if (event.type === "local-moved") return `整理「${event.title ?? "未命名文档"}」`;
     if (event.type === "local-deleted") return `删除「${event.title ?? "未命名文档"}」`;
     if (event.type === "document-linked") return `连接「${event.title ?? "未命名文档"}」`;
     if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
-    return `读取「${event.title ?? "分享资料"}」`;
+    return `访问分享链接「${event.title ?? "分享资料"}」`;
   }
   private timeText(iso: string): string { return new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  private operationLabel(operation: LiveAgentActivity["operation"]): string {
+    if (operation === "created") return "创建";
+    if (operation === "updated") return "更新";
+    if (operation === "archived") return "整理";
+    return "读取";
+  }
+  private liveActivityText(agentName: string, title: string, operations: LiveAgentActivity["operation"][]): string {
+    if (agentName === "分享链接") return `分享链接刚刚被访问「${title}」`;
+    return `${agentName} 已${operations.map((operation) => this.operationLabel(operation)).join("并")}「${title}」`;
+  }
+  showAgentActivity(activity: LiveAgentActivity): void {
+    const container = this.recentActivityContainer;
+    if (!container) return;
+    if (this.recentActivityEmpty) { this.recentActivityEmpty.remove(); this.recentActivityEmpty = null; }
+    const list = this.recentActivityList ?? container.createEl("ul", { cls: "agentnote-activity-list" });
+    this.recentActivityList = list;
+    const now = Date.now();
+    const pending = this.pendingAgentActivity;
+    if (pending && pending.agentName === activity.agentName && pending.title === activity.title && now - pending.receivedAt < 6_000) {
+      if (!pending.operations.includes(activity.operation)) pending.operations.push(activity.operation);
+      pending.copy.setText(this.liveActivityText(activity.agentName, activity.title, pending.operations));
+      pending.time.setText("刚刚");
+      pending.receivedAt = now;
+      pending.surface.addClass("is-new");
+      window.setTimeout(() => pending.surface.removeClass("is-new"), 3_000);
+      return;
+    }
+    const item = list.createEl("li");
+    const surface = item.createDiv({ cls: "agentnote-activity-row is-new" });
+    const copy = surface.createEl("span", { text: this.liveActivityText(activity.agentName, activity.title, [activity.operation]) });
+    const time = surface.createEl("time", { text: "刚刚" });
+    list.prepend(item);
+    while (list.children.length > 3) list.lastElementChild?.remove();
+    this.pendingAgentActivity = { surface, copy, time, agentName: activity.agentName, title: activity.title, operations: [activity.operation], receivedAt: now };
+    window.setTimeout(() => surface.removeClass("is-new"), 3_000);
+    window.setTimeout(() => { if (time.isConnected) time.setText(this.timeText(activity.at)); }, 3_500);
+  }
   private renderDashboard(insights: DashboardInsights): void {
+    this.recentActivityContainer = null;
+    this.recentActivityList = null;
+    this.recentActivityEmpty = null;
+    this.pendingAgentActivity = null;
     const dashboard = this.contentEl.createDiv({ cls: "agentnote-dashboard" });
     const overview = dashboard.createDiv({ cls: "agentnote-dashboard-hero" });
     overview.createEl("span", { cls: "agentnote-eyebrow", text: "本地知识洞察" });
@@ -79,15 +125,20 @@ export class AgentNoteView extends ItemView {
       const stat = stats.createDiv({ cls: "agentnote-metric" }); stat.createEl("strong", { text: String(value) }); stat.createEl("span", { text: label });
     }
     const activity = dashboard.createDiv({ cls: "agentnote-home-activity" });
+    this.recentActivityContainer = activity;
     const heading = activity.createDiv({ cls: "agentnote-section-heading" });
     heading.createEl("h4", { text: "最近动态" });
     const detail = heading.createEl("button", { text: "查看完整洞察", cls: "mod-cta" });
     detail.onclick = () => new InsightsModal(this.app, this.plugin).open();
-    if (!insights.activities.length) activity.createEl("p", { cls: "agentnote-empty-copy", text: "创建并分享资料给 agent 后，这里会留下它进入工作流的记录。" });
+    if (!insights.activities.length) this.recentActivityEmpty = activity.createEl("p", { cls: "agentnote-empty-copy", text: "创建并分享资料给 agent 后，这里会留下它进入工作流的记录。" });
     else {
       const list = activity.createEl("ul", { cls: "agentnote-activity-list" });
+      this.recentActivityList = list;
       for (const event of insights.activities.slice(0, 3)) {
-        const item = list.createEl("li"); item.createEl("span", { text: this.activityText(event) }); item.createEl("time", { text: this.timeText(event.at) });
+        const item = list.createEl("li");
+        const row = item.createDiv({ cls: "agentnote-activity-row" });
+        row.createEl("span", { text: this.activityText(event) });
+        row.createEl("time", { text: this.timeText(event.at) });
       }
     }
   }
@@ -184,12 +235,12 @@ class InsightsModal extends Modal {
     if (event.type === "node-restored") return `恢复「${this.displayTitle(event.title ?? "未命名资料")}」`;
     if (event.type === "local-created") return `新建「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "local-edited") return `编辑「${this.displayTitle(event.title ?? "未命名文档")}」`;
-    if (event.type === "local-read") return `查看「${this.displayTitle(event.title ?? "未命名文档")}」`;
+    if (event.type === "local-read") return `本地阅读「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "local-moved") return `整理「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "local-deleted") return `删除「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "document-linked") return `连接「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
-    return `读取「${event.title ?? "分享资料"}」`;
+    return `访问分享链接「${this.displayTitle(event.title ?? "分享资料")}」`;
   }
   private async render(): Promise<void> {
     const insights = await this.plugin.store.getDashboardInsights();
@@ -212,7 +263,7 @@ class InsightsModal extends Modal {
     if (this.tab === "overview") this.renderOverview(body, insights, agents);
     if (this.tab === "week") this.renderPeriod(body, { eyebrow: "WEEKLY REVIEW", title: "本周知识活动报告", description: "建设、使用、连接与整理共同构成真实的知识工作节奏。", trendTitle: "每日知识活动", rankingTitle: "本周协作资料" }, [[insights.summary.weekActivityScore, "知识活动值"], [insights.summary.weekCreated, "内容建设"], [insights.summary.weekUpdated, "维护整理"], [insights.summary.weekResolves, "资料使用"]], insights.weekly, insights.weeklyTrend, "weekly");
     if (this.tab === "month") {
-      this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: "开始以来的知识贡献", description: `从 ${this.dateText(insights.startedAt)} 的第一条记录开始，持续回看本地知识如何被建设、使用、连接与整理。`, trendTitle: "知识贡献", rankingTitle: "开始以来协作资料" }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, "活跃天数"], [insights.summary.allTimeActivityScore, "知识活动值"], [insights.documents.reduce((total, entry) => total + entry.reuse, 0), "累计使用"], [insights.documents.length, "参与资料"]], insights.allTime, insights.allTimeTrend, "contributions");
+      this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: "开始以来的知识贡献", description: `从 ${this.dateText(insights.startedAt)} 的第一条记录开始。总值保留全部历史，记录墙展示最近 52 周。`, trendTitle: "最近 52 周知识贡献", rankingTitle: "开始以来协作资料" }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, "近一年活跃天数"], [insights.summary.allTimeActivityScore, "累计知识活动值"], [insights.documents.reduce((total, entry) => total + entry.reuse, 0), "累计使用"], [insights.documents.length, "参与资料"]], insights.allTime, insights.allTimeTrend, "contributions");
       this.renderDocumentContributions(body, insights.documents);
     }
     if (this.tab === "agents") this.renderAgents(body, agents);
@@ -363,7 +414,7 @@ class InsightsModal extends Modal {
   }
   private renderTimeline(parent: HTMLElement, insights: DashboardInsights): void {
     const agents = new Set(insights.timeline.map((event) => event.actor?.name ?? event.actor?.id).filter(Boolean));
-    this.renderTabHero(parent, "ACTIVITY LOG", "协作时间线", "用连续活动回看资料何时被创建、调用、更新和整理。", [[insights.timeline.length, "记录活动"], [agents.size, "参与 agent"], [insights.summary.weekResolves, "本周读取"]]);
+    this.renderTabHero(parent, "ACTIVITY LOG", "协作时间线", "分享链接每次成功访问都会留下记录；本地阅读指文件在 Obsidian 中保持打开超过 20 秒。", [[insights.timeline.length, "记录活动"], [agents.size, "参与 agent"], [insights.summary.weekResolves, "本周使用"]]);
     const filters = parent.createDiv({ cls: "agentnote-timeline-filters" });
     for (const [filter, label] of [["all", "全部"], ["construction", "建设"], ["reuse", "使用"], ["connection", "连接"], ["organization", "整理"]] as const) {
       const button = filters.createEl("button", { text: label, cls: this.timelineFilter === filter ? "is-active" : "" });
@@ -377,7 +428,7 @@ class InsightsModal extends Modal {
       const detail = item.createDiv();
       const chip = event.type === "document-linked" ? "连接" : ["share-resolved", "local-read"].includes(event.type) ? "使用" : event.type === "share-created" ? "分享" : ["node-created", "local-created"].includes(event.type) ? "创建" : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? "整理" : "维护";
       const title = detail.createDiv({ cls: "agentnote-timeline-title" }); title.createEl("strong", { text: this.activityText(event) }); title.createEl("span", { cls: `agentnote-event-chip is-${event.type}`, text: chip });
-      detail.createEl("span", { text: [event.actor?.name ?? event.actor?.id ?? (event.origin === "local" ? "本地操作" : "未申报 agent"), event.actor?.sessionTitle, event.targetKind === "folder" ? "文件夹" : event.targetKind === "node" ? "笔记" : event.targetKind === "file" ? "文件" : undefined].filter(Boolean).join(" · ") });
+      detail.createEl("span", { text: [event.actor?.name ?? event.actor?.id ?? (event.type === "share-resolved" ? "访问方未识别" : event.origin === "local" ? "本地操作" : "未申报 agent"), event.actor?.sessionTitle, event.targetKind === "folder" ? "文件夹" : event.targetKind === "node" ? "笔记" : event.targetKind === "file" ? "文件" : undefined].filter(Boolean).join(" · ") });
       item.createEl("time", { text: this.timeText(event.at) });
     }
   }

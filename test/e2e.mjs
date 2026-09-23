@@ -11,7 +11,8 @@ const { VaultStore, AgentServer, detectAgents, installSkill, renderSkillMd, rend
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const store = new VaultStore(vault);
 let activityNotifications = 0;
-const server = new AgentServer(store, { port: 0, onActivity: () => { activityNotifications++; } });
+const liveActivities = [];
+const server = new AgentServer(store, { port: 0, onActivity: (activity) => { activityNotifications++; liveActivities.push(activity); } });
 const port = await server.start();
 const base = `http://127.0.0.1:${port}`;
 let passed = 0;
@@ -35,6 +36,10 @@ try {
     assert.equal(result.status, 201); assert.equal(result.data.type, "snippet"); assert.equal(result.data.background.includes("发布节奏"), true); textId = result.data.id;
     assert.equal(result.data.status, "created");
     assert.equal(activityNotifications, 1);
+    assert.equal(liveActivities.at(-1)?.operation, "created");
+    assert.equal(liveActivities.at(-1)?.title, "发布窗口");
+    assert.equal(liveActivities.at(-1)?.actor?.name, "Codex");
+    assert.equal(liveActivities.at(-1)?.actor?.sessionTitle, "发布流程验证");
     assert.ok(result.data.link.startsWith(base)); assert.match(result.data.link, /\/api\/shares\/s-x-[0-9a-f]+\/resolve$/);
     textLink = result.data.link;
   });
@@ -57,6 +62,8 @@ try {
     const result = await api("GET", textLink.replace(base, ""), undefined, { "x-agentnote-agent-name": "Codex", "x-agentnote-session-title": encodeURIComponent("发布流程验证") });
     assert.equal(result.data.kind, "text"); assert.equal(result.data.content, "周五晚间不发布生产版本。");
     assert.ok(path.isAbsolute(result.data.filePath)); assert.match(result.data.hint, /优先通过本链接/);
+    assert.equal(liveActivities.at(-1)?.operation, "read");
+    assert.equal(liveActivities.at(-1)?.title, "发布窗口");
   });
   await test("dashboard records successful link use and ranks reusable notes", async () => {
     const insights = await store.getDashboardInsights();
@@ -65,7 +72,7 @@ try {
     assert.equal(insights.weekly[0].node.id, textId);
     assert.match(insights.weekly[0].reason, /本周被读取/);
     assert.equal(insights.weeklyTrend.length, 7);
-    assert.ok(insights.allTimeTrend.length >= 1);
+    assert.ok(insights.allTimeTrend.length >= 358 && insights.allTimeTrend.length <= 364);
     assert.ok(insights.startedAt);
     assert.ok(insights.timeline.length >= 2);
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.name, "Codex");
@@ -88,8 +95,14 @@ try {
       assert.equal(insights.summary.weekUpdated, 1);
       assert.equal(insights.summary.weekSharesCreated, 1);
       assert.equal(insights.summary.weekResolves, 1);
+      assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.origin, "link");
       assert.ok(insights.timeline.some((event) => event.type === "share-created" && event.title === "统计样本"));
       assert.equal(insights.weeklyTrend.reduce((total, point) => total + point.count, 0), 12);
+      const later = await scoringStore.getDashboardInsights(new Date("2027-01-02T12:00:00"));
+      assert.equal(later.allTimeTrend.length, 364);
+      assert.equal(later.allTimeTrend[0].label, "2026-01-04");
+      assert.equal(later.allTimeTrend.at(-1).label, "2027-01-02");
+      assert.equal(later.summary.allTimeActivityScore, 12);
     } finally {
       await fsp.rm(scoringVault, { recursive: true, force: true });
     }

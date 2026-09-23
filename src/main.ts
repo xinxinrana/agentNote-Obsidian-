@@ -2,6 +2,7 @@ import * as os from "os";
 import * as path from "path";
 import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile } from "obsidian";
 import { AgentServer } from "./core/server";
+import type { AgentActivity } from "./core/server";
 import { detectAgents, DetectedAgent, installSkill, uninstallSkill } from "./core/skill";
 import { isNewerVersion } from "./core/version";
 import { VaultStore } from "./core/store";
@@ -10,6 +11,7 @@ import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
 import { AGENTNOTE_VIEW, AgentNoteView, QuickStartModal } from "./ui/panel";
 
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
+export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
 interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; agents: Record<string, AgentProfile> }
 const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, agents: {} };
 
@@ -60,6 +62,15 @@ export default class AgentNotePlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
   }
   refreshPanels(): void { for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) if (leaf.view instanceof AgentNoteView) void leaf.view.refresh(); }
+  private recordAgentActivity(activity: AgentActivity): void {
+    const latest: LiveAgentActivity = {
+      ...activity,
+      at: new Date().toISOString(),
+      agentName: activity.actor?.name ?? activity.actor?.id ?? (activity.operation === "read" ? "分享链接" : "未识别 agent"),
+      sessionTitle: activity.actor?.sessionTitle,
+    };
+    for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) if (leaf.view instanceof AgentNoteView) leaf.view.showAgentActivity(latest);
+  }
   schedulePanelRefresh(): void {
     if (this.panelRefreshTimer !== null) return;
     this.panelRefreshTimer = window.setTimeout(() => { this.panelRefreshTimer = null; this.refreshPanels(); }, 500);
@@ -154,7 +165,7 @@ export default class AgentNotePlugin extends Plugin {
   }
   async startServer(quiet = false): Promise<void> {
     if (this.server) return;
-    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: () => this.schedulePanelRefresh() });
+    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity) });
     try { await this.server.start(); if (!quiet) new Notice(`agentNote 服务已启动：127.0.0.1:${this.server.port}`); }
     catch (error) { this.server = null; new Notice(`agentNote 服务启动失败：${(error as Error).message}`); }
     this.refreshPanels();

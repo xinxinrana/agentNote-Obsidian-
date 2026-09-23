@@ -93,9 +93,11 @@ agentNote records local actions that put knowledge to work: user-created files, 
 
 Each document has a reviewable contribution breakdown: construction, reuse, connection, and organization. Deletion records remain in the local ledger, while the timeline displays only the most recent 30 days so recent cleanup remains visible without making the history endless.
 
+Each successful share-link request counts as one use. If the request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
+
 - **Profile**: a seven-day overview and reusable-note ranking.
 - **This week**: daily knowledge activity and the most reused material.
-- **All time**: contribution history from the first record onward; deeper color represents more knowledge work that day.
+- **All time**: totals and note rankings retain the full history. The contribution grid shows a rolling 52 weeks; deeper color represents more knowledge work that day.
 - **Agent and timeline**: filter local and agent activity by construction, reuse, connection, and organization.
 - **Cleanup**: low-use notes that may be archived; protected notes never appear here.
 
