@@ -198,7 +198,7 @@ export default class AgentNotePlugin extends Plugin {
   async applyUpdate(release: ReleaseInfo): Promise<void> {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) throw new Error("agentNote 需要桌面端文件系统 vault。");
-    const dir = path.join(adapter.getBasePath(), this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`);
+    const dir = path.join(adapter.getBasePath(), this.manifest.dir ?? path.join(this.app.vault.configDir, "plugins", this.manifest.id));
     await installRelease(dir, release);
     new Notice(`agentNote 已更新到 v${release.version}，正在重载插件。`);
     const plugins = (this.app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;

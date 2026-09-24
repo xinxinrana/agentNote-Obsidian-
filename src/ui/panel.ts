@@ -651,7 +651,7 @@ class UnlockPromptModal extends Modal {
   onOpen(): void {
     this.contentEl.empty(); this.contentEl.createEl("h2", { text: "解锁提示词编辑？" });
     this.contentEl.createEl("p", { cls: "agentnote-prompt-risk", text: "修改后可能导致接入失效。不同 agent 的缓存机制不同，保存并更新安装后，可能需要重启 agent 或新开对话才会生效。理解 skill 机制后再继续。" });
-    new Setting(this.contentEl).addButton((button) => button.setButtonText("取消").onClick(() => this.close())).addButton((button) => button.setButtonText("我理解，继续编辑").setWarning().onClick(() => { this.done(); this.close(); }));
+    new Setting(this.contentEl).addButton((button) => button.setButtonText("取消").onClick(() => this.close())).addButton((button) => button.setButtonText("我理解，继续编辑").onClick(() => { this.done(); this.close(); }));
   }
 }
 
