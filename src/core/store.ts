@@ -150,6 +150,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class VaultStore {
   readonly root: string;
   readonly dataDir: string;
+  private readonly configDir: string;
   private cache = new Map<string, { mtimeMs: number; node: AgentNode }>();
   private idToPath = new Map<string, string>();
   private idempotentCreates = new Map<string, Promise<AgentNode>>();
@@ -158,11 +159,16 @@ export class VaultStore {
   private referenceWriteQueue: Promise<void> = Promise.resolve();
   private suppressedLocalPaths = new Map<string, number>();
 
-  constructor(vaultRoot: string) {
+  constructor(vaultRoot: string, configDir = ".obsidian") {
     this.root = path.resolve(vaultRoot);
     this.dataDir = path.join(this.root, "agentNote");
+    this.configDir = this.normalizeVaultPath(configDir);
   }
   private p(...parts: string[]): string { return path.join(this.dataDir, ...parts); }
+  private isConfigPath(filePath: string): boolean {
+    const normalized = this.normalizeVaultPath(filePath);
+    return normalized === this.configDir || normalized.startsWith(`${this.configDir}/`);
+  }
 
   async init(): Promise<void> {
     await Promise.all([fsp.mkdir(this.p("nodes"), { recursive: true }), fsp.mkdir(this.p("data"), { recursive: true })]);
@@ -257,7 +263,7 @@ export class VaultStore {
     return false;
   }
   async recordLocalActivity(type: Extract<InsightEventType, `local-${string}`>, filePath: string, oldPath?: string): Promise<boolean> {
-    if (!filePath.toLowerCase().endsWith(".md") || this.normalizeVaultPath(filePath).startsWith(".obsidian/")) return false;
+    if (!filePath.toLowerCase().endsWith(".md") || this.isConfigPath(filePath)) return false;
     if (type !== "local-moved" && this.consumeSuppressedLocalActivity(filePath)) return false;
     const document = type === "local-deleted" ? await this.deleteDocument(filePath) : type === "local-moved" && oldPath ? await this.moveDocument(filePath, oldPath) : await this.ensureDocument(filePath);
     await this.recordEvent({ type, documentId: document.id, path: document.path, title: document.title, origin: "local" });
@@ -734,7 +740,7 @@ export class VaultStore {
       return candidate ? [candidate] : [];
     });
     const localCandidates = documents.flatMap((document): ArchiveCandidate[] => {
-      if (document.deletedAt || document.path.startsWith("agentNote/") || document.path.startsWith(".obsidian/") || !fs.existsSync(path.join(this.root, document.path))) return [];
+      if (document.deletedAt || document.path.startsWith("agentNote/") || this.isConfigPath(document.path) || !fs.existsSync(path.join(this.root, document.path))) return [];
       const candidate = archiveCandidate(document, undefined, eventsByDocument.get(document.id) ?? []);
       return candidate ? [candidate] : [];
     });

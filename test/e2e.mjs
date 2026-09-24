@@ -260,6 +260,27 @@ try {
     }
   });
 
+  await test("custom Obsidian config folders stay out of activity and archive suggestions", async () => {
+    const customVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-config-"));
+    const previousStore = new VaultStore(customVault);
+    try {
+      await previousStore.init();
+      await fsp.mkdir(path.join(customVault, ".my-obsidian"), { recursive: true });
+      await fsp.writeFile(path.join(customVault, ".my-obsidian", "internal.md"), "# Internal", "utf8");
+      await previousStore.recordLocalActivity("local-created", ".my-obsidian/internal.md");
+      const customStore = new VaultStore(customVault, ".my-obsidian");
+      assert.equal(await customStore.recordLocalActivity("local-read", ".my-obsidian/internal.md"), false);
+      await fsp.writeFile(path.join(customVault, "visible.md"), "# Visible", "utf8");
+      assert.equal(await customStore.recordLocalActivity("local-created", "visible.md"), true);
+      const future = new Date(Date.now() + 8 * 86_400_000);
+      const candidates = (await customStore.getDashboardInsights(future)).archiveCandidates;
+      assert.equal(candidates.some((candidate) => candidate.document.path === ".my-obsidian/internal.md"), false);
+      assert.equal(candidates.some((candidate) => candidate.document.path === "visible.md"), true);
+    } finally {
+      await fsp.rm(customVault, { recursive: true, force: true });
+    }
+  });
+
   await test("local document activity keeps a stable history through organization and deletion", async () => {
     const localPath = "工作/协作记录.md";
     assert.equal(await store.recordLocalActivity("local-created", localPath), true);

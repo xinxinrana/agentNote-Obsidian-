@@ -32,7 +32,7 @@ export default class AgentNotePlugin extends Plugin {
     await this.loadSettings();
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) { new Notice("agentNote 需要桌面端文件系统 vault。"); return; }
-    this.store = new VaultStore(adapter.getBasePath());
+    this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
     await this.store.init();
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
@@ -84,7 +84,7 @@ export default class AgentNotePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-open", (file) => this.trackReadFile(file)));
   }
   private isTrackedMarkdown(file: TAbstractFile | null): file is TFile {
-    return file instanceof TFile && file.extension.toLowerCase() === "md" && !file.path.startsWith(".obsidian/") && !file.path.startsWith("agentNote/data/");
+    return file instanceof TFile && file.extension.toLowerCase() === "md" && !file.path.startsWith(`${this.app.vault.configDir}/`) && !file.path.startsWith("agentNote/data/");
   }
   private recordLocalActivity(type: "local-created" | "local-edited" | "local-read" | "local-moved" | "local-deleted", filePath: string, oldPath?: string): void {
     void this.store.recordLocalActivity(type, filePath, oldPath)

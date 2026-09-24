@@ -34,7 +34,7 @@ export class AgentServer {
   }
   async stop(): Promise<void> { if (this.server) await new Promise<void>((resolve) => this.server!.close(() => resolve())); this.server = null; }
   private shareLink(shareId: string): string { return `http://127.0.0.1:${this.port ?? this.opts.port}/api/shares/${shareId}/resolve`; }
-  private notifyActivity(activity: AgentActivity): void { try { this.opts.onActivity?.(activity); } catch {} }
+  private notifyActivity(activity: AgentActivity): void { try { this.opts.onActivity?.(activity); } catch (error) { console.warn("agentNote activity notification failed", error); } }
   private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated", context: ActivityContext) {
     const share = await this.store.ensureShareForNode(node.id, context);
     return { status, link: this.shareLink(share.id), ...nodeView(node) };

@@ -397,7 +397,7 @@ class InsightsModal extends Modal {
     const leadingDays = firstDate.getDay();
     const weeks = Math.ceil((leadingDays + trend.length) / 7);
     const chart = parent.createDiv({ cls: "agentnote-contribution-chart" });
-    requestAnimationFrame(() => { chart.scrollLeft = chart.scrollWidth; });
+    window.requestAnimationFrame(() => { chart.scrollLeft = chart.scrollWidth; });
     const weekdays = chart.createDiv({ cls: "agentnote-contribution-weekdays" });
     for (const label of ["日", "", "二", "", "四", "", "六"]) weekdays.createEl("span", { text: label });
     const calendar = chart.createDiv({ cls: "agentnote-contribution-calendar" });
@@ -679,7 +679,7 @@ export class FeedbackModal extends Modal {
     if (!await this.copy()) return;
     const params = new URLSearchParams({ title: `[${this.type}] ${this.title.trim()}`, body: this.report() });
     try {
-      const { shell } = require("electron") as { shell: { openExternal(url: string): Promise<void> } };
+      const { shell } = await import("electron");
       await shell.openExternal(`https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`);
       this.close();
     } catch (error) { new Notice(`无法打开系统浏览器：${(error as Error).message}`); }
