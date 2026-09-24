@@ -44,6 +44,7 @@ export interface VaultDocument {
   created: string;
   updated: string;
   deletedAt?: string;
+  protected?: boolean;
 }
 export interface InsightEvent {
   at: string;
@@ -64,11 +65,19 @@ export type ContributionCategory = "construction" | "reuse" | "connection" | "or
 export interface DocumentContribution {
   document: VaultDocument;
   score: number;
+  recentScore: number;
   construction: number;
   reuse: number;
   connection: number;
   organization: number;
   lastActive?: string;
+}
+export interface ArchiveCandidate {
+  document: VaultDocument;
+  node?: AgentNode;
+  reason: string;
+  uses: number;
+  lastUsed?: string;
 }
 export interface DashboardInsights {
   summary: {
@@ -83,6 +92,7 @@ export interface DashboardInsights {
     monthResolves: number;
   };
   weekly: InsightNote[];
+  weeklyDocuments: DocumentContribution[];
   monthly: InsightNote[];
   allTime: InsightNote[];
   activities: InsightEvent[];
@@ -92,7 +102,9 @@ export interface DashboardInsights {
   allTimeTrend: InsightTrendPoint[];
   documents: DocumentContribution[];
   startedAt: string;
-  archiveCandidates: AgentNode[];
+  archiveCandidates: ArchiveCandidate[];
+  protectedDocuments: VaultDocument[];
+  protectedNodes: AgentNode[];
 }
 export interface AgentInsight { name: string; uses: number; created: number; updated: number; lastActive: string }
 export interface DocumentInsight { nodeId?: string; title: string; uses: number; agents: string[]; lastUsed: string }
@@ -104,19 +116,19 @@ export type ShareResult =
 
 /** Tells the receiving agent how to update the explicitly shared content. */
 const SHARE_HINT = "优先通过本链接读取。更新已分享内容时，PATCH /api/shares/<shareId>，请求体为 { content: 更新后的完整内容 }。";
-const ACTIVITY_WEIGHTS: Partial<Record<InsightEventType, number>> = {
+export const ACTIVITY_WEIGHTS: Partial<Record<InsightEventType, number>> = {
   "node-created": 4,
   "node-updated": 3,
   "node-archived": 3,
   "node-restored": 2,
   "share-created": 2,
   "share-resolved": 3,
-  "local-created": 4,
-  "local-edited": 3,
-  "local-read": 1,
-  "local-moved": 2,
-  "local-deleted": 3,
-  "document-linked": 4,
+  "local-created": 6,
+  "local-edited": 6,
+  "local-read": 4,
+  "local-moved": 4,
+  "local-deleted": 4,
+  "document-linked": 5,
 };
 
 export function contributionCategory(event: InsightEvent): ContributionCategory {
@@ -228,6 +240,13 @@ export class VaultStore {
       documents.push(document); return document;
     });
   }
+  async protectDocument(documentId: string, protectedValue: boolean): Promise<void> {
+    await this.updateDocuments((documents) => {
+      const document = documents.find((candidate) => candidate.id === documentId && !candidate.deletedAt);
+      if (!document) throw new StoreError(404, "文档不存在");
+      document.protected = protectedValue;
+    });
+  }
   private suppressLocalActivity(filePath: string): void { this.suppressedLocalPaths.set(this.normalizeVaultPath(filePath), Date.now() + 30_000); }
   private consumeSuppressedLocalActivity(filePath: string): boolean {
     const normalized = this.normalizeVaultPath(filePath);
@@ -242,8 +261,23 @@ export class VaultStore {
     if (type !== "local-moved" && this.consumeSuppressedLocalActivity(filePath)) return false;
     const document = type === "local-deleted" ? await this.deleteDocument(filePath) : type === "local-moved" && oldPath ? await this.moveDocument(filePath, oldPath) : await this.ensureDocument(filePath);
     await this.recordEvent({ type, documentId: document.id, path: document.path, title: document.title, origin: "local" });
-    if (type === "local-moved" && oldPath) await this.moveReferenceSource(oldPath, filePath);
+    if (type === "local-moved" && oldPath) {
+      await this.moveReferenceSource(oldPath, filePath);
+      await this.moveShareTargets(oldPath, filePath);
+    }
     return true;
+  }
+  private async moveShareTargets(oldPath: string, newPath: string): Promise<void> {
+    const oldNormalized = this.normalizeVaultPath(oldPath);
+    const newNormalized = this.normalizeVaultPath(newPath);
+    const shares = await this.readShares();
+    let changed = false;
+    for (const share of shares) {
+      if (share.target.kind !== "file" || this.normalizeVaultPath(share.target.path) !== oldNormalized) continue;
+      share.target.path = newNormalized;
+      changed = true;
+    }
+    if (changed) await this.writeShares(shares);
   }
   private async readReferences(): Promise<Record<string, string[]>> {
     try {
@@ -275,7 +309,14 @@ export class VaultStore {
     const newSource = this.normalizeVaultPath(newPath);
     const task = this.referenceWriteQueue.then(async () => {
       const references = await this.readReferences();
-      if (references[oldSource]) { references[newSource] = references[oldSource]; delete references[oldSource]; await fsp.writeFile(this.p("data", "references.json"), JSON.stringify(references, null, 2), "utf8"); }
+      let changed = false;
+      if (references[oldSource]) { references[newSource] = references[oldSource]; delete references[oldSource]; changed = true; }
+      for (const [source, targets] of Object.entries(references)) {
+        if (!targets.includes(oldSource)) continue;
+        references[source] = [...new Set(targets.map((target) => target === oldSource ? newSource : target))].sort();
+        changed = true;
+      }
+      if (changed) await fsp.writeFile(this.p("data", "references.json"), JSON.stringify(references, null, 2), "utf8");
     });
     this.referenceWriteQueue = task.catch(() => undefined);
     await task;
@@ -366,7 +407,11 @@ export class VaultStore {
     this.suppressLocalActivity(destination);
     if (previous && previous !== destination) this.suppressLocalActivity(previous);
     await fsp.writeFile(destination, serializeNode(node), "utf8");
-    if (previous && previous !== destination) await fsp.rm(previous, { force: true });
+    if (previous && previous !== destination) {
+      await fsp.rm(previous, { force: true });
+      await this.moveDocument(path.relative(this.root, destination), path.relative(this.root, previous));
+      await this.moveReferenceSource(path.relative(this.root, previous), path.relative(this.root, destination));
+    }
     const stat = await fsp.stat(destination);
     this.cache.set(destination, { mtimeMs: stat.mtimeMs, node: { ...node, updated: stat.mtime.toISOString() } });
     this.idToPath.set(node.id, destination);
@@ -609,21 +654,32 @@ export class VaultStore {
   }
   async getDashboardInsights(now = new Date()): Promise<DashboardInsights> {
     const [nodes, documents, activityEvents] = await Promise.all([this.listNodes(), this.readDocuments(), this.readStoredEvents()]);
+    const eventsByDocument = new Map<string, InsightEvent[]>();
+    const eventsByNode = new Map<string, InsightEvent[]>();
+    for (const event of activityEvents) {
+      if (event.documentId) {
+        const events = eventsByDocument.get(event.documentId) ?? []; events.push(event); eventsByDocument.set(event.documentId, events);
+      }
+      if (event.nodeId) {
+        const events = eventsByNode.get(event.nodeId) ?? []; events.push(event); eventsByNode.set(event.nodeId, events);
+      }
+    }
     const weekStart = new Date(now); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const archiveBefore = new Date(now); archiveBefore.setDate(archiveBefore.getDate() - 30);
     const deletionVisibleAfter = new Date(now); deletionVisibleAfter.setDate(deletionVisibleAfter.getDate() - 30);
     const inRange = (at: string, start: Date) => new Date(at) >= start && new Date(at) <= now;
     const resolveEvents = activityEvents.filter((event) => event.type === "share-resolved");
     const activityScore = (items: InsightEvent[]): number => items.reduce((total, event) => total + (ACTIVITY_WEIGHTS[event.type] ?? 0), 0);
     const documentIdForEvent = (event: InsightEvent): string | undefined => event.documentId;
-    const documentContributions = documents.filter((document) => !document.deletedAt).map((document) => {
-      const documentEvents = activityEvents.filter((event) => documentIdForEvent(event) === document.id);
+    const recentStart = new Date(now); recentStart.setDate(recentStart.getDate() - 30);
+    const buildDocumentContributions = (start?: Date): DocumentContribution[] => documents.filter((document) => !document.deletedAt).map((document) => {
+      const documentEvents = (eventsByDocument.get(document.id) ?? []).filter((event) => !start || inRange(event.at, start));
       const categories: Record<ContributionCategory, number> = { construction: 0, reuse: 0, connection: 0, organization: 0 };
       for (const event of documentEvents) categories[contributionCategory(event)] += ACTIVITY_WEIGHTS[event.type] ?? 0;
       return {
         document,
         score: activityScore(documentEvents),
+        recentScore: activityScore(documentEvents.filter((event) => inRange(event.at, recentStart))),
         construction: categories.construction,
         reuse: categories.reuse,
         connection: categories.connection,
@@ -631,6 +687,7 @@ export class VaultStore {
         lastActive: documentEvents.map((event) => event.at).sort().at(-1),
       };
     }).filter((document) => document.score > 0).sort((a, b) => b.score - a.score || (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
+    const documentContributions = buildDocumentContributions();
     const buildRanking = (start: Date, period: "week" | "month" | "all"): InsightNote[] => {
       const usage = new Map<string, InsightEvent[]>();
       for (const event of resolveEvents.filter((event) => event.nodeId && inRange(event.at, start))) {
@@ -649,8 +706,39 @@ export class VaultStore {
       }).sort((a, b) => b.score - a.score || (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).slice(0, 3);
     };
     const usedNodeIds = new Set(activityEvents.filter((event) => ["share-resolved", "local-read"].includes(event.type) && inRange(event.at, weekStart)).map(documentIdForEvent).filter(Boolean));
-    const everUsed = new Set(resolveEvents.flatMap((event) => event.nodeId ? [event.nodeId] : []));
     const dateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const documentsByPath = new Map(documents.map((document) => [document.path, document]));
+    const archiveCandidate = (document: VaultDocument, node: AgentNode | undefined, events: InsightEvent[]): ArchiveCandidate | null => {
+      if (document.protected || node?.pinned || node?.archived) return null;
+      const observed = events.filter((event) => new Date(event.at) <= now);
+      const uses = observed.filter((event) => ["share-resolved", "local-read", "document-linked"].includes(event.type));
+      const meaningful = observed.filter((event) => ["node-created", "node-updated", "local-created", "local-edited", "share-created", "share-resolved", "local-read", "document-linked"].includes(event.type));
+      const lastAttention = Math.max(new Date(document.created).getTime(), new Date(document.updated).getTime(), node ? new Date(node.updated).getTime() : 0, ...meaningful.map((event) => new Date(event.at).getTime()));
+      const lastUsed = uses.map((event) => event.at).sort().at(-1);
+      const useWeeks = new Set(uses.map((event) => {
+        const date = new Date(event.at); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return dateKey(date);
+      })).size;
+      const quietDays = uses.length === 0 ? 7 : useWeeks >= 2 ? 90 : 30;
+      if (!Number.isFinite(lastAttention) || now.getTime() - lastAttention < quietDays * 86_400_000) return null;
+      const reason = uses.length === 0 ? "至少 7 天未被阅读、引用或通过分享链接访问" : useWeeks >= 2 ? "曾跨周复用，近 90 天没有新的使用或维护" : "曾被使用，近 30 天没有新的使用或维护";
+      return { document, node, reason, uses: uses.length, lastUsed };
+    };
+    const nodeCandidates = nodes.flatMap((node): ArchiveCandidate[] => {
+      if (node.archived || node.pinned) return [];
+      const nodePath = this.idToPath.get(node.id);
+      if (!nodePath) return [];
+      const relativePath = path.relative(this.root, nodePath).split(path.sep).join("/");
+      const document = documentsByPath.get(relativePath) ?? { id: node.id, path: relativePath, title: node.title, created: node.created, updated: node.updated };
+      const events = [...new Set([...(eventsByNode.get(node.id) ?? []), ...(eventsByDocument.get(document.id) ?? [])])];
+      const candidate = archiveCandidate(document, node, events);
+      return candidate ? [candidate] : [];
+    });
+    const localCandidates = documents.flatMap((document): ArchiveCandidate[] => {
+      if (document.deletedAt || document.path.startsWith("agentNote/") || document.path.startsWith(".obsidian/") || !fs.existsSync(path.join(this.root, document.path))) return [];
+      const candidate = archiveCandidate(document, undefined, eventsByDocument.get(document.id) ?? []);
+      return candidate ? [candidate] : [];
+    });
+    const archiveCandidates = [...nodeCandidates, ...localCandidates].sort((first, second) => first.uses - second.uses || first.document.updated.localeCompare(second.document.updated));
     const dailyScores = new Map<string, number>();
     for (const event of activityEvents) {
       const date = new Date(event.at);
@@ -665,8 +753,8 @@ export class VaultStore {
     const recordedAt = [...activityEvents.map((event) => event.at), ...documents.map((document) => document.created)].map((at) => new Date(at).getTime()).filter(Number.isFinite);
     const startedAt = new Date(recordedAt.length ? Math.min(...recordedAt) : now.getTime());
     const contributionStart = new Date(now); contributionStart.setHours(0, 0, 0, 0);
-    contributionStart.setDate(contributionStart.getDate() - contributionStart.getDay() - 51 * 7);
-    const contributionDays = 51 * 7 + now.getDay() + 1;
+    contributionStart.setDate(contributionStart.getDate() - contributionStart.getDay() - 39 * 7);
+    const contributionDays = 39 * 7 + now.getDay() + 1;
     const monthDays = Math.max(1, Math.ceil((now.getTime() - monthStart.getTime()) / 86_400_000) + 1);
     return {
       summary: {
@@ -681,6 +769,7 @@ export class VaultStore {
         monthResolves: activityEvents.filter((event) => ["share-resolved", "local-read"].includes(event.type) && inRange(event.at, monthStart)).length,
       },
       weekly: buildRanking(weekStart, "week"),
+      weeklyDocuments: buildDocumentContributions(weekStart),
       monthly: buildRanking(monthStart, "month"),
       allTime: buildRanking(startedAt, "all"),
       activities: activityEvents.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
@@ -690,11 +779,13 @@ export class VaultStore {
       allTimeTrend: trend(contributionStart, contributionDays, dateKey),
       documents: documentContributions,
       startedAt: startedAt.toISOString(),
-      archiveCandidates: nodes.filter((node) => !node.archived && !node.pinned && new Date(node.created) <= archiveBefore && new Date(node.updated) <= archiveBefore && !everUsed.has(node.id)).sort((a, b) => a.updated.localeCompare(b.updated)),
+      archiveCandidates,
+      protectedDocuments: documents.filter((document) => document.protected && !document.deletedAt),
+      protectedNodes: nodes.filter((node) => node.pinned && !node.archived),
     };
   }
-  async listActivity(filter: { from?: string; to?: string; agent?: string; action?: InsightEventType; nodeId?: string } = {}): Promise<InsightEvent[]> {
-    return (await this.readEvents()).filter((event) => (!filter.from || event.at >= filter.from) && (!filter.to || event.at <= filter.to) && (!filter.agent || (event.actor?.name ?? event.actor?.id) === filter.agent) && (!filter.action || event.type === filter.action) && (!filter.nodeId || event.nodeId === filter.nodeId)).sort((a, b) => b.at.localeCompare(a.at));
+  async listActivity(filter: { from?: string; to?: string; agent?: string; action?: InsightEventType; nodeId?: string; documentId?: string } = {}): Promise<InsightEvent[]> {
+    return (await this.readEvents()).filter((event) => (!filter.from || event.at >= filter.from) && (!filter.to || event.at <= filter.to) && (!filter.agent || (event.actor?.name ?? event.actor?.id) === filter.agent) && (!filter.action || event.type === filter.action) && (!filter.nodeId || event.nodeId === filter.nodeId) && (!filter.documentId || event.documentId === filter.documentId)).sort((a, b) => b.at.localeCompare(a.at));
   }
   async getAgentInsights(): Promise<AgentInsight[]> {
     const grouped = new Map<string, AgentInsight>();

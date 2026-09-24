@@ -100,7 +100,7 @@ export class AgentServer {
     }
     if (parts[1] === "insights" && method === "GET") {
       if (parts[2] === "overview") return send(res, 200, { ok: true, data: await this.store.getDashboardInsights() });
-      if (parts[2] === "activity") return send(res, 200, { ok: true, data: await this.store.listActivity({ from: url.searchParams.get("from") ?? undefined, to: url.searchParams.get("to") ?? undefined, agent: url.searchParams.get("agent") ?? undefined, action: url.searchParams.get("action") as InsightEventType ?? undefined, nodeId: url.searchParams.get("nodeId") ?? undefined }) });
+      if (parts[2] === "activity") return send(res, 200, { ok: true, data: await this.store.listActivity({ from: url.searchParams.get("from") ?? undefined, to: url.searchParams.get("to") ?? undefined, agent: url.searchParams.get("agent") ?? undefined, action: url.searchParams.get("action") as InsightEventType ?? undefined, nodeId: url.searchParams.get("nodeId") ?? undefined, documentId: url.searchParams.get("documentId") ?? undefined }) });
       if (parts[2] === "agents") return send(res, 200, { ok: true, data: await this.store.getAgentInsights() });
       if (parts[2] === "documents") return send(res, 200, { ok: true, data: await this.store.getDocumentInsights() });
     }

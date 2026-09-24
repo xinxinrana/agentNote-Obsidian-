@@ -72,7 +72,7 @@ try {
     assert.equal(insights.weekly[0].node.id, textId);
     assert.match(insights.weekly[0].reason, /本周被读取/);
     assert.equal(insights.weeklyTrend.length, 7);
-    assert.ok(insights.allTimeTrend.length >= 358 && insights.allTimeTrend.length <= 364);
+    assert.ok(insights.allTimeTrend.length >= 274 && insights.allTimeTrend.length <= 280);
     assert.ok(insights.startedAt);
     assert.ok(insights.timeline.length >= 2);
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.name, "Codex");
@@ -99,8 +99,8 @@ try {
       assert.ok(insights.timeline.some((event) => event.type === "share-created" && event.title === "统计样本"));
       assert.equal(insights.weeklyTrend.reduce((total, point) => total + point.count, 0), 12);
       const later = await scoringStore.getDashboardInsights(new Date("2027-01-02T12:00:00"));
-      assert.equal(later.allTimeTrend.length, 364);
-      assert.equal(later.allTimeTrend[0].label, "2026-01-04");
+      assert.equal(later.allTimeTrend.length, 280);
+      assert.equal(later.allTimeTrend[0].label, "2026-03-29");
       assert.equal(later.allTimeTrend.at(-1).label, "2027-01-02");
       assert.equal(later.summary.allTimeActivityScore, 12);
     } finally {
@@ -149,13 +149,36 @@ try {
   });
   await test("pinned notes stay out of archive recommendations", async () => {
     const stale = await store.createNode({ title: "待归档笔记", content: "不再使用的资料。" });
-    const future = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+    const future = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000);
     const before = await store.getDashboardInsights(future);
-    assert.ok(before.archiveCandidates.some((node) => node.id === stale.id));
+    assert.ok(before.archiveCandidates.some((candidate) => candidate.node.id === stale.id));
     const pinned = await store.updateNode(stale.id, { pinned: true });
     assert.equal(pinned.pinned, true);
     const after = await store.getDashboardInsights(future);
-    assert.equal(after.archiveCandidates.some((node) => node.id === stale.id), false);
+    assert.equal(after.archiveCandidates.some((candidate) => candidate.node.id === stale.id), false);
+  });
+  await test("archive suggestions follow first use and repeated use over time", async () => {
+    const lifecycleVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-lifecycle-"));
+    const lifecycleStore = new VaultStore(lifecycleVault);
+    try {
+      await lifecycleStore.init();
+      const note = await lifecycleStore.createNode({ title: "长期参考", content: "可以反复复用。" });
+      const share = await lifecycleStore.createShare(note.id);
+      await lifecycleStore.resolveShare(share.id);
+      const baseTime = Date.now();
+      const candidatesAt = async (days) => (await lifecycleStore.getDashboardInsights(new Date(baseTime + days * 86_400_000))).archiveCandidates;
+      assert.equal((await candidatesAt(8)).some((candidate) => candidate.node?.id === note.id), false);
+      assert.equal((await candidatesAt(31)).some((candidate) => candidate.node?.id === note.id), true);
+      const eventsPath = path.join(lifecycleVault, "agentNote", "data", "events.json");
+      const events = JSON.parse(await fsp.readFile(eventsPath, "utf8"));
+      const use = events.find((event) => event.type === "share-resolved");
+      events.push({ ...use, at: new Date(baseTime + 8 * 86_400_000).toISOString() });
+      await fsp.writeFile(eventsPath, JSON.stringify(events));
+      assert.equal((await candidatesAt(40)).some((candidate) => candidate.node?.id === note.id), false);
+      assert.equal((await candidatesAt(99)).some((candidate) => candidate.node?.id === note.id), true);
+    } finally {
+      await fsp.rm(lifecycleVault, { recursive: true, force: true });
+    }
   });
 
   await test("file share resolves to address, background, and current content", async () => {
@@ -195,11 +218,46 @@ try {
 
   await test("archive is a folder move and does not break an existing share", async () => {
     const share = await api("POST", "/api/shares", { nodeId: textId });
+    const documentPath = await store.nodeFilePath(textId);
+    const documentBefore = (await store.getDashboardInsights()).documents.find((entry) => entry.document.path === documentPath);
     const archived = await api("POST", `/api/nodes/${textId}/archive`, { archived: true });
     assert.equal(archived.data.archived, true);
     assert.ok(fs.existsSync(path.join(vault, "agentNote", "nodes", "归档", "发布窗口.md")));
     const resolved = await api("GET", `/api/shares/${share.data.id}/resolve`); assert.equal(resolved.status, 200);
+    const documentAfter = (await store.getDashboardInsights()).documents.find((entry) => entry.document.id === documentBefore?.document.id);
+    assert.ok(documentAfter); assert.match(documentAfter.document.path, /归档/);
+    assert.ok(documentAfter.score >= documentBefore.score);
     const restored = await api("POST", `/api/nodes/${textId}/archive`, { archived: false }); assert.equal(restored.data.archived, false);
+  });
+  await test("local archive protects user choice and keeps moved share links live", async () => {
+    const localVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-local-archive-"));
+    const localStore = new VaultStore(localVault);
+    try {
+      await localStore.init();
+      await fsp.writeFile(path.join(localVault, "draft.md"), "# Draft", "utf8");
+      await localStore.recordLocalActivity("local-created", "draft.md");
+      await fsp.writeFile(path.join(localVault, "working.md"), "# Working", "utf8");
+      await localStore.recordLocalActivity("local-created", "working.md");
+      await localStore.recordLocalActivity("local-read", "working.md");
+      const future = new Date(Date.now() + 8 * 86_400_000);
+      const candidate = (await localStore.getDashboardInsights(future)).archiveCandidates.find((entry) => entry.document.path === "draft.md");
+      assert.ok(candidate); assert.equal(candidate.node, undefined);
+      assert.equal((await localStore.getDashboardInsights(future)).archiveCandidates.some((entry) => entry.document.path === "working.md"), false);
+      assert.equal((await localStore.getDashboardInsights(new Date(Date.now() + 31 * 86_400_000))).archiveCandidates.some((entry) => entry.document.path === "working.md"), true);
+      await localStore.protectDocument(candidate.document.id, true);
+      assert.equal((await localStore.getDashboardInsights(future)).archiveCandidates.some((entry) => entry.document.id === candidate.document.id), false);
+      await localStore.protectDocument(candidate.document.id, false);
+      const share = await localStore.createPathShare("draft.md");
+      await fsp.mkdir(path.join(localVault, "agentNote", "归档文件"), { recursive: true });
+      await fsp.rename(path.join(localVault, "draft.md"), path.join(localVault, "agentNote", "归档文件", "draft.md"));
+      await localStore.recordLocalActivity("local-moved", "agentNote/归档文件/draft.md", "draft.md");
+      assert.equal((await localStore.resolveShare(share.id)).content, "# Draft");
+      const after = await localStore.getDashboardInsights(future);
+      assert.equal(after.archiveCandidates.some((entry) => entry.document.id === candidate.document.id), false);
+      assert.ok(after.documents.some((entry) => entry.document.id === candidate.document.id && entry.document.path === "agentNote/归档文件/draft.md"));
+    } finally {
+      await fsp.rm(localVault, { recursive: true, force: true });
+    }
   });
 
   await test("local document activity keeps a stable history through organization and deletion", async () => {
@@ -227,8 +285,17 @@ try {
     await store.recordDocumentReferences(sourcePath, [targetPath]);
     const insights = await store.getDashboardInsights();
     const target = insights.documents.find((document) => document.document.path === targetPath);
-    assert.equal(target?.connection, 4);
+    assert.equal(target?.connection, 5);
+    assert.equal(insights.weeklyDocuments.find((document) => document.document.path === targetPath)?.connection, 5);
+    assert.ok(insights.weeklyDocuments.some((document) => document.document.path === sourcePath));
+    const activity = await api("GET", `/api/insights/activity?documentId=${target.document.id}`);
+    assert.equal(activity.status, 200);
+    assert.ok(activity.data.some((event) => event.type === "document-linked" && event.documentId === target.document.id));
     assert.ok((await store.listActivity()).some((event) => event.type === "document-linked" && event.sourcePath === sourcePath && event.path === targetPath));
+    const movedTarget = "研究/已整理/项目复盘.md";
+    await store.recordLocalActivity("local-moved", movedTarget, targetPath);
+    await store.recordDocumentReferences(sourcePath, [movedTarget]);
+    assert.equal((await store.listActivity()).filter((event) => event.type === "document-linked" && event.documentId === target.document.id).length, 1);
   });
   await test("contribution insights retain genuine activity recorded before startup", async () => {
     const historicVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-history-"));
@@ -240,12 +307,12 @@ try {
       const historicStore = new VaultStore(historicVault);
       await historicStore.init();
       const before = await historicStore.getDashboardInsights();
-      assert.equal(before.summary.allTimeActivityScore, 4);
+      assert.equal(before.summary.allTimeActivityScore, 6);
       assert.equal(before.documents.length, 1);
       assert.equal(before.timeline.length, 1);
       await historicStore.recordLocalActivity("local-created", "新资料.md");
       const after = await historicStore.getDashboardInsights();
-      assert.equal(after.summary.allTimeActivityScore, 8);
+      assert.equal(after.summary.allTimeActivityScore, 12);
       assert.equal(after.documents.length, 2);
     } finally {
       await fsp.rm(historicVault, { recursive: true, force: true });

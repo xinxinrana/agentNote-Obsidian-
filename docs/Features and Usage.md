@@ -79,6 +79,8 @@ Select **Author Evan · Feedback** at the bottom of the connection panel. Comple
 
 ## 4. Archive and protect notes
 
+The Cleanup tab considers both agentNote notes and vault documents with recorded activity. Material that has never been read, referenced, or accessed through a share link may be suggested after seven quiet days; previously used material has at least 30 days, or 90 days if reused across weeks. New reading, editing, linking, or share access restarts the quiet period. Suggestions never move files automatically. You can protect a document, archive it individually, or undo a recent archive. Regular vault documents move to `agentNote/归档文件/`, while their existing share links remain usable.
+
 Archiving moves a note into the vault's archive folder. It is not deletion: the note and any existing share link remain usable.
 
 **Protect from archiving** keeps a note out of archive suggestions. It does not modify the note or its links.
@@ -93,11 +95,13 @@ agentNote records local actions that put knowledge to work: user-created files, 
 
 Each document has a reviewable contribution breakdown: construction, reuse, connection, and organization. Deletion records remain in the local ledger, while the timeline displays only the most recent 30 days so recent cleanup remains visible without making the history endless.
 
+Local creation, editing, reading, and organization reflect the user's own work first; share access and agent updates also contribute to each document. Select **View activity records** on a document card to see the dated events and their contribution values.
+
 Each successful share-link request counts as one use. If the request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
 
 - **Profile**: a seven-day overview and reusable-note ranking.
-- **This week**: daily knowledge activity and the most reused material.
-- **All time**: totals and note rankings retain the full history. The contribution grid shows a rolling 52 weeks; deeper color represents more knowledge work that day.
+- **This week**: daily knowledge activity, reused material, and a document ranking that includes local work.
+- **All time**: totals and note rankings retain the full history. The contribution grid shows a rolling 40 weeks, opens at the latest dates, and keeps breathing room on the right; deeper color represents more knowledge work that day.
 - **Agent and timeline**: filter local and agent activity by construction, reuse, connection, and organization.
 - **Cleanup**: low-use notes that may be archived; protected notes never appear here.
 

@@ -26,6 +26,7 @@ export default class AgentNotePlugin extends Plugin {
   private panelRefreshTimer: number | null = null;
   private localEditTimers = new Map<string, number>();
   private localReadTimer: number | null = null;
+  private suppressedLocalRenames = new Set<string>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -114,9 +115,32 @@ export default class AgentNotePlugin extends Plugin {
   }
   private trackMovedFile(file: TAbstractFile, oldPath: string): void {
     if (!this.isTrackedMarkdown(file) || !oldPath.toLowerCase().endsWith(".md")) return;
+    if (this.suppressedLocalRenames.delete(oldPath)) return;
     const pending = this.localEditTimers.get(oldPath);
     if (pending !== undefined) { window.clearTimeout(pending); this.localEditTimers.delete(oldPath); }
     this.recordLocalActivity("local-moved", file.path, oldPath);
+  }
+  async moveVaultDocument(sourcePath: string, destinationPath: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(sourcePath);
+    if (!(file instanceof TFile)) throw new Error("原文档不存在");
+    if (this.app.vault.getAbstractFileByPath(destinationPath)) throw new Error("目标位置已有同名文档");
+    this.suppressedLocalRenames.add(sourcePath);
+    try { await this.app.fileManager.renameFile(file, destinationPath); }
+    catch (error) { this.suppressedLocalRenames.delete(sourcePath); throw error; }
+    window.setTimeout(() => this.suppressedLocalRenames.delete(sourcePath), 5_000);
+    try { await this.store.recordLocalActivity("local-moved", destinationPath, sourcePath); }
+    catch { new Notice("文档已移动，但活动记录未更新；请检查已有分享链接。"); }
+    this.schedulePanelRefresh();
+  }
+  async archiveVaultDocument(sourcePath: string): Promise<string> {
+    const file = this.app.vault.getAbstractFileByPath(sourcePath);
+    if (!(file instanceof TFile)) throw new Error("原文档不存在");
+    const folderPath = "agentNote/归档文件";
+    if (!this.app.vault.getAbstractFileByPath(folderPath)) await this.app.vault.createFolder(folderPath);
+    let destinationPath = `${folderPath}/${file.name}`;
+    for (let suffix = 2; this.app.vault.getAbstractFileByPath(destinationPath); suffix++) destinationPath = `${folderPath}/${file.basename} ${suffix}.${file.extension}`;
+    await this.moveVaultDocument(sourcePath, destinationPath);
+    return destinationPath;
   }
   private trackReadFile(file: TFile | null): void {
     if (this.localReadTimer !== null) window.clearTimeout(this.localReadTimer);
