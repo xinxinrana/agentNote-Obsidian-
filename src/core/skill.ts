@@ -87,6 +87,17 @@ X-AgentNote-Session-Title: <encodeURIComponent(根据当前具体工作填写的
 - 读取始终优先通过链接，它返回当前内容和背景。
 - 更新已分享内容时，PATCH \`/api/shares/<shareId>\`，请求体为 \`{ "content": "更新后的完整内容" }\`。
 
+## 活动查询与总结
+
+- GET \`{{baseUrl}}/api/insights/overview\`：查看本周概览、趋势和资料排名。
+- GET \`{{baseUrl}}/api/insights/activity?from=<开始时间>&to=<结束时间>\`：查询指定时间段的操作，可追加 \`agent\`、\`action\`、\`nodeId\` 或 \`documentId\` 筛选。时间使用 UTC ISO 格式（如 \`2026-09-20T16:00:00.000Z\`），参数需 URL 编码，包含起止时间；本周按用户本地周一零点计算并转换为 UTC。
+- GET \`{{baseUrl}}/api/insights/agents\`：查看各 agent 的累计分享读取、创建和修改次数。
+- GET \`{{baseUrl}}/api/insights/documents\`：查看资料的累计分享读取次数、使用过的 agent 和最近使用时间。
+
+响应中的 \`data\` 是查询结果，查询统计不会新增活动。用户要求提炼本周重点时，先查本周活动，再按需阅读相关正文生成分享内容；活动量仅作线索，不代表工作强度或成果。
+
+也可按需读取 \`GET {{baseUrl}}/api/health\` 返回的 \`data.vault\` 下的 \`agentNote/data/events*.json\` 活动日志，用于回顾与总结；日志由插件维护，请勿修改。
+
 ## 可用接口
 
 \`\`\`
@@ -98,10 +109,6 @@ PATCH {{baseUrl}}/api/nodes/<id>
 POST {{baseUrl}}/api/shares
 PATCH {{baseUrl}}/api/shares/<shareId>
 GET  {{baseUrl}}/api/shares/<id>/resolve
-GET  {{baseUrl}}/api/insights/overview
-GET  {{baseUrl}}/api/insights/activity?agent=&nodeId=&action=
-GET  {{baseUrl}}/api/insights/agents
-GET  {{baseUrl}}/api/insights/documents
 \`\`\`
 `;
 
