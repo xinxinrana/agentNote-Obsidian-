@@ -114,14 +114,24 @@ agent 会整理标题、正文、背景与标签，并写入 vault。写入成�
 
 ## 开发
 
-```powershell
-npm install
-npm run typecheck
-npm run build
-node test/e2e.mjs
+```sh
+npm ci
+npm test
 ```
 
 构建会生成 Obsidian 插件包 `main.js`，以及 Node 兼容核心测试包 `test/core-bundle.cjs`。
+
+开发命令支持 macOS、Windows 和 Linux。`npm test` 依次执行类型检查、构建和核心端到端测试，不会部署到 vault。使用 `npm run dev` 可持续监听代码并重新构建。
+
+部署到本地测试 vault 时，明确指定已有目录（路径有空格时加引号）：
+
+```sh
+npm run deploy:test -- "/absolute/path/to/test-vault"
+```
+
+开发环境使用 Node.js 22 或更新版本。也可在项目根目录的 `.env.local` 中保存 `AGENTNOTE_TEST_VAULT="/absolute/path/to/test-vault"`，之后直接运行 `npm run deploy:test`。该本地文件已被 Git 忽略；命令行路径优先于环境变量，已有环境变量优先于 `.env.local`。追加 `--dry-run` 可检查部署位置而不写入文件。
+
+默认插件配置目录为 `.obsidian`；如有自定义目录，追加 `--config-dir .obsidian-test`。部署会覆盖该目录下 agentNote 的三个插件文件，完成后在 Obsidian 中重新加载插件。
 
 ## 许可证
 
