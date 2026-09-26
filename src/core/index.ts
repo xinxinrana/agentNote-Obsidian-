@@ -9,3 +9,4 @@ export * from "./store";
 export * from "./server";
 export * from "./skill";
 export * from "./version";
+export * from "./activityLog";

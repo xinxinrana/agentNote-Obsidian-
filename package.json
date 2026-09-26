@@ -9,6 +9,7 @@
     "build": "node esbuild.config.mjs",
     "dev": "node esbuild.config.mjs --watch",
     "test": "npm run typecheck && npm run build && node test/e2e.mjs",
+    "test:git-sync": "npm run build && node test/git-sync.mjs",
     "typecheck": "tsc --noEmit",
     "deploy:test": "npm run build && node scripts/deploy-test.mjs"
   },

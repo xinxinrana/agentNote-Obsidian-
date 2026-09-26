@@ -90,6 +90,8 @@ Open the agentNote connection panel. Detected agents can be connected or updated
 
 ## Documentation
 
+For device-specific activity logs, see [Git activity sync](docs/Git活动记录同步.md) (Chinese). Each device appends to its own log; statistics merge all device logs. This does not resolve conflicts in note contents or other shared state.
+
 | Chinese primary document | English copy |
 | --- | --- |
 | [How to Use agentNote](docs/如何使用.md) | [How to Use agentNote](docs/How%20to%20Use.md) |
