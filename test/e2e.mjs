@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, AgentServer, detectAgents, installSkill, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, AgentServer, detectAgents, installSkill, skillStatus, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -456,11 +456,63 @@ try {
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
+  await test("damaged shared data stops writes and remains recoverable", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-shared-damaged-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      const node = await isolated.createNode({ title: "保留的笔记" });
+      const data = path.join(root, "agentNote", "data");
+      for (const [name, operation] of [
+        ["documents.json", () => isolated.recordLocalActivity("local-edited", "note.md")],
+        ["references.json", () => isolated.recordDocumentReferences("note.md", ["target.md"])],
+        ["shares.json", () => isolated.createShare(node.id)],
+        ["agents.json", () => isolated.registerAgent({ id: "codex", name: "Codex" })],
+        ["idempotency.json", () => isolated.createNode({ title: "不应创建" }, "key-1")],
+      ]) {
+        const file = path.join(data, name);
+        const original = await fsp.readFile(file, "utf8").catch(() => null);
+        await fsp.writeFile(file, "<<<<<<< HEAD\n[]\n=======\n{}\n>>>>>>> branch\n");
+        await assert.rejects(operation(), (error) => error.statusCode === 409 && error.message.includes(name));
+        assert.match(await fsp.readFile(file, "utf8"), /^<<<<<<< HEAD/);
+        if (original === null) await fsp.rm(file); else await fsp.writeFile(file, original);
+      }
+      assert.equal((await isolated.listNodes()).some((entry) => entry.title === "不应创建"), false);
+      await isolated.registerAgent({ id: "codex", name: "Codex" });
+      await isolated.createShare(node.id);
+      assert.equal((await isolated.listShares()).length, 1);
+      const documents = path.join(data, "documents.json");
+      await fsp.writeFile(documents, '[{"id":"partial"}]');
+      await assert.rejects(isolated.recordLocalActivity("local-edited", "note.md"), (error) => error.statusCode === 409);
+      assert.equal(await fsp.readFile(documents, "utf8"), '[{"id":"partial"}]');
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
-    const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); assert.deepEqual(JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")), { version: 1, id: "codex", name: "Codex" }); await fsp.rm(home, { recursive: true, force: true });
+    const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); const identity = JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")); assert.equal(identity.id, "codex"); assert.equal(identity.name, "Codex"); assert.match(identity.skillHash, /^[a-f0-9]{64}$/); assert.match(identity.defaultTemplateHash, /^[a-f0-9]{64}$/); await fsp.rm(home, { recursive: true, force: true });
+  });
+  await test("skill status distinguishes default updates from custom and legacy prompts", async () => {
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-skill-status-"));
+    const dir = path.join(home, "agentnote");
+    try {
+      const options = { port, agentId: "codex", agentName: "Codex" };
+      installSkill(dir, options);
+      assert.equal(skillStatus(dir, options), "current");
+      const identityPath = path.join(dir, "agentnote.identity.json");
+      const identity = JSON.parse(await fsp.readFile(identityPath, "utf8"));
+      await fsp.writeFile(identityPath, JSON.stringify({ ...identity, defaultTemplateHash: "older" }));
+      assert.equal(skillStatus(dir, options), "update");
+      assert.equal(skillStatus(dir, { ...options, template: "用户自定义模板" }), "custom");
+      await fsp.appendFile(path.join(dir, "SKILL.md"), "\n用户手动添加的内容");
+      assert.equal(skillStatus(dir, options), "custom");
+      await fsp.writeFile(identityPath, JSON.stringify({ version: 1, id: "codex", name: "Codex" }));
+      assert.equal(skillStatus(dir, options), "unknown");
+      await fsp.writeFile(path.join(dir, "SKILL.md"), renderSkillMd(options));
+      assert.equal(skillStatus(dir, options), "current");
+    } finally { await fsp.rm(home, { recursive: true, force: true }); }
   });
   await test("editable prompt templates retain dynamic service and identity values", async () => {
     const template = "为 {{agentName}} 配置 {{baseUrl}}，身份是 {{agentId}}。";

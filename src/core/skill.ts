@@ -1,9 +1,11 @@
 import * as fs from "fs";
 import * as path from "path";
+import { createHash } from "crypto";
 
 export interface AgentTarget { id: string; name: string; detectRel: string; skillsRel: string; website: string }
 export interface DetectedAgent extends AgentTarget { skillDir: string; available: boolean; installed: boolean }
 export interface AgentPromptOptions { port: number; instructions?: string; agentId?: string; agentName?: string; template?: string }
+export type SkillStatus = "current" | "update" | "custom" | "unknown";
 
 export const KNOWN_AGENTS: AgentTarget[] = [
   { id: "claude-code", name: "Claude Code", detectRel: ".claude", skillsRel: ".claude/skills", website: "https://claude.com/product/claude-code" },
@@ -127,10 +129,26 @@ export function renderSkillMd({ port, instructions = "", agentId = "agentnote", 
   return resolved;
 }
 
+function digest(value: string): string { return createHash("sha256").update(value).digest("hex"); }
+
+export function skillStatus(dir: string, options: AgentPromptOptions): SkillStatus {
+  const file = path.join(dir, "SKILL.md");
+  if (!fs.existsSync(file)) return "unknown";
+  if (options.template !== undefined && options.template !== DEFAULT_SKILL_TEMPLATE) return "custom";
+  try {
+    const installed = digest(fs.readFileSync(file, "utf8"));
+    const identity = JSON.parse(fs.readFileSync(path.join(dir, "agentnote.identity.json"), "utf8")) as Record<string, unknown>;
+    if (typeof identity.skillHash !== "string" || typeof identity.defaultTemplateHash !== "string") return installed === digest(renderSkillMd(options)) ? "current" : "unknown";
+    if (installed !== identity.skillHash) return "custom";
+    return identity.defaultTemplateHash === digest(DEFAULT_SKILL_TEMPLATE) ? "current" : "update";
+  } catch { return "unknown"; }
+}
+
 export function installSkill(dir: string, options: AgentPromptOptions): void {
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "SKILL.md"), renderSkillMd(options), "utf8");
-  fs.writeFileSync(path.join(dir, "agentnote.identity.json"), JSON.stringify({ version: 1, id: options.agentId ?? "agentnote", name: options.agentName ?? "未命名 agent" }, null, 2), "utf8");
+  const skill = renderSkillMd(options);
+  fs.writeFileSync(path.join(dir, "SKILL.md"), skill, "utf8");
+  fs.writeFileSync(path.join(dir, "agentnote.identity.json"), JSON.stringify({ version: 1, id: options.agentId ?? "agentnote", name: options.agentName ?? "未命名 agent", skillHash: digest(skill), defaultTemplateHash: digest(DEFAULT_SKILL_TEMPLATE) }, null, 2), "utf8");
 }
 
 /** A portable task for agents outside the built-in registry. */
