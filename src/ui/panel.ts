@@ -691,7 +691,7 @@ export class FeedbackModal extends Modal {
     if (!await this.copy()) return;
     const params = new URLSearchParams({ title: `[${this.type}] ${this.title.trim()}`, body: this.report() });
     try {
-      const { shell } = await import("electron");
+      const { shell } = require("electron") as typeof import("electron");
       await shell.openExternal(`https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`);
       this.close();
     } catch (error) { new Notice(`无法打开系统浏览器：${(error as Error).message}`); }
