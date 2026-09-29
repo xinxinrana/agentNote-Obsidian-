@@ -21,6 +21,7 @@ agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、W
 - 即使未安装，也始终展示 Claude Code、Codex 和 WorkBuddy，并提供官网入口。
 - 用本地知识档案查看复用、活动、贡献与整理建议。
 - 生成可匿名展示的知识活动 PNG 分享图。
+- 在知识档案中点击资料标题直达原文件，并查看本地活动记录。
 
 ## 三分钟开始
 
@@ -62,7 +63,7 @@ agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、W
 - 在编辑器中选中文本，使用 **agentNote: 分享选中文本**。
 - 把自动复制的本地地址发给 agent。
 
-地址会返回当前内容、背景、本机文件路径以及读取或编辑原文件的提示。
+地址会返回当前内容、背景和本机文件路径。优先通过地址读取；更新已分享内容时使用分享 API。
 
 ### 让 agent 写笔记
 
@@ -76,7 +77,7 @@ agent 会整理标题、正文、背景与标签，并写入 vault。写入成�
 
 ### 接入 agent
 
-打开 **agentNote 接入台**。已检测到的 agent 可直接接入或更新；未安装时可点击 **前往官网安装**。不在列表中的 agent 可使用 **手动接入任意 agent**。
+打开 **agentNote 接入台**。Claude Code、Codex、WorkBuddy 始终显示；未安装时可点击 **前往官网安装**，已安装时可接入或更新。接入台会提示默认说明有更新、自定义说明等状态。不在列表中的 agent 可使用 **手动接入任意 agent**。
 
 ## 本地服务与隐私
 
@@ -98,6 +99,7 @@ agent 会整理标题、正文、背景与标签，并写入 vault。写入成�
 | [核心产品设计](docs/product-design.md) | [Product Design](docs/Product%20Design.md) |
 | [产品介绍 PDF](docs/agentNote：让本地%20Obsidian%20内容直接流向%20AI%20agent.pdf) | [Product Overview PDF](docs/agentNote%20-%20Local%20Obsidian%20Knowledge%20for%20AI%20Agents.pdf) |
 | [官方社区市场上架流程](docs/官方社区市场上架流程.md) | [Obsidian Community Listing Guide](docs/Obsidian%20Community%20Listing%20Guide.md) |
+| [Git 活动记录同步](docs/Git活动记录同步.md) | [Git Activity Sync](docs/Git%20Activity%20Sync.md) |
 
 <details>
 <summary><strong>产品视觉概览</strong></summary>

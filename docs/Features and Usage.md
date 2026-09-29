@@ -60,12 +60,14 @@ Open the **agentNote connection panel** in the Obsidian sidebar.
 
 ### Recognized agents
 
-When Claude Code, Codex, or WorkBuddy is detected:
+Claude Code, Codex, and WorkBuddy always appear. An uninstalled agent offers **Open official website**. For an installed agent:
 
 1. Select **Connect agentNote**.
 2. agentNote writes its long-term usage instructions to that agent's skill directory.
 3. Restart the agent once.
 4. Share a link or ask it to write a note naturally.
+
+The panel distinguishes updated default instructions, customized instructions, and installations without version markers. Use **Update default instructions** when a newer default is available; customized instructions are not treated as an outdated default.
 
 Use **Manage prompt** to review the complete installed prompt. Select **Unlock editing**, acknowledge the risk, then make changes in the same editor. Saving and updating the installation locks the prompt again. Existing agent-specific instructions remain part of the complete prompt. Changes may require restarting the agent or opening a new conversation. **Remove connection** removes only agentNote's skill. No other skills, settings, conversations, or files are deleted.
 
@@ -97,6 +99,8 @@ Each document has a reviewable contribution breakdown: construction, reuse, conn
 
 Local creation, editing, reading, and organization reflect the user's own work first; share access and agent updates also contribute to each document. Select **View activity records** on a document card to see the dated events and their contribution values.
 
+Click a material title in the knowledge profile to open its original file in a new Obsidian tab. In **Privacy view**, titles are anonymized and the open-file action is hidden.
+
 Each successful share-link request counts as one use. If the request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
 
 - **Profile**: a seven-day overview and reusable-note ranking.
@@ -115,6 +119,7 @@ Use **Generate sharing image** in the profile to preview and copy a PNG summary.
 | An agent does not understand writing requests | Confirm it is connected, then restart it. |
 | The port is occupied | Change the port in agentNote settings and update the agent connection. |
 | You need to share with another device or person | agentNote is local-only and is not a public or cross-device sharing service. |
+| Data fails to load after a Git sync | Inspect the affected JSON file in `agentNote/data/` for conflicts or corruption; resolve it before retrying instead of overwriting existing data with an empty file. |
 
 ## 7. Updates and boundaries
 

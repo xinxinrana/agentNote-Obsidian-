@@ -22,6 +22,7 @@ agentNote is an Obsidian desktop plugin that connects your vault with agents suc
 - Open the official website for an agent that is not detected locally.
 - Explore a local knowledge profile with reuse rankings, contribution history, activity, and archive suggestions.
 - Generate a privacy-aware PNG summary of your knowledge activity for sharing.
+- Open a note directly from its title in the knowledge profile, and review its local activity history.
 
 ## Start in 3 minutes
 
@@ -63,7 +64,7 @@ Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete
 - Select text in the editor and use **agentNote: Share selected content**.
 - Send the copied local URL to your agent.
 
-The response includes the current content, its background, the local file path, and instructions for reading or editing the original file.
+The response includes the current content, its background, and the local file path. Read through the link; update shared content through the share API.
 
 ### Write notes from an agent
 
@@ -77,7 +78,7 @@ The agentNote skill asks the agent to create a title, body, background, and tags
 
 ### Connect an agent
 
-Open the agentNote connection panel. Detected agents can be connected or updated directly. If an agent is not installed, use **Open official website** to install it first. You can also use **Connect any agent manually** for an agent that is not listed.
+Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always appear. An uninstalled agent offers **Open official website**; an installed agent can be connected or updated. The panel indicates when the default instructions have changed or an installed prompt is customized. You can also use **Connect any agent manually** for an agent that is not listed.
 
 ## Local service and privacy
 
@@ -90,7 +91,7 @@ Open the agentNote connection panel. Detected agents can be connected or updated
 
 ## Documentation
 
-For device-specific activity logs, see [Git activity sync](docs/Git活动记录同步.md) (Chinese). Each device appends to its own log; statistics merge all device logs. This does not resolve conflicts in note contents or other shared state.
+For device-specific activity logs, see [Git activity sync](docs/Git%20Activity%20Sync.md). Each device appends to its own log; statistics merge all device logs. This does not resolve conflicts in note contents or other shared state.
 
 | Chinese primary document | English copy |
 | --- | --- |
@@ -99,6 +100,7 @@ For device-specific activity logs, see [Git activity sync](docs/Git活动记录�
 | [Product Design](docs/product-design.md) | [Product Design](docs/Product%20Design.md) |
 | [Product Overview PDF](docs/agentNote：让本地%20Obsidian%20内容直接流向%20AI%20agent.pdf) | [Product Overview PDF](docs/agentNote%20-%20Local%20Obsidian%20Knowledge%20for%20AI%20Agents.pdf) |
 | [Obsidian Community Listing Guide](docs/官方社区市场上架流程.md) | [Obsidian Community Listing Guide](docs/Obsidian%20Community%20Listing%20Guide.md) |
+| [Git 活动记录同步](docs/Git活动记录同步.md) | [Git Activity Sync](docs/Git%20Activity%20Sync.md) |
 
 ## Development
 

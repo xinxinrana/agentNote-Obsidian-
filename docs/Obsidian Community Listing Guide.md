@@ -21,7 +21,7 @@ Before publishing, decide the release version and the exact feature scope. Keep 
 - GitHub Release tag
 - Release title
 
-Use a strict semantic version such as `0.3.2`. Do not reuse a previously published tag.
+Use a new semantic version such as `X.Y.Z`. Do not reuse a previously published tag.
 
 ## 2. Check Repository Requirements
 
@@ -48,6 +48,8 @@ Run the quality gates from the repository root:
 npm run typecheck
 npm run build
 node test/e2e.mjs
+npm run test:git-sync
+git diff --check
 ```
 
 Then deploy the built plugin to a test vault and verify in Obsidian:
@@ -60,8 +62,12 @@ Then deploy the built plugin to a test vault and verify in Obsidian:
 - The local service responds at `/api/health`.
 - Shared files, folders, selections, and notes resolve correctly.
 - An agent can create and update notes through the intended local workflow.
+- Material titles in the knowledge profile open their original files; privacy view hides titles and open-file actions.
+- The feedback form copies the report and opens a pre-filled issue in the system default browser.
 
 Do not create a release until these checks pass.
+
+Deploy only the three plugin files to a test vault. Do not overwrite live notes or `agentNote/data/*.json` during release verification.
 
 ## 4. Commit and Push
 
@@ -103,7 +109,7 @@ The account owner completes the account-bound actions:
 6. Accept the developer policies and maintenance commitment.
 7. Submit the listing or the new release for review.
 
-Do not create a duplicate listing for a later version. Publish an incremented GitHub Release and let the directory review the existing listing again.
+Do not create a duplicate listing for a later version. Publish an incremented GitHub Release and let the directory review the existing listing again. If a new release does not appear, use the listing's check-for-releases and request-review actions.
 
 ## 7. Handle Review Feedback
 
@@ -115,6 +121,8 @@ When a check fails, capture the exact error message and identify its category:
 - Repository visibility, branch, or account configuration.
 
 Fix the root cause, rerun the local quality gates, publish a new incremented release, and let the checker run again. Do not alter an already-published release tag to represent a different build.
+
+Distinguish errors from warnings and recommendations. Assess a warning's impact before changing working functionality or user data. A completed preview check is not the same as approval of the latest release; inspect the result for that release version.
 
 ## 8. Verify the Published Plugin
 

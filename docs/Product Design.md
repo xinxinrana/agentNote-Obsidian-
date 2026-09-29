@@ -63,6 +63,8 @@ Background answers: what is this, where did it come from, and why is it being sh
 
 The connection panel helps agents recognize and use agentNote. It installs and manages long-term prompts, shows service status and connected agents, and provides a manual connection flow for agents outside the built-in list.
 
+Material titles in the knowledge profile open the original files. Contribution records and cleanup suggestions therefore lead back to editable content; privacy view hides both titles and these links.
+
 Background, tags, search, protection, and archiving are maintenance aids, not ends in themselves. Their only standard is whether they help users maintain local content that agents can understand and reuse over time.
 
 ## Boundaries

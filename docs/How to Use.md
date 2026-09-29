@@ -30,6 +30,8 @@ If it is not running, select **Start service**. The service stays on your comput
 
 In **Connect an agent**, find Claude Code, Codex, or WorkBuddy and select **Connect agentNote**. Restart that agent once so it can load the installed skill.
 
+All three agents remain visible even when not installed. Use **Open official website** to install one. If a connected agent shows that its default instructions have changed, select **Update default instructions**.
+
 If your agent is not listed, choose **Connect any agent manually**, copy the generated task, and send it to that agent. The task tells it how to install and verify its own long-term instruction.
 
 <p align="center">
