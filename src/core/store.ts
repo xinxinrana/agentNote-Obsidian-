@@ -4,6 +4,7 @@ import * as path from "path";
 import { randomBytes } from "crypto";
 import { isNodeFile, parseNode, serializeNode } from "./nodeFile";
 import { AgentNode, NodeSource, NodeType, Share, ShareTarget, normalizeTags, qualityWarnings, shareTarget } from "./types";
+import { ActivityLog, ActivityLogOptions } from "./activityLog";
 
 export class StoreError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -47,6 +48,8 @@ export interface VaultDocument {
   protected?: boolean;
 }
 export interface InsightEvent {
+  eventId?: string;
+  deviceId?: string;
   at: string;
   type: InsightEventType;
   origin?: "local" | "agent" | "link";
@@ -154,15 +157,16 @@ export class VaultStore {
   private cache = new Map<string, { mtimeMs: number; node: AgentNode }>();
   private idToPath = new Map<string, string>();
   private idempotentCreates = new Map<string, Promise<AgentNode>>();
-  private eventWriteQueue: Promise<void> = Promise.resolve();
+  private readonly activityLog: ActivityLog;
   private documentWriteQueue: Promise<void> = Promise.resolve();
   private referenceWriteQueue: Promise<void> = Promise.resolve();
   private suppressedLocalPaths = new Map<string, number>();
 
-  constructor(vaultRoot: string, configDir = ".obsidian") {
+  constructor(vaultRoot: string, configDir = ".obsidian", activityOptions: ActivityLogOptions = {}) {
     this.root = path.resolve(vaultRoot);
     this.dataDir = path.join(this.root, "agentNote");
     this.configDir = this.normalizeVaultPath(configDir);
+    this.activityLog = new ActivityLog(this.p("data"), activityOptions);
   }
   private p(...parts: string[]): string { return path.join(this.dataDir, ...parts); }
   private isConfigPath(filePath: string): boolean {
@@ -174,8 +178,7 @@ export class VaultStore {
     await Promise.all([fsp.mkdir(this.p("nodes"), { recursive: true }), fsp.mkdir(this.p("data"), { recursive: true })]);
     const shares = this.p("data", "shares.json");
     if (!fs.existsSync(shares)) await fsp.writeFile(shares, "[]", "utf8");
-    const events = this.p("data", "events.json");
-    if (!fs.existsSync(events)) await fsp.writeFile(events, "[]", "utf8");
+    await this.activityLog.init();
     const documents = this.p("data", "documents.json");
     if (!fs.existsSync(documents)) await fsp.writeFile(documents, "[]", "utf8");
     const references = this.p("data", "references.json");
@@ -188,12 +191,21 @@ export class VaultStore {
     return path.relative(this.root, absolute).split(path.sep).join("/");
   }
   private documentTitle(filePath: string): string { return path.basename(filePath, ".md") || "未命名文档"; }
-  private async readDocuments(): Promise<VaultDocument[]> {
+  private async readDataFile<T>(name: string, valid: (value: unknown) => value is T, missing?: T): Promise<T> {
+    let raw: string;
+    try { raw = await fsp.readFile(this.p("data", name), "utf8"); }
+    catch (error) {
+      if (missing !== undefined && (error as NodeJS.ErrnoException).code === "ENOENT") return missing;
+      throw new StoreError(409, `${name} 无法读取，请检查并解决 Git 冲突后重试`);
+    }
     try {
-      const documents: unknown = JSON.parse(await fsp.readFile(this.p("data", "documents.json"), "utf8")) as unknown;
-      if (!Array.isArray(documents)) return [];
-      return documents.filter((document: unknown): document is VaultDocument => isRecord(document) && typeof document.id === "string" && typeof document.path === "string" && typeof document.title === "string" && typeof document.created === "string" && typeof document.updated === "string");
-    } catch { return []; }
+      const value: unknown = JSON.parse(raw);
+      if (valid(value)) return value;
+    } catch { /* Leave the file untouched for recovery. */ }
+    throw new StoreError(409, `${name} 内容损坏，请检查并解决 Git 冲突后重试`);
+  }
+  private async readDocuments(): Promise<VaultDocument[]> {
+    return this.readDataFile("documents.json", (value): value is VaultDocument[] => Array.isArray(value) && value.every((document) => isRecord(document) && typeof document.id === "string" && typeof document.path === "string" && typeof document.title === "string" && typeof document.created === "string" && typeof document.updated === "string" && (document.deletedAt === undefined || typeof document.deletedAt === "string") && (document.protected === undefined || typeof document.protected === "boolean")));
   }
   private async writeDocuments(documents: VaultDocument[]): Promise<void> {
     await fsp.writeFile(this.p("data", "documents.json"), JSON.stringify(documents, null, 2), "utf8");
@@ -286,11 +298,7 @@ export class VaultStore {
     if (changed) await this.writeShares(shares);
   }
   private async readReferences(): Promise<Record<string, string[]>> {
-    try {
-      const references: unknown = JSON.parse(await fsp.readFile(this.p("data", "references.json"), "utf8")) as unknown;
-      if (!isRecord(references)) return {};
-      return Object.fromEntries(Object.entries(references).filter(([, targets]) => Array.isArray(targets) && targets.every((target) => typeof target === "string"))) as Record<string, string[]>;
-    } catch { return {}; }
+    return this.readDataFile("references.json", (value): value is Record<string, string[]> => isRecord(value) && Object.values(value).every((targets) => Array.isArray(targets) && targets.every((target) => typeof target === "string")));
   }
   async recordDocumentReferences(sourcePath: string, targetPaths: string[], recordAdditions = true): Promise<void> {
     const source = this.normalizeVaultPath(sourcePath);
@@ -433,10 +441,7 @@ export class VaultStore {
   }
 
   private async readIdempotencyKeys(): Promise<Record<string, string>> {
-    try {
-      const value: unknown = JSON.parse(await fsp.readFile(this.p("data", "idempotency.json"), "utf8")) as unknown;
-      return isRecord(value) && Object.values(value).every((item) => typeof item === "string") ? value as Record<string, string> : {};
-    } catch { return {}; }
+    return this.readDataFile("idempotency.json", (value): value is Record<string, string> => isRecord(value) && Object.values(value).every((item) => typeof item === "string"), {});
   }
   private async writeIdempotencyKeys(keys: Record<string, string>): Promise<void> {
     await fsp.writeFile(this.p("data", "idempotency.json"), JSON.stringify(keys, null, 2), "utf8");
@@ -506,20 +511,17 @@ export class VaultStore {
   }
 
   private async readShares(): Promise<Share[]> {
-    try {
-      const shares: unknown = JSON.parse(await fsp.readFile(this.p("data", "shares.json"), "utf8")) as unknown;
-      if (!Array.isArray(shares)) return [];
-      return shares.filter(isRecord).map((share) => ({ ...share, target: shareTarget(share as unknown as Share) } as unknown as Share));
-    } catch { return []; }
+    const shares = await this.readDataFile("shares.json", (value): value is Share[] => Array.isArray(value) && value.every((share) => {
+      if (!isRecord(share) || typeof share.id !== "string" || typeof share.created !== "string") return false;
+      const target = share.target ?? (typeof share.nodeId === "string" ? { kind: "node", nodeId: share.nodeId } : undefined);
+      return isRecord(target) && ((target.kind === "node" && typeof target.nodeId === "string") || ((target.kind === "file" || target.kind === "folder") && typeof target.path === "string")) && (share.selection === undefined || typeof share.selection === "string") && (share.background === undefined || typeof share.background === "string");
+    }));
+    return shares.map((share) => ({ ...share, target: shareTarget(share) }));
   }
   private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
   async listShares(): Promise<Share[]> { return this.readShares(); }
   private async readRegisteredAgents(): Promise<RegisteredAgent[]> {
-    try {
-      const agents: unknown = JSON.parse(await fsp.readFile(this.p("data", "agents.json"), "utf8")) as unknown;
-      if (!Array.isArray(agents)) return [];
-      return agents.filter((agent): agent is RegisteredAgent => isRecord(agent) && typeof agent.id === "string" && typeof agent.name === "string" && !!agent.id.trim() && !!agent.name.trim());
-    } catch { return []; }
+    return this.readDataFile("agents.json", (value): value is RegisteredAgent[] => Array.isArray(value) && value.every((agent) => isRecord(agent) && typeof agent.id === "string" && typeof agent.name === "string" && !!agent.id.trim() && !!agent.name.trim()), []);
   }
   async registerAgent(agent: RegisteredAgent): Promise<void> {
     const id = agent.id.trim().toLowerCase().slice(0, 80);
@@ -631,11 +633,7 @@ export class VaultStore {
   }
 
   private async readStoredEvents(): Promise<InsightEvent[]> {
-    try {
-      const events: unknown = JSON.parse(await fsp.readFile(this.p("data", "events.json"), "utf8")) as unknown;
-      if (!Array.isArray(events)) return [];
-      return events.filter((event: unknown): event is InsightEvent => isRecord(event) && typeof event.at === "string" && typeof event.type === "string");
-    } catch { return []; }
+    return this.activityLog.read();
   }
   private async readEvents(): Promise<InsightEvent[]> {
     const events = await this.readStoredEvents();
@@ -650,13 +648,7 @@ export class VaultStore {
       }));
   }
   private async recordEvent(event: Omit<InsightEvent, "at">): Promise<void> {
-    const task = this.eventWriteQueue.then(async () => {
-      const events = await this.readStoredEvents();
-      events.push({ ...event, at: new Date().toISOString() });
-      await fsp.writeFile(this.p("data", "events.json"), JSON.stringify(events, null, 2), "utf8");
-    });
-    this.eventWriteQueue = task.catch(() => undefined);
-    await task;
+    await this.activityLog.append(event);
   }
   async getDashboardInsights(now = new Date()): Promise<DashboardInsights> {
     const [nodes, documents, activityEvents] = await Promise.all([this.listNodes(), this.readDocuments(), this.readStoredEvents()]);

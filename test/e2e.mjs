@@ -6,9 +6,20 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore, AgentServer, detectAgents, installSkill, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, AgentServer, detectAgents, installSkill, skillStatus, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
+const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
+const defaultDeviceIdFile = path.join(identityRoot, "default-device-id");
+class VaultStore extends CoreVaultStore {
+  constructor(root, configDir = ".obsidian", options = {}) {
+    super(root, configDir, { deviceIdFile: defaultDeviceIdFile, ...options });
+  }
+}
+async function localEventsPath(root) {
+  const deviceId = (await fsp.readFile(defaultDeviceIdFile, "utf8")).trim();
+  return path.join(root, "agentNote", "data", `events.${deviceId}.json`);
+}
 const store = new VaultStore(vault);
 let activityNotifications = 0;
 const liveActivities = [];
@@ -169,10 +180,10 @@ try {
       const candidatesAt = async (days) => (await lifecycleStore.getDashboardInsights(new Date(baseTime + days * 86_400_000))).archiveCandidates;
       assert.equal((await candidatesAt(8)).some((candidate) => candidate.node?.id === note.id), false);
       assert.equal((await candidatesAt(31)).some((candidate) => candidate.node?.id === note.id), true);
-      const eventsPath = path.join(lifecycleVault, "agentNote", "data", "events.json");
+      const eventsPath = await localEventsPath(lifecycleVault);
       const events = JSON.parse(await fsp.readFile(eventsPath, "utf8"));
       const use = events.find((event) => event.type === "share-resolved");
-      events.push({ ...use, at: new Date(baseTime + 8 * 86_400_000).toISOString() });
+      events.push({ ...use, eventId: "second-use", at: new Date(baseTime + 8 * 86_400_000).toISOString() });
       await fsp.writeFile(eventsPath, JSON.stringify(events));
       assert.equal((await candidatesAt(40)).some((candidate) => candidate.node?.id === note.id), false);
       assert.equal((await candidatesAt(99)).some((candidate) => candidate.node?.id === note.id), true);
@@ -210,7 +221,7 @@ try {
   await test("legacy activity records recover their document title from the share", async () => {
     const created = await api("POST", "/api/shares", { path: "plain.md" });
     const eventsPath = path.join(vault, "agentNote", "data", "events.json");
-    const events = JSON.parse(await fsp.readFile(eventsPath, "utf8"));
+    const events = [];
     events.push({ type: "share-resolved", shareId: created.data.id, targetKind: "file", at: new Date().toISOString() });
     await fsp.writeFile(eventsPath, JSON.stringify(events));
     assert.equal((await store.listActivity()).find((event) => event.shareId === created.data.id)?.title, "plain");
@@ -340,11 +351,168 @@ try {
     }
   });
 
+  await test("device logs merge across vault copies without rewriting another device's history", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-sync-"));
+    try {
+      const firstVault = path.join(root, "mac-vault");
+      const secondVault = path.join(root, "windows-vault");
+      const firstOptions = { deviceIdFile: path.join(root, "mac-local", "device-id") };
+      const secondOptions = { deviceIdFile: path.join(root, "windows-local", "device-id") };
+      const first = new VaultStore(firstVault, ".obsidian", firstOptions);
+      await first.init();
+      const note = await first.createNode({ title: "跨设备资料", content: "原文件仍由 Git 同步。" }, undefined, { actor: { id: "codex", name: "Codex" } });
+      const share = await first.createShare(note.id);
+      await first.resolveShare(share.id, { actor: { id: "codex", name: "Codex" } });
+      const firstLog = await new ActivityLog(path.join(firstVault, "agentNote", "data"), firstOptions).filePath();
+      const firstBytes = await fsp.readFile(firstLog);
+      await fsp.cp(firstVault, secondVault, { recursive: true });
+      const second = new VaultStore(secondVault, ".obsidian", secondOptions);
+      await second.init();
+      assert.equal((await second.listActivity()).length, 3, "initializing a copied vault does not create events");
+      await second.resolveShare(share.id, { actor: { id: "claude-code", name: "Claude Code" } });
+      const secondLog = await new ActivityLog(path.join(secondVault, "agentNote", "data"), secondOptions).filePath();
+      assert.notEqual(path.basename(firstLog), path.basename(secondLog));
+      assert.equal(JSON.parse(await fsp.readFile(secondLog, "utf8")).length, 1, "foreign history is not copied into the writer's file");
+      assert.deepEqual(await fsp.readFile(path.join(secondVault, "agentNote", "data", path.basename(firstLog))), firstBytes);
+      const syncedSecondLog = path.join(firstVault, "agentNote", "data", path.basename(secondLog));
+      await fsp.copyFile(secondLog, syncedSecondLog);
+      for (const current of [first, second]) {
+        assert.equal((await current.listActivity()).length, 4);
+        const insights = await current.getDashboardInsights();
+        assert.equal(insights.summary.allTimeActivityScore, 12);
+        assert.equal(insights.documents.find((row) => row.document.title === "跨设备资料")?.score, 12);
+        assert.equal((await current.getDocumentInsights()).find((row) => row.nodeId === note.id)?.uses, 2);
+        assert.deepEqual((await current.getAgentInsights()).map((row) => [row.name, row.uses]).sort(), [["Claude Code", 1], ["Codex", 1]]);
+      }
+      await fsp.copyFile(secondLog, syncedSecondLog);
+      assert.equal((await first.listActivity()).length, 4, "repeated sync does not count events twice");
+      const foreignBytes = await fsp.readFile(syncedSecondLog);
+      const restarted = new VaultStore(firstVault, ".obsidian", firstOptions);
+      await restarted.init();
+      await restarted.resolveShare(share.id);
+      const appended = JSON.parse(await fsp.readFile(firstLog, "utf8"));
+      assert.deepEqual(appended.slice(0, 3), JSON.parse(firstBytes.toString("utf8")), "previous operations stay unchanged");
+      assert.equal(appended.length, 4);
+      assert.deepEqual(await fsp.readFile(syncedSecondLog), foreignBytes);
+      assert.equal((await first.listActivity()).length, 5);
+      assert.equal((await fsp.readdir(path.join(firstVault, "agentNote", "data"))).filter((name) => /^events\..*\.json$/.test(name)).length, 2);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("legacy history stays read-only and event IDs deduplicate imported records", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-legacy-"));
+    try {
+      const data = path.join(root, "vault", "agentNote", "data");
+      await fsp.mkdir(data, { recursive: true });
+      const old = { at: "2025-01-01T00:00:00.000Z", type: "local-read", title: "旧资料", path: "旧资料.md" };
+      const legacyPath = path.join(data, "events.json");
+      const oldBytes = JSON.stringify([old, old]);
+      await fsp.writeFile(legacyPath, oldBytes);
+      const options = { deviceIdFile: path.join(root, "local", "device-id") };
+      const log = new ActivityLog(data, options);
+      await log.init();
+      const historic = await log.read();
+      assert.equal(historic.length, 2, "identical historic operations remain distinct");
+      assert.notEqual(historic[0].eventId, historic[1].eventId);
+      await fsp.writeFile(path.join(data, "events.imported.json"), JSON.stringify(historic));
+      await log.append({ type: "local-read", title: "新资料" });
+      assert.equal((await log.read()).length, 3);
+      assert.equal(await fsp.readFile(legacyPath, "utf8"), oldBytes);
+      assert.deepEqual((await new ActivityLog(data, options).read()).map((row) => row.eventId), (await log.read()).map((row) => row.eventId));
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("concurrent writers on one device retain every operation and one identity", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-writers-"));
+    try {
+      const data = path.join(root, "vault", "agentNote", "data");
+      await fsp.mkdir(data, { recursive: true });
+      const options = { deviceIdFile: path.join(root, "local", "device-id") };
+      const logs = [new ActivityLog(data, options), new ActivityLog(data, options)];
+      await Promise.all(logs.map((log) => log.init()));
+      assert.equal(await logs[0].filePath(), await logs[1].filePath());
+      await Promise.all(Array.from({ length: 20 }, (_, i) => logs[i % 2].append({ type: "local-read", title: `操作 ${i}` })));
+      const events = await logs[0].read();
+      assert.equal(events.length, 20);
+      assert.equal(new Set(events.map((event) => event.eventId)).size, 20);
+      assert.equal(new Set(events.map((event) => event.deviceId)).size, 1);
+      assert.equal((await fsp.readdir(data)).length, 1);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("damaged writer history fails without overwriting it and can recover", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-damaged-"));
+    try {
+      const data = path.join(root, "vault", "agentNote", "data");
+      await fsp.mkdir(data, { recursive: true });
+      const log = new ActivityLog(data, { deviceIdFile: path.join(root, "local", "device-id") });
+      const file = await log.filePath();
+      await fsp.writeFile(file, "broken JSON");
+      await assert.rejects(log.append({ type: "local-read" }));
+      assert.equal(await fsp.readFile(file, "utf8"), "broken JSON");
+      await fsp.writeFile(file, "[]");
+      await log.append({ type: "local-read" });
+      assert.equal((await log.read()).length, 1);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("damaged shared data stops writes and remains recoverable", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-shared-damaged-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      const node = await isolated.createNode({ title: "保留的笔记" });
+      const data = path.join(root, "agentNote", "data");
+      for (const [name, operation] of [
+        ["documents.json", () => isolated.recordLocalActivity("local-edited", "note.md")],
+        ["references.json", () => isolated.recordDocumentReferences("note.md", ["target.md"])],
+        ["shares.json", () => isolated.createShare(node.id)],
+        ["agents.json", () => isolated.registerAgent({ id: "codex", name: "Codex" })],
+        ["idempotency.json", () => isolated.createNode({ title: "不应创建" }, "key-1")],
+      ]) {
+        const file = path.join(data, name);
+        const original = await fsp.readFile(file, "utf8").catch(() => null);
+        await fsp.writeFile(file, "<<<<<<< HEAD\n[]\n=======\n{}\n>>>>>>> branch\n");
+        await assert.rejects(operation(), (error) => error.statusCode === 409 && error.message.includes(name));
+        assert.match(await fsp.readFile(file, "utf8"), /^<<<<<<< HEAD/);
+        if (original === null) await fsp.rm(file); else await fsp.writeFile(file, original);
+      }
+      assert.equal((await isolated.listNodes()).some((entry) => entry.title === "不应创建"), false);
+      await isolated.registerAgent({ id: "codex", name: "Codex" });
+      await isolated.createShare(node.id);
+      assert.equal((await isolated.listShares()).length, 1);
+      const documents = path.join(data, "documents.json");
+      await fsp.writeFile(documents, '[{"id":"partial"}]');
+      await assert.rejects(isolated.recordLocalActivity("local-edited", "note.md"), (error) => error.statusCode === 409);
+      assert.equal(await fsp.readFile(documents, "utf8"), '[{"id":"partial"}]');
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
-    const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); assert.deepEqual(JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")), { version: 1, id: "codex", name: "Codex" }); await fsp.rm(home, { recursive: true, force: true });
+    const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); const identity = JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")); assert.equal(identity.id, "codex"); assert.equal(identity.name, "Codex"); assert.match(identity.skillHash, /^[a-f0-9]{64}$/); assert.match(identity.defaultTemplateHash, /^[a-f0-9]{64}$/); await fsp.rm(home, { recursive: true, force: true });
+  });
+  await test("skill status distinguishes default updates from custom and legacy prompts", async () => {
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-skill-status-"));
+    const dir = path.join(home, "agentnote");
+    try {
+      const options = { port, agentId: "codex", agentName: "Codex" };
+      installSkill(dir, options);
+      assert.equal(skillStatus(dir, options), "current");
+      const identityPath = path.join(dir, "agentnote.identity.json");
+      const identity = JSON.parse(await fsp.readFile(identityPath, "utf8"));
+      await fsp.writeFile(identityPath, JSON.stringify({ ...identity, defaultTemplateHash: "older" }));
+      assert.equal(skillStatus(dir, options), "update");
+      assert.equal(skillStatus(dir, { ...options, template: "用户自定义模板" }), "custom");
+      await fsp.appendFile(path.join(dir, "SKILL.md"), "\n用户手动添加的内容");
+      assert.equal(skillStatus(dir, options), "custom");
+      await fsp.writeFile(identityPath, JSON.stringify({ version: 1, id: "codex", name: "Codex" }));
+      assert.equal(skillStatus(dir, options), "unknown");
+      await fsp.writeFile(path.join(dir, "SKILL.md"), renderSkillMd(options));
+      assert.equal(skillStatus(dir, options), "current");
+    } finally { await fsp.rm(home, { recursive: true, force: true }); }
   });
   await test("editable prompt templates retain dynamic service and identity values", async () => {
     const template = "为 {{agentName}} 配置 {{baseUrl}}，身份是 {{agentId}}。";
@@ -388,4 +556,5 @@ try {
 } finally {
   await server.stop();
   await fsp.rm(vault, { recursive: true, force: true });
+  await fsp.rm(identityRoot, { recursive: true, force: true });
 }

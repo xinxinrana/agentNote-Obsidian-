@@ -1,7 +1,7 @@
-import { App, ItemView, Modal, Notice, Setting, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import type AgentNotePlugin from "../main";
 import type { LiveAgentActivity } from "../main";
-import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, type DetectedAgent } from "../core/skill";
+import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, skillStatus, type DetectedAgent } from "../core/skill";
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
@@ -170,7 +170,8 @@ export class AgentNoteView extends ItemView {
       icon.decoding = "async";
       const identity = header.createDiv();
       identity.createEl("strong", { text: agent.name });
-      identity.createEl("div", { cls: `agentnote-agent-status ${agent.installed && profile.enabled ? "is-connected" : ""}`, text: !agent.available ? "未检测到安装" : agent.installed && profile.enabled ? "已接入" : "未接入" });
+      const status = agent.installed && profile.enabled ? skillStatus(agent.skillDir, { port: this.plugin.server?.port ?? this.plugin.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name, template: profile.template }) : "unknown";
+      identity.createEl("div", { cls: `agentnote-agent-status ${agent.installed && profile.enabled ? "is-connected" : ""}`, text: !agent.available ? "未检测到安装" : !agent.installed || !profile.enabled ? "未接入" : status === "update" ? "默认说明有更新" : status === "custom" ? "已接入 · 自定义说明" : status === "unknown" ? "已接入 · 版本未标记" : "已接入" });
       if (!agent.available) {
         const actions = card.createDiv({ cls: "agentnote-node-actions" });
         actions.createEl("a", { text: "前往官网安装", cls: "external-link", attr: { href: agent.website, target: "_blank", rel: "noopener noreferrer", "aria-label": `在浏览器中打开 ${agent.name} 官网` } });
@@ -178,7 +179,7 @@ export class AgentNoteView extends ItemView {
       }
       card.createEl("div", { cls: "agentnote-agent-path", text: `安装位置：${agent.skillDir}` });
       const actions = card.createDiv({ cls: "agentnote-node-actions" });
-      const install = actions.createEl("button", { text: agent.installed ? "更新接入" : "接入 agentNote", cls: "mod-cta" });
+      const install = actions.createEl("button", { text: !agent.installed ? "接入 agentNote" : status === "update" ? "更新默认说明" : "更新接入", cls: "mod-cta" });
       install.onclick = () => void this.plugin.installAgent(agent);
       const edit = actions.createEl("button", { text: "管理提示词" });
       edit.onclick = () => new AgentPromptModal(this.app, this.plugin, agent, () => this.refresh()).open();
@@ -228,6 +229,17 @@ class InsightsModal extends Modal {
   private timeText(iso: string): string { return new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
   private dateText(iso: string): string { return new Date(iso).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" }); }
   private displayTitle(title: string): string { return this.privateView ? "已匿名资料" : title; }
+  private fileTitle(parent: HTMLElement, title: string, path: () => Promise<string>): void {
+    if (this.privateView) { parent.createEl("strong", { text: this.displayTitle(title) }); return; }
+    const button = parent.createEl("button", { cls: "agentnote-file-link", text: title, attr: { title: `打开「${title}」` } });
+    button.onclick = () => void (async () => {
+      try {
+        const file = this.app.vault.getAbstractFileByPath(await path());
+        if (!(file instanceof TFile)) throw new Error("文件已不存在");
+        await this.app.workspace.getLeaf("tab").openFile(file);
+      } catch (error) { new Notice(`无法打开资料：${(error as Error).message}`); }
+    })();
+  }
   private activeDays(trend: { count: number }[]): number { return trend.filter((point) => point.count > 0).length; }
   private activityText(event: InsightEvent): string {
     if (event.type === "node-created") return `创建「${this.displayTitle(event.title ?? "未命名资料")}」`;
@@ -321,7 +333,7 @@ class InsightsModal extends Modal {
       for (const [index, entry] of insights.weekly.entries()) {
         const card = cards.createDiv({ cls: "agentnote-profile-note" });
         card.createEl("span", { cls: "agentnote-profile-rank", text: String(index + 1).padStart(2, "0") });
-        const detail = card.createDiv(); detail.createEl("strong", { text: this.displayTitle(entry.node.title) }); detail.createEl("small", { text: entry.reason });
+        const detail = card.createDiv(); this.fileTitle(detail, entry.node.title, () => this.plugin.store.nodeFilePath(entry.node.id)); detail.createEl("small", { text: entry.reason });
         card.createEl("span", { cls: "agentnote-profile-use-count", text: `${entry.reads} 次` });
       }
     }
@@ -371,7 +383,7 @@ class InsightsModal extends Modal {
     for (const [index, entry] of notes.entries()) {
       const card = ranking.createDiv({ cls: "agentnote-value-card" });
       card.createEl("span", { cls: "agentnote-value-rank", text: String(index + 1).padStart(2, "0") });
-      const row = card.createDiv({ cls: "agentnote-value-title" }); row.createEl("strong", { text: this.displayTitle(entry.node.title) });
+      const row = card.createDiv({ cls: "agentnote-value-title" }); this.fileTitle(row, entry.node.title, () => this.plugin.store.nodeFilePath(entry.node.id));
       if (entry.node.pinned) row.createEl("span", { cls: "agentnote-pin-badge", text: "已保护", attr: { title: "这条资料不会出现在“整理”中的归档建议里。" } });
       card.createEl("p", { text: entry.reason });
       if (entry.lastRead) card.createEl("small", { text: `最近使用：${this.timeText(entry.lastRead)}` });
@@ -386,7 +398,7 @@ class InsightsModal extends Modal {
     for (const [index, entry] of documents.slice(0, 8).entries()) {
       const card = section.createDiv({ cls: "agentnote-value-card" });
       card.createEl("span", { cls: "agentnote-value-rank", text: String(index + 1).padStart(2, "0") });
-      const row = card.createDiv({ cls: "agentnote-value-title" }); row.createEl("strong", { text: this.displayTitle(entry.document.title) }); row.createEl("span", { cls: "agentnote-profile-use-count", text: `${entry.score}` });
+      const row = card.createDiv({ cls: "agentnote-value-title" }); this.fileTitle(row, entry.document.title, async () => entry.document.path); row.createEl("span", { cls: "agentnote-profile-use-count", text: `${entry.score}` });
       card.createEl("p", { text: `内容建设 ${entry.construction} · 协作复用 ${entry.reuse} · 知识连接 ${entry.connection} · 知识整理 ${entry.organization}` });
       if (entry.lastActive) card.createEl("small", { text: `最近活动：${this.timeText(entry.lastActive)}${title === "文档贡献档案" ? ` · 近 30 天活动值 ${entry.recentScore}` : ""}` });
       card.createEl("button", { text: "查看活动记录" }).onclick = () => new DocumentActivityModal(this.app, this.plugin, entry, this.privateView, title === "本周文档贡献").open();
@@ -466,7 +478,7 @@ class InsightsModal extends Modal {
     if (!insights.archiveCandidates.length) parent.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: "没有需要优先整理的资料。" });
     const list = parent.createDiv({ cls: "agentnote-archive-list" });
     for (const { node, document, reason, uses, lastUsed } of insights.archiveCandidates) {
-      const card = list.createDiv({ cls: "agentnote-archive-card" }); card.createEl("strong", { text: this.displayTitle(document.title) }); card.createEl("span", { text: reason });
+      const card = list.createDiv({ cls: "agentnote-archive-card" }); this.fileTitle(card, document.title, async () => node ? this.plugin.store.nodeFilePath(node.id) : document.path); card.createEl("span", { text: reason });
       if (uses) card.createEl("small", { text: `累计使用 ${uses} 次${lastUsed ? ` · 最近使用 ${this.dateText(lastUsed)}` : ""}` });
       const actions = card.createDiv({ cls: "agentnote-node-actions" });
       const keep = actions.createEl("button", { text: "保护，不归档", attr: { title: "尊重你的判断；保护后不会再推荐归档。" } }); keep.onclick = () => void (async () => { try { if (node) await this.plugin.store.updateNode(node.id, { pinned: true }); else await this.plugin.store.protectDocument(document.id, true); new Notice(`已保护「${document.title}」：它不会进入归档建议。`); await this.render(); this.plugin.refreshPanels(); } catch (error) { new Notice(`保护失败：${(error as Error).message}`); } })();
@@ -479,11 +491,11 @@ class InsightsModal extends Modal {
       protectedSection.createEl("p", { text: "这些资料不会进入自动整理建议；需要时可以取消保护。" });
       const protectedList = protectedSection.createDiv({ cls: "agentnote-archive-list" });
       for (const node of insights.protectedNodes) {
-        const card = protectedList.createDiv({ cls: "agentnote-archive-card" }); card.createEl("strong", { text: this.displayTitle(node.title) });
+        const card = protectedList.createDiv({ cls: "agentnote-archive-card" }); this.fileTitle(card, node.title, () => this.plugin.store.nodeFilePath(node.id));
         const button = card.createEl("button", { text: "取消保护" }); button.onclick = () => void (async () => { await this.plugin.store.updateNode(node.id, { pinned: false }); await this.render(); this.plugin.refreshPanels(); })();
       }
       for (const document of protectedDocuments) {
-        const card = protectedList.createDiv({ cls: "agentnote-archive-card" }); card.createEl("strong", { text: this.displayTitle(document.title) });
+        const card = protectedList.createDiv({ cls: "agentnote-archive-card" }); this.fileTitle(card, document.title, async () => document.path);
         const button = card.createEl("button", { text: "取消保护" }); button.onclick = () => void (async () => { await this.plugin.store.protectDocument(document.id, false); await this.render(); this.plugin.refreshPanels(); })();
       }
     }
@@ -679,7 +691,7 @@ export class FeedbackModal extends Modal {
     if (!await this.copy()) return;
     const params = new URLSearchParams({ title: `[${this.type}] ${this.title.trim()}`, body: this.report() });
     try {
-      const { shell } = await import("electron");
+      const { shell } = require("electron") as typeof import("electron");
       await shell.openExternal(`https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`);
       this.close();
     } catch (error) { new Notice(`无法打开系统浏览器：${(error as Error).message}`); }
