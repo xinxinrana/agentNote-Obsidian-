@@ -21,7 +21,7 @@ agentNote is an Obsidian desktop plugin that connects your vault with agents suc
 - Show Claude Code, Codex, and WorkBuddy in the connection panel even when they are not installed.
 - Open the official website for an agent that is not detected locally.
 - Explore a local knowledge profile with reuse rankings, contribution history, activity, and archive suggestions.
-- Generate a privacy-aware PNG summary of your knowledge activity for sharing.
+- Generate a privacy-aware PNG of all-time knowledge contributions for sharing.
 - Open a note directly from its title in the knowledge profile, and review its local activity history.
 - Keep immutable, per-day cold copies of past activity logs, either automatically or on demand.
 

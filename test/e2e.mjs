@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, AgentServer, detectAgents, installSkill, skillStatus, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, detectAgents, installSkill, skillStatus, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -307,6 +307,29 @@ try {
     const insights = await store.getDashboardInsights();
     assert.equal(insights.documents.some((document) => document.document.path === movedPath), false);
     assert.ok(insights.summary.weekActivityScore >= 15);
+  });
+  await test("bulk detection uses a one-second window and ignored events preserve document state", async () => {
+    const events = (types, times) => types.map((type, index) => ({ type, at: times[index] }));
+    assert.equal(isLocalActivityBurst(events(["edit", "edit", "edit"], [0, 200, 400])), false);
+    assert.equal(isLocalActivityBurst(events(["edit", "edit", "edit", "edit"], [0, 200, 400, 999])), true);
+    assert.equal(isLocalActivityBurst(events(["edit", "edit", "edit", "edit"], [0, 400, 800, 1_200])), false);
+    assert.equal(isLocalActivityBurst(events(Array.from({ length: 11 }, (_, index) => `type-${index}`), Array.from({ length: 11 }, (_, index) => index * 50))), true);
+    assert.equal(isLocalActivityBurst(events(Array.from({ length: 11 }, (_, index) => `type-${index}`), Array.from({ length: 11 }, (_, index) => index * 100))), false);
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-bulk-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      await fsp.writeFile(path.join(root, "draft.md"), "draft");
+      const share = await isolated.createPathShare("draft.md");
+      await isolated.recordLocalActivity("local-created", "draft.md", undefined, false);
+      await fsp.rename(path.join(root, "draft.md"), path.join(root, "final.md"));
+      await isolated.recordLocalActivity("local-moved", "final.md", "draft.md", false);
+      assert.equal((await isolated.listActivity()).filter((event) => event.type.startsWith("local-")).length, 0);
+      assert.equal((await isolated.listShares()).find((entry) => entry.id === share.id)?.target.path, "final.md");
+      const documents = JSON.parse(await fsp.readFile(path.join(root, "agentNote", "data", "documents.json"), "utf8"));
+      assert.equal(documents.length, 1);
+      assert.equal(documents[0].path, "final.md");
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
   await test("new document references contribute after their first observed baseline", async () => {
     const sourcePath = "研究/项目索引.md";

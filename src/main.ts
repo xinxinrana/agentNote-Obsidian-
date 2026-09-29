@@ -6,14 +6,16 @@ import type { AgentActivity } from "./core/server";
 import { detectAgents, DetectedAgent, installSkill, uninstallSkill } from "./core/skill";
 import { isNewerVersion } from "./core/version";
 import { VaultStore } from "./core/store";
+import { isLocalActivityBurst } from "./core/activityLog";
 import { isNodeFile } from "./core/nodeFile";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
-import { AGENTNOTE_VIEW, AgentNoteView, QuickStartModal } from "./ui/panel";
+import { AGENTNOTE_VIEW, AgentNoteView, BulkActivityModal, QuickStartModal } from "./ui/panel";
 
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
-interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; agents: Record<string, AgentProfile> }
-const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, agents: {} };
+type BulkActivityAction = "ask" | "record" | "ignore";
+interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; bulkActivityAction: BulkActivityAction; agents: Record<string, AgentProfile> }
+const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, bulkActivityAction: "ask", agents: {} };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -28,6 +30,12 @@ export default class AgentNotePlugin extends Plugin {
   private coldBackupTask: Promise<{ created: number; existing: number }> | null = null;
   private localEditTimers = new Map<string, number>();
   private localReadTimer: number | null = null;
+  private localActivityTimer: number | null = null;
+  private pendingLocalActivities: { type: "local-created" | "local-edited" | "local-moved" | "local-deleted"; path: string; at: number; oldPath?: string; references?: boolean; bulkSession?: boolean }[] = [];
+  private localActivityTask: Promise<void> = Promise.resolve();
+  private bulkChoiceTask: Promise<boolean> | null = null;
+  private bulkModal: BulkActivityModal | null = null;
+  private recentBulkChoice: { record: boolean; until: number } | null = null;
   private suppressedLocalRenames = new Set<string>();
 
   async onload(): Promise<void> {
@@ -55,9 +63,11 @@ export default class AgentNotePlugin extends Plugin {
     if (this.settings.autostartServer) await this.startServer(true);
   }
   onunload(): void {
+    this.bulkModal?.close();
     if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer);
     if (this.coldBackupTimer !== null) window.clearTimeout(this.coldBackupTimer);
     if (this.localReadTimer !== null) window.clearTimeout(this.localReadTimer);
+    if (this.localActivityTimer !== null) { window.clearTimeout(this.localActivityTimer); void this.flushLocalActivities(true); }
     for (const timer of this.localEditTimers.values()) window.clearTimeout(timer);
     void this.stopServer(true);
   }
@@ -104,14 +114,61 @@ export default class AgentNotePlugin extends Plugin {
     return file instanceof TFile && file.extension.toLowerCase() === "md" && !file.path.startsWith(`${this.app.vault.configDir}/`) && !file.path.startsWith("agentNote/data/");
   }
   private recordLocalActivity(type: "local-created" | "local-edited" | "local-read" | "local-moved" | "local-deleted", filePath: string, oldPath?: string): void {
+    if (type !== "local-read") {
+      const now = Date.now();
+      const bulkSession = !!this.bulkChoiceTask || !!(this.recentBulkChoice && now < this.recentBulkChoice.until);
+      if (bulkSession && this.recentBulkChoice) this.recentBulkChoice.until = now + 1_000;
+      this.pendingLocalActivities.push({ type, path: filePath, at: now, oldPath, references: type === "local-created" || type === "local-edited", bulkSession });
+      if (this.localActivityTimer !== null) window.clearTimeout(this.localActivityTimer);
+      if (isLocalActivityBurst(this.pendingLocalActivities)) void this.flushLocalActivities();
+      else this.localActivityTimer = window.setTimeout(() => void this.flushLocalActivities(), 1_000);
+      return;
+    }
     void this.store.recordLocalActivity(type, filePath, oldPath)
       .then((recorded) => { if (recorded) this.schedulePanelRefresh(); })
       .catch(() => undefined);
   }
+  private async chooseBulkActivity(count: number): Promise<boolean> {
+    if (this.settings.bulkActivityAction !== "ask") return this.settings.bulkActivityAction === "record";
+    if (this.bulkChoiceTask) return this.bulkChoiceTask;
+    if (this.recentBulkChoice && Date.now() < this.recentBulkChoice.until) return this.recentBulkChoice.record;
+    this.bulkChoiceTask = new Promise<boolean>((resolve) => {
+      this.bulkModal = new BulkActivityModal(this.app, count, (record, remember) => {
+        this.bulkModal = null;
+        if (remember) { this.settings.bulkActivityAction = record ? "record" : "ignore"; void this.saveSettings(); }
+        this.recentBulkChoice = { record, until: Date.now() + 1_000 };
+        resolve(record);
+      });
+      this.bulkModal.open();
+    });
+    try { return await this.bulkChoiceTask; }
+    finally { this.bulkChoiceTask = null; }
+  }
+  private flushLocalActivities(unloading = false): Promise<void> {
+    if (this.localActivityTimer !== null) window.clearTimeout(this.localActivityTimer);
+    this.localActivityTimer = null;
+    const batch = this.pendingLocalActivities.splice(0);
+    if (!batch.length) return this.localActivityTask;
+    const task = this.localActivityTask.then(async () => {
+      const burst = isLocalActivityBurst(batch) || batch.some((item) => item.bulkSession);
+      const record = !burst || (unloading && this.settings.bulkActivityAction === "ask" ? false : await this.chooseBulkActivity(batch.length));
+      for (const item of batch) {
+        try {
+          const updated = await this.store.recordLocalActivity(item.type, item.path, item.oldPath, record);
+          if (updated && !unloading) this.schedulePanelRefresh();
+          if (item.references) {
+            const file = this.app.vault.getAbstractFileByPath(item.path);
+            if (file instanceof TFile) this.trackDocumentReferences(file, record);
+          }
+        } catch { /* Keep processing other vault changes. */ }
+      }
+    });
+    this.localActivityTask = task.catch(() => undefined);
+    return task;
+  }
   private trackCreatedFile(file: TAbstractFile): void {
     if (this.isTrackedMarkdown(file)) {
       this.recordLocalActivity("local-created", file.path);
-      window.setTimeout(() => this.trackDocumentReferences(file, true), 500);
     }
   }
   private trackModifiedFile(file: TAbstractFile): void {
@@ -121,7 +178,6 @@ export default class AgentNotePlugin extends Plugin {
     this.localEditTimers.set(file.path, window.setTimeout(() => {
       this.localEditTimers.delete(file.path);
       this.recordLocalActivity("local-edited", file.path);
-      this.trackDocumentReferences(file, true);
     }, 20_000));
   }
   private trackDeletedFile(file: TAbstractFile): void {
@@ -261,6 +317,7 @@ export default class AgentNotePlugin extends Plugin {
       showQuickStart: typeof settings.showQuickStart === "boolean" ? settings.showQuickStart : DEFAULT_SETTINGS.showQuickStart,
       coldBackupEnabled: typeof settings.coldBackupEnabled === "boolean" ? settings.coldBackupEnabled : DEFAULT_SETTINGS.coldBackupEnabled,
       coldBackupDelayMinutes: typeof settings.coldBackupDelayMinutes === "number" && Number.isInteger(settings.coldBackupDelayMinutes) && settings.coldBackupDelayMinutes >= 1 && settings.coldBackupDelayMinutes <= 60 ? settings.coldBackupDelayMinutes : DEFAULT_SETTINGS.coldBackupDelayMinutes,
+      bulkActivityAction: settings.bulkActivityAction === "record" || settings.bulkActivityAction === "ignore" ? settings.bulkActivityAction : "ask",
       agents: isRecord(settings.agents) ? settings.agents as Record<string, AgentProfile> : {},
     };
   }
@@ -324,6 +381,12 @@ class AgentNoteSettingTab extends PluginSettingTab {
     new Setting(this.containerEl).setName("本地服务").setHeading();
     new Setting(this.containerEl).setName("本地服务端口").setDesc("agent 通过此端口读取分享和写入笔记。").addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => { const port = Number(value); if (Number.isInteger(port) && port > 0 && port < 65536) { this.plugin.settings.port = port; await this.plugin.saveSettings(); } }));
     new Setting(this.containerEl).setName("启动 Obsidian 时运行服务").addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => { this.plugin.settings.autostartServer = value; await this.plugin.saveSettings(); }));
+    new Setting(this.containerEl).setName("批量本地操作").setHeading();
+    new Setting(this.containerEl).setName("检测到大量文件变动时").setDesc("1 秒内同类操作超过 3 次，或任意操作超过 10 次时生效；忽略活动仍会更新文档索引与分享目标。")
+      .addDropdown((dropdown) => dropdown.addOptions({ ask: "每次询问", ignore: "不计入活动（推荐）", record: "计入活动" }).setValue(this.plugin.settings.bulkActivityAction).onChange(async (value) => {
+        this.plugin.settings.bulkActivityAction = value as BulkActivityAction;
+        await this.plugin.saveSettings();
+      }));
     new Setting(this.containerEl).setName("活动记录冷备份").setHeading();
     new Setting(this.containerEl)
       .setName("启动后自动备份")

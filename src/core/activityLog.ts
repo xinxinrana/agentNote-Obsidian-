@@ -11,6 +11,16 @@ export interface ActivityLogOptions {
 
 const writerQueues = new Map<string, Promise<void>>();
 const devicePattern = /^[a-zA-Z0-9-]{1,80}$/;
+export function isLocalActivityBurst(events: readonly { type: string; at: number }[]): boolean {
+  for (let end = 0, start = 0; end < events.length; end++) {
+    while (events[end].at - events[start].at >= 1_000) start++;
+    if (end - start + 1 > 10) return true;
+    let same = 0;
+    for (let index = start; index <= end; index++) if (events[index].type === events[end].type) same++;
+    if (same > 3) return true;
+  }
+  return false;
+}
 function isEvent(value: unknown): value is InsightEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as InsightEvent;

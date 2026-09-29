@@ -278,11 +278,11 @@ export class VaultStore {
     this.suppressedLocalPaths.delete(normalized);
     return false;
   }
-  async recordLocalActivity(type: Extract<InsightEventType, `local-${string}`>, filePath: string, oldPath?: string): Promise<boolean> {
+  async recordLocalActivity(type: Extract<InsightEventType, `local-${string}`>, filePath: string, oldPath?: string, recordHistory = true): Promise<boolean> {
     if (!filePath.toLowerCase().endsWith(".md") || this.isConfigPath(filePath)) return false;
     if (type !== "local-moved" && this.consumeSuppressedLocalActivity(filePath)) return false;
     const document = type === "local-deleted" ? await this.deleteDocument(filePath) : type === "local-moved" && oldPath ? await this.moveDocument(filePath, oldPath) : await this.ensureDocument(filePath);
-    await this.recordEvent({ type, documentId: document.id, path: document.path, title: document.title, origin: "local" });
+    if (recordHistory) await this.recordEvent({ type, documentId: document.id, path: document.path, title: document.title, origin: "local" });
     if (type === "local-moved" && oldPath) {
       await this.moveReferenceSource(oldPath, filePath);
       await this.moveShareTargets(oldPath, filePath);

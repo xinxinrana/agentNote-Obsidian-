@@ -95,6 +95,8 @@ Select **View full insights** in the connection panel to review local activity. 
 
 agentNote records local actions that put knowledge to work: user-created files, completed edit sessions, reading for more than 20 seconds, agent use, adding a new note link, moving, renaming, archiving, and deleting. Existing genuine collaboration records remain available; the plugin starts listening only after initialization, so it does not treat pre-existing files as newly created. It does not rate people or upload activity. A day's knowledge activity value is simply the combined value of those actions.
 
+When more than three local actions of the same kind, or more than ten local actions of any kind, occur within one second, the plugin asks whether to count the batch. Ignoring a batch still updates document records and moved share targets. The choice can be remembered or set in agentNote settings.
+
 Each document has a reviewable contribution breakdown: construction, reuse, connection, and organization. Deletion records remain in the local ledger, while the timeline displays only the most recent 30 days so recent cleanup remains visible without making the history endless.
 
 Local creation, editing, reading, and organization reflect the user's own work first; share access and agent updates also contribute to each document. Select **View activity records** on a document card to see the dated events and their contribution values.
