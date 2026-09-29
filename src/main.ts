@@ -12,8 +12,8 @@ import { AGENTNOTE_VIEW, AgentNoteView, QuickStartModal } from "./ui/panel";
 
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
-interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; agents: Record<string, AgentProfile> }
-const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, agents: {} };
+interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; agents: Record<string, AgentProfile> }
+const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, agents: {} };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -24,6 +24,8 @@ export default class AgentNotePlugin extends Plugin {
   store!: VaultStore;
   server: AgentServer | null = null;
   private panelRefreshTimer: number | null = null;
+  private coldBackupTimer: number | null = null;
+  private coldBackupTask: Promise<{ created: number; existing: number }> | null = null;
   private localEditTimers = new Map<string, number>();
   private localReadTimer: number | null = null;
   private suppressedLocalRenames = new Set<string>();
@@ -49,10 +51,12 @@ export default class AgentNotePlugin extends Plugin {
       menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
     this.app.workspace.onLayoutReady(() => this.registerLocalActivityTracking());
+    this.scheduleColdBackup();
     if (this.settings.autostartServer) await this.startServer(true);
   }
   onunload(): void {
     if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer);
+    if (this.coldBackupTimer !== null) window.clearTimeout(this.coldBackupTimer);
     if (this.localReadTimer !== null) window.clearTimeout(this.localReadTimer);
     for (const timer of this.localEditTimers.values()) window.clearTimeout(timer);
     void this.stopServer(true);
@@ -63,6 +67,19 @@ export default class AgentNotePlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
   }
   refreshPanels(): void { for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) if (leaf.view instanceof AgentNoteView) void leaf.view.refresh(); }
+  scheduleColdBackup(): void {
+    if (this.coldBackupTimer !== null) window.clearTimeout(this.coldBackupTimer);
+    this.coldBackupTimer = null;
+    if (!this.settings.coldBackupEnabled) return;
+    this.coldBackupTimer = window.setTimeout(() => {
+      this.coldBackupTimer = null;
+      void this.runColdBackup().catch((error: Error) => new Notice(`冷备份失败：${error.message}`));
+    }, this.settings.coldBackupDelayMinutes * 60_000);
+  }
+  runColdBackup(): Promise<{ created: number; existing: number }> {
+    if (!this.coldBackupTask) this.coldBackupTask = this.store.backupPastDays().finally(() => { this.coldBackupTask = null; });
+    return this.coldBackupTask;
+  }
   private recordAgentActivity(activity: AgentActivity): void {
     const latest: LiveAgentActivity = {
       ...activity,
@@ -242,6 +259,8 @@ export default class AgentNotePlugin extends Plugin {
       port: typeof settings.port === "number" ? settings.port : DEFAULT_SETTINGS.port,
       autostartServer: typeof settings.autostartServer === "boolean" ? settings.autostartServer : DEFAULT_SETTINGS.autostartServer,
       showQuickStart: typeof settings.showQuickStart === "boolean" ? settings.showQuickStart : DEFAULT_SETTINGS.showQuickStart,
+      coldBackupEnabled: typeof settings.coldBackupEnabled === "boolean" ? settings.coldBackupEnabled : DEFAULT_SETTINGS.coldBackupEnabled,
+      coldBackupDelayMinutes: typeof settings.coldBackupDelayMinutes === "number" && Number.isInteger(settings.coldBackupDelayMinutes) && settings.coldBackupDelayMinutes >= 1 && settings.coldBackupDelayMinutes <= 60 ? settings.coldBackupDelayMinutes : DEFAULT_SETTINGS.coldBackupDelayMinutes,
       agents: isRecord(settings.agents) ? settings.agents as Record<string, AgentProfile> : {},
     };
   }
@@ -305,6 +324,36 @@ class AgentNoteSettingTab extends PluginSettingTab {
     new Setting(this.containerEl).setName("本地服务").setHeading();
     new Setting(this.containerEl).setName("本地服务端口").setDesc("agent 通过此端口读取分享和写入笔记。").addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => { const port = Number(value); if (Number.isInteger(port) && port > 0 && port < 65536) { this.plugin.settings.port = port; await this.plugin.saveSettings(); } }));
     new Setting(this.containerEl).setName("启动 Obsidian 时运行服务").addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => { this.plugin.settings.autostartServer = value; await this.plugin.saveSettings(); }));
+    new Setting(this.containerEl).setName("活动记录冷备份").setHeading();
+    new Setting(this.containerEl)
+      .setName("启动后自动备份")
+      .setDesc("按本机日期留存历史活动记录；不会覆盖原日志或已有备份，也不参与统计。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.coldBackupEnabled).onChange(async (value) => {
+        this.plugin.settings.coldBackupEnabled = value;
+        await this.plugin.saveSettings();
+        this.plugin.scheduleColdBackup();
+      }));
+    new Setting(this.containerEl)
+      .setName("启动后延迟（分钟）")
+      .setDesc("自动备份延迟 1–60 分钟开始，按日期顺序处理。")
+      .addText((input) => input.setValue(String(this.plugin.settings.coldBackupDelayMinutes)).onChange(async (value) => {
+        const minutes = Number(value);
+        if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) return;
+        this.plugin.settings.coldBackupDelayMinutes = minutes;
+        await this.plugin.saveSettings();
+        this.plugin.scheduleColdBackup();
+      }));
+    new Setting(this.containerEl)
+      .setName("立即备份历史日期")
+      .setDesc("副本保存在 agentNote/data/cold-backups/；当天记录留待下一次备份。")
+      .addButton((button) => button.setButtonText("立即备份").onClick(async () => {
+        button.setDisabled(true);
+        try {
+          const result = await this.plugin.runColdBackup();
+          new Notice(`冷备份完成：新增 ${result.created} 份，已有 ${result.existing} 份未改动。`);
+        } catch (error) { new Notice(`冷备份失败：${(error as Error).message}`); }
+        finally { button.setDisabled(false); }
+      }));
     this.containerEl.createEl("p", { text: "agent 的安装、提示词与接入状态在 agentNote 接入台中管理。" });
   }
 }

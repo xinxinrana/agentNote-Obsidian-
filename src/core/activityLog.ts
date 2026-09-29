@@ -86,6 +86,41 @@ export class ActivityLog {
     }
     return result.sort((a, b) => a.at.localeCompare(b.at) || a.eventId!.localeCompare(b.eventId!));
   }
+  async backupPastDays(now = new Date()): Promise<{ created: number; existing: number }> {
+    const dayKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const today = dayKey(now);
+    const deviceId = await this.deviceId();
+    const sources = [{ file: "events.json", label: `legacy.${deviceId}` }, { file: `events.${deviceId}.json`, label: deviceId }];
+    const snapshots: { day: string; name: string; events: InsightEvent[] }[] = [];
+    for (const source of sources) {
+      const days = new Map<string, InsightEvent[]>();
+      for (const event of await this.readFile(path.join(this.directory, source.file))) {
+        const date = new Date(event.at);
+        if (Number.isNaN(date.getTime())) throw new Error(`活动日志时间无效：${source.file}`);
+        const day = dayKey(date);
+        if (day >= today) continue;
+        const events = days.get(day) ?? [];
+        events.push(event);
+        days.set(day, events);
+      }
+      for (const [day, events] of days) snapshots.push({ day, name: `events.${source.label}.${day}.json`, events });
+    }
+    snapshots.sort((left, right) => left.day.localeCompare(right.day) || left.name.localeCompare(right.name));
+    const directory = path.join(this.directory, "cold-backups");
+    let created = 0;
+    let existing = 0;
+    if (snapshots.length) await fsp.mkdir(directory, { recursive: true });
+    for (const snapshot of snapshots) {
+      const target = path.join(directory, snapshot.name);
+      const temporary = `${target}.${randomUUID()}.tmp`;
+      try {
+        await fsp.writeFile(temporary, JSON.stringify(snapshot.events, null, 2), { flag: "wx" });
+        try { await fsp.link(temporary, target); created++; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") existing++; else throw error; }
+      } finally { await fsp.rm(temporary, { force: true }); }
+    }
+    return { created, existing };
+  }
   async append(event: Omit<InsightEvent, "at" | "eventId" | "deviceId">): Promise<void> {
     const deviceId = await this.deviceId();
     const file = await this.filePath();

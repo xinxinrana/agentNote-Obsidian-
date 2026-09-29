@@ -16,6 +16,8 @@ Writes to a device log run in order and replace the file via a temporary file. A
 
 ## Git boundaries
 
+Settings offer a delayed automatic cold backup and a manual **Back up now** action. They save past local-calendar days from the local device log and legacy `events.json` as separate, immutable files under `agentNote/data/cold-backups/`. The plugin does not use these files for statistics. Each device backs up its own activity. Note contents and shared configuration are outside this backup, and late events cannot be inserted into an existing snapshot.
+
 Keep `events.*.json` and any existing `events.json` when syncing a vault. Different devices write different log paths, reducing conflicts between activity logs. Update the plugin on every syncing device; older versions may still write to the shared legacy log.
 
 This does not merge conflicts in Markdown, `shares.json`, `documents.json`, `references.json`, `agents.json`, or `idempotency.json`. If shared JSON is unreadable or invalid, affected operations report an error instead of replacing existing data with empty values. Inspect and resolve the conflict before retrying; do not delete the original file to dismiss the error.

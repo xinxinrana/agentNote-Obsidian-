@@ -194,7 +194,7 @@ export class AgentNoteView extends ItemView {
     const footer = parent.createDiv({ cls: "agentnote-panel-footer" });
     footer.createEl("small", { text: "作者 Evan" });
     footer.createEl("span", { text: "·", attr: { "aria-hidden": "true" } });
-    const feedback = footer.createEl("button", { text: "反馈" });
+    const feedback = footer.createEl("button", { text: "反馈", cls: "agentnote-feedback-link" });
     feedback.onclick = () => new FeedbackModal(this.app, this.plugin).open();
   }
 }
@@ -237,6 +237,7 @@ class InsightsModal extends Modal {
         const file = this.app.vault.getAbstractFileByPath(await path());
         if (!(file instanceof TFile)) throw new Error("文件已不存在");
         await this.app.workspace.getLeaf("tab").openFile(file);
+        this.close();
       } catch (error) { new Notice(`无法打开资料：${(error as Error).message}`); }
     })();
   }

@@ -811,19 +811,21 @@
   letter-spacing: 0.01em;
 }
 
-.agentnote-panel-footer button {
-  padding: 0;
-  border: 0;
-  background: transparent;
+.agentnote-panel .agentnote-panel-footer button.agentnote-feedback-link {
+  all: unset;
   color: var(--interactive-accent);
-  font-size: inherit;
+  font: inherit;
   font-weight: 500;
   cursor: pointer;
 }
 
-.agentnote-panel-footer button:hover {
-  color: var(--interactive-accent);
+.agentnote-panel .agentnote-panel-footer button.agentnote-feedback-link:hover {
   text-decoration: underline;
+}
+
+.agentnote-panel .agentnote-panel-footer button.agentnote-feedback-link:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
 }
 
 .agentnote-prompt-editor {
@@ -1261,23 +1263,16 @@
   color: var(--text-success);
 }
 
-.agentnote-file-link {
-  appearance: none;
-  border: 0;
-  background: none;
-  box-shadow: none;
-  padding: 0;
-  height: auto;
-  min-width: 0;
-  color: var(--text-normal);
+.agentnote-insights-modal button.agentnote-file-link {
+  all: unset;
+  color: var(--text-accent);
   font: inherit;
   font-weight: 600;
-  text-align: left;
   cursor: pointer;
 }
-.agentnote-file-link:hover { color: var(--text-accent); text-decoration: underline; }
-.agentnote-file-link:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
-.agentnote-profile-note .agentnote-file-link { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agentnote-insights-modal button.agentnote-file-link:hover { text-decoration: underline; }
+.agentnote-insights-modal button.agentnote-file-link:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.agentnote-insights-modal .agentnote-profile-note .agentnote-file-link { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .agentnote-agent-path,
 .agentnote-skill-path {

@@ -422,6 +422,44 @@ try {
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
+  await test("cold backups keep past local and legacy days immutable without touching live logs", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-cold-backup-"));
+    try {
+      const data = path.join(root, "vault", "agentNote", "data");
+      await fsp.mkdir(data, { recursive: true });
+      const log = new ActivityLog(data, { deviceIdFile: path.join(root, "local", "device-id") });
+      const localPath = await log.filePath();
+      const deviceId = path.basename(localPath).slice("events.".length, -".json".length);
+      const event = (day, title) => ({ at: new Date(2026, 8, day, 12).toISOString(), type: "local-read", title });
+      const legacyPath = path.join(data, "events.json");
+      const legacyBytes = JSON.stringify([event(27, "旧记录")]);
+      const local = [event(27, "第一天"), event(28, "第二天"), event(29, "今天")];
+      await fsp.writeFile(legacyPath, legacyBytes);
+      await fsp.writeFile(localPath, JSON.stringify(local));
+      const result = await log.backupPastDays(new Date(2026, 8, 29, 12));
+      assert.deepEqual(result, { created: 3, existing: 0 });
+      const backups = path.join(data, "cold-backups");
+      const firstPath = path.join(backups, `events.${deviceId}.2026-09-27.json`);
+      const secondPath = path.join(backups, `events.${deviceId}.2026-09-28.json`);
+      const legacyBackup = path.join(backups, `events.legacy.${deviceId}.2026-09-27.json`);
+      assert.deepEqual(JSON.parse(await fsp.readFile(firstPath, "utf8")), [local[0]]);
+      assert.deepEqual(JSON.parse(await fsp.readFile(secondPath, "utf8")), [local[1]]);
+      assert.deepEqual(JSON.parse(await fsp.readFile(legacyBackup, "utf8")), [event(27, "旧记录")]);
+      assert.equal((await fsp.readdir(backups)).length, 3, "today has no backup yet");
+      const before = await fsp.readFile(secondPath);
+      local.push(event(28, "迟到的旧日期记录"));
+      await fsp.writeFile(localPath, JSON.stringify(local));
+      assert.deepEqual(await log.backupPastDays(new Date(2026, 8, 29, 12)), { created: 0, existing: 3 });
+      assert.deepEqual(await fsp.readFile(secondPath), before, "existing snapshots are never overwritten");
+      assert.equal(await fsp.readFile(legacyPath, "utf8"), legacyBytes);
+      assert.deepEqual(JSON.parse(await fsp.readFile(localPath, "utf8")), local);
+      await fsp.writeFile(localPath, "<<<<<<< conflict");
+      await assert.rejects(log.backupPastDays(new Date(2026, 8, 29, 12)), /活动日志不是合法 JSON/);
+      assert.deepEqual(await fsp.readFile(secondPath), before);
+      assert.equal(await fsp.readFile(localPath, "utf8"), "<<<<<<< conflict");
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
   await test("concurrent writers on one device retain every operation and one identity", async () => {
     const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-writers-"));
     try {

@@ -185,6 +185,10 @@ export class VaultStore {
     if (!fs.existsSync(references)) await fsp.writeFile(references, "{}", "utf8");
   }
 
+  async backupPastDays(now = new Date()): Promise<{ created: number; existing: number }> {
+    return this.activityLog.backupPastDays(now);
+  }
+
   private normalizeVaultPath(filePath: string): string {
     const absolute = path.resolve(this.root, filePath);
     if (absolute !== this.root && !absolute.startsWith(`${this.root}${path.sep}`)) throw new StoreError(400, "文件路径不在当前 vault 中");

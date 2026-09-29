@@ -99,7 +99,7 @@ Each document has a reviewable contribution breakdown: construction, reuse, conn
 
 Local creation, editing, reading, and organization reflect the user's own work first; share access and agent updates also contribute to each document. Select **View activity records** on a document card to see the dated events and their contribution values.
 
-Click a material title in the knowledge profile to open its original file in a new Obsidian tab. In **Privacy view**, titles are anonymized and the open-file action is hidden.
+Material titles appear as text links in the knowledge profile. Click one to open its original file in a new Obsidian tab and close the insights window. In **Privacy view**, titles are anonymized and the open-file action is hidden.
 
 Each successful share-link request counts as one use. If the request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
 
@@ -126,3 +126,11 @@ Use **Generate sharing image** in the profile to preview and copy a PNG summary.
 Check the installed version and select **Check for updates** in Obsidian's agentNote settings. Updates download `main.js`, `manifest.json`, and `styles.css` from GitHub Releases and reload the plugin.
 
 agentNote does not upload content, provide cloud accounts or synchronization, or replace Obsidian's editing, file management, backup, or Git workflows. Your original content always remains in your vault.
+
+### Activity-log cold backups
+
+In agentNote settings, keep automatic backups on, choose a 1–60 minute startup delay, or select **Back up now**. Automatic backup is enabled by default and starts three minutes after startup. It processes eligible days in sequence without delaying plugin startup.
+
+Cold backups copy past-day activity from this device's log and the legacy `events.json` into one JSON file per source and local calendar day in `agentNote/data/cold-backups/`. The plugin never reads these copies for statistics and never overwrites an existing copy or the source log. Each device should run its own backups.
+
+This is not a full-vault backup. It does not cover note contents, shared configuration, or other devices' unsynced logs. A late event for an already backed-up day does not change the immutable snapshot. Resolve Git conflicts without deleting the original data. See [Git Activity Sync](Git%20Activity%20Sync.md).
