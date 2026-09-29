@@ -4,6 +4,8 @@
 
 [视觉识别规范（VI）](VI.md)包含标志、色彩、字体、留白和应用规则。
 
+[三张使用场景插画](scenes/README.md)展示分享资料、agent 读取和成果写回笔记库，可用于产品介绍与演示。
+
 | 用途 | 预览 | SVG | PNG |
 | --- | --- | --- | --- |
 | 常态角色 | <img src="xiaojian-idle.svg" alt="小笺常态" width="96"> | [xiaojian-idle.svg](xiaojian-idle.svg) | [PNG](png/xiaojian-idle.png) |

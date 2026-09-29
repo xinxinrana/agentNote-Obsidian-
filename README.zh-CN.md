@@ -93,7 +93,7 @@ agent 会整理标题、正文、背景与标签，并写入 vault。写入成�
 
 ## 文档
 
-小笺的角色、标记、品牌组合图及 [VI 视觉识别规范](assets/brand/VI.md)可在[产品形象资产目录](assets/brand/README.md)中直接下载与复用。
+小笺的角色、标记、品牌组合图、[VI 视觉识别规范](assets/brand/VI.md)和[三张使用场景插画](assets/brand/scenes/README.md)可在[产品形象资产目录](assets/brand/README.md)中直接下载与复用。
 
 通过 Git 同步多台设备的活动日志，见 [Git 活动记录同步](docs/Git活动记录同步.md)。每台设备只追加自己的记录，统计汇总所有设备的日志；此能力不覆盖正文及其他共享配置的冲突处理。
 

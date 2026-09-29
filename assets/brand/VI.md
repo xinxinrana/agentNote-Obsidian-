@@ -44,3 +44,5 @@ agentNote 让本地笔记与文件顺畅进入 agent 工作流。视觉语言以
 ## 可复用文件
 
 下载或复制 [`README.md`](README.md) 列出的 SVG / PNG。品牌颜色与字体变量见 [`tokens.css`](tokens.css)；桌面插件中的角色直接引用这组 SVG。
+
+[使用场景插画](scenes/README.md)可用于介绍分享、读取和写回流程。插画不能替代真实界面截图或功能说明。
