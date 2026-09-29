@@ -6,7 +6,7 @@
 
 agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、WorkBuddy 等 agent。你选择一份资料，插件会生成始终返回最新内容的本地地址；agent 产生的成果也能自然写回你的 vault。
 
-<img src="assets/brand/xiaojian-wave.svg" alt="agentNote 的笔记伙伴小笺" width="120">
+<img src="assets/brand/xiaoji-wave.svg" alt="agentNote 的笔记伙伴小记" width="120">
 
 <p align="center">
   <img src="docs/img/整体页面展示.png" alt="agentNote 在 Obsidian 中展示知识洞察和 agent 接入台" width="920">
@@ -93,7 +93,7 @@ agent 会整理标题、正文、背景与标签，并写入 vault。写入成�
 
 ## 文档
 
-小笺的角色、标记、品牌组合图、[VI 视觉识别规范](assets/brand/VI.md)和[三张使用场景插画](assets/brand/scenes/README.md)可在[产品形象资产目录](assets/brand/README.md)中直接下载与复用。
+小记的角色、标记、品牌组合图、[VI 视觉识别规范](assets/brand/VI.md)和[三张使用场景插画](assets/brand/scenes/README.md)可在[产品形象资产目录](assets/brand/README.md)中直接下载与复用。
 
 通过 Git 同步多台设备的活动日志，见 [Git 活动记录同步](docs/Git活动记录同步.md)。每台设备只追加自己的记录，统计汇总所有设备的日志；此能力不覆盖正文及其他共享配置的冲突处理。
 

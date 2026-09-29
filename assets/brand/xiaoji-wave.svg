@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
-  <title id="title">小笺，agentNote 的笔记伙伴</title>
+  <title id="title">挥手的小记</title>
   <defs>
     <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="#FFFFFF"/>
@@ -11,9 +11,10 @@
     </linearGradient>
   </defs>
   <ellipse cx="256" cy="445" rx="124" ry="13" fill="#8B54D0" opacity=".14"/>
-  <path d="M129 235 C91 207 73 221 71 246 M383 231 C421 203 437 218 440 242" fill="none" stroke="#8652CF" stroke-width="17" stroke-linecap="round"/>
+  <path d="M129 235 C91 207 73 221 71 246 M383 231 C423 215 438 174 440 125" fill="none" stroke="#8652CF" stroke-width="17" stroke-linecap="round"/>
   <circle cx="70" cy="246" r="15" fill="#BE8BFA" stroke="#8652CF" stroke-width="7"/>
-  <circle cx="441" cy="242" r="15" fill="#BE8BFA" stroke="#8652CF" stroke-width="7"/>
+  <circle cx="440" cy="125" r="15" fill="#BE8BFA" stroke="#8652CF" stroke-width="7"/>
+  <path d="M424 89 L414 78 M443 86 L443 72 M462 92 L472 80" fill="none" stroke="#B074F7" stroke-width="7" stroke-linecap="round"/>
   <path d="M205 393 L191 429 M306 393 L321 429" fill="none" stroke="#8652CF" stroke-width="17" stroke-linecap="round"/>
   <path d="M174 429 Q190 414 211 427 M300 427 Q319 414 338 429" fill="none" stroke="#8652CF" stroke-width="15" stroke-linecap="round"/>
   <path d="M152 92 H318 L383 156 V367 Q383 401 349 401 H152 Q118 401 118 367 V126 Q118 92 152 92Z" fill="url(#paper)" stroke="url(#edge)" stroke-width="12" stroke-linejoin="round"/>
@@ -24,7 +25,7 @@
   <ellipse cx="290" cy="273" rx="12" ry="17" fill="#392552"/>
   <circle cx="169" cy="300" r="15" fill="#F7A5C8" opacity=".72"/>
   <circle cx="326" cy="300" r="15" fill="#F7A5C8" opacity=".72"/>
-  <path d="M231 308 Q248 327 265 308" fill="none" stroke="#392552" stroke-width="8" stroke-linecap="round"/>
+  <path d="M231 307 Q248 333 265 307Z" fill="#392552"/>
   <path d="M179 350 H316" stroke="#CBA6EF" stroke-width="11" stroke-linecap="round"/>
   <circle cx="96" cy="115" r="10" fill="#B074F7"/>
   <path d="M423 90 L427 103 L440 107 L427 111 L423 124 L419 111 L406 107 L419 103Z" fill="#B074F7"/>

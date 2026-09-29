@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
-  <title id="title">小笺图标</title>
+  <title id="title">小记图标</title>
   <path d="M28 11 H76 L104 39 V104 Q104 116 92 116 H28 Q16 116 16 104 V23 Q16 11 28 11Z" fill="#F8F3FF" stroke="#8652CF" stroke-width="7" stroke-linejoin="round"/>
   <path d="M76 11 V32 Q76 39 83 39 H104Z" fill="#D8B5FF" stroke="#8652CF" stroke-width="6" stroke-linejoin="round"/>
   <ellipse cx="44" cy="69" rx="5" ry="8" fill="#392552"/>

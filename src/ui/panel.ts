@@ -5,8 +5,8 @@ import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, skillStatu
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
-import xiaojianIdle from "../../assets/brand/xiaojian-idle.svg";
-import xiaojianWave from "../../assets/brand/xiaojian-wave.svg";
+import xiaojiIdle from "../../assets/brand/xiaoji-idle.svg";
+import xiaojiWave from "../../assets/brand/xiaoji-wave.svg";
 import { toBlob } from "html-to-image";
 import { ACTIVITY_WEIGHTS, type DashboardInsights, type DocumentContribution, type InsightEvent, type InsightNote } from "../core/store";
 
@@ -19,7 +19,7 @@ const AGENT_ICONS: Record<string, string> = {
 };
 
 function renderCompanion(parent: HTMLElement, pose: "idle" | "wave" = "idle"): void {
-  parent.createEl("img", { cls: "agentnote-companion", attr: { src: pose === "wave" ? xiaojianWave : xiaojianIdle, alt: "小笺，agentNote 的笔记伙伴" } });
+  parent.createEl("img", { cls: "agentnote-companion", attr: { src: pose === "wave" ? xiaojiWave : xiaojiIdle, alt: "小记，agentNote 的笔记伙伴" } });
 }
 
 export class AgentNoteView extends ItemView {
@@ -131,7 +131,7 @@ export class AgentNoteView extends ItemView {
     const companionCard = overview.createDiv({ cls: "agentnote-companion-feature" });
     renderCompanion(companionCard);
     const companionCopy = companionCard.createDiv();
-    companionCopy.createEl("strong", { text: "小笺" });
+    companionCopy.createEl("strong", { text: "小记" });
     companionCopy.createEl("span", { text: "陪你把本地资料带进每一次协作" });
     const stats = overview.createDiv({ cls: "agentnote-metric-strip" });
     for (const [value, label] of [[insights.summary.weekActivityScore, "知识活跃分"], [insights.summary.weekUpdated, "本周更新"], [insights.summary.weekResolves, "本周复用"]] as const) {

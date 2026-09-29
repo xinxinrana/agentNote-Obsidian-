@@ -6,7 +6,7 @@ Share local Obsidian notes and files with AI agents through a private, local-onl
 
 agentNote is an Obsidian desktop plugin that connects your vault with agents such as Claude Code, Codex, and WorkBuddy. You choose what an agent can read, and the plugin creates a live local URL that always resolves to the current content.
 
-<img src="assets/brand/xiaojian-wave.svg" alt="Xiaojian, the agentNote note companion" width="120">
+<img src="assets/brand/xiaoji-wave.svg" alt="Xiaoji, the agentNote note companion" width="120">
 
 <p align="center">
   <img src="docs/img/整体页面展示.png" alt="agentNote running inside Obsidian with the local knowledge dashboard and agent connection panel" width="920">
@@ -94,7 +94,7 @@ Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always ap
 
 ## Documentation
 
-The reusable Xiaojian character, mark, logo, visual identity guide, and [three usage illustrations](assets/brand/scenes/README.md) are in the [brand asset kit](assets/brand/README.md).
+The reusable Xiaoji character, mark, logo, visual identity guide, and [three usage illustrations](assets/brand/scenes/README.md) are in the [brand asset kit](assets/brand/README.md).
 
 For device-specific activity logs, see [Git activity sync](docs/Git%20Activity%20Sync.md). Each device appends to its own log; statistics merge all device logs. This does not resolve conflicts in note contents or other shared state.
 

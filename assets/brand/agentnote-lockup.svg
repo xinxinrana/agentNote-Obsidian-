@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" role="img" aria-labelledby="title">
-  <title id="title">agentNote 与小笺品牌组合</title>
+  <title id="title">agentNote 与小记品牌组合</title>
   <g transform="translate(26 20) scale(1.7)">
     <path d="M28 11 H76 L104 39 V104 Q104 116 92 116 H28 Q16 116 16 104 V23 Q16 11 28 11Z" fill="#F8F3FF" stroke="#8652CF" stroke-width="7" stroke-linejoin="round"/>
     <path d="M76 11 V32 Q76 39 83 39 H104Z" fill="#D8B5FF" stroke="#8652CF" stroke-width="6" stroke-linejoin="round"/>
