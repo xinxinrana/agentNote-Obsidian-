@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">小笺头像</title>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#F9F3FF"/><stop offset="1" stop-color="#DEBEFF"/></linearGradient></defs>
+  <circle cx="256" cy="256" r="246" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="245" fill="none" stroke="#A675E5" stroke-width="10"/>
+  <path d="M139 84 H292 L373 165 V384 Q373 418 339 418 H139 Q105 418 105 384 V118 Q105 84 139 84Z" fill="#FCFAFF" stroke="#8652CF" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M292 85 V144 Q292 165 313 165 H372Z" fill="#D8B5FF" stroke="#8652CF" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M160 199 H267" fill="none" stroke="#DCC2F8" stroke-width="14" stroke-linecap="round"/>
+  <ellipse cx="181" cy="284" rx="13" ry="19" fill="#392552"/>
+  <ellipse cx="290" cy="284" rx="13" ry="19" fill="#392552"/>
+  <circle cx="143" cy="316" r="16" fill="#F7A5C8" opacity=".72"/>
+  <circle cx="327" cy="316" r="16" fill="#F7A5C8" opacity=".72"/>
+  <path d="M218 327 Q236 348 254 327" fill="none" stroke="#392552" stroke-width="9" stroke-linecap="round"/>
+  <path d="M164 377 H309" fill="none" stroke="#D0A9F3" stroke-width="13" stroke-linecap="round"/>
+  <path d="M412 92 L420 116 L444 124 L420 132 L412 156 L404 132 L380 124 L404 116Z" fill="#A675E5"/>
+</svg>

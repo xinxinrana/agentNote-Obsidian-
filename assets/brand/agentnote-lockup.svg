@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" role="img" aria-labelledby="title">
+  <title id="title">agentNote 与小笺品牌组合</title>
+  <g transform="translate(26 20) scale(1.7)">
+    <path d="M28 11 H76 L104 39 V104 Q104 116 92 116 H28 Q16 116 16 104 V23 Q16 11 28 11Z" fill="#F8F3FF" stroke="#8652CF" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M76 11 V32 Q76 39 83 39 H104Z" fill="#D8B5FF" stroke="#8652CF" stroke-width="6" stroke-linejoin="round"/>
+    <ellipse cx="44" cy="69" rx="5" ry="8" fill="#392552"/>
+    <ellipse cx="78" cy="69" rx="5" ry="8" fill="#392552"/>
+    <path d="M50 88 Q61 100 72 88" fill="none" stroke="#392552" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <text x="257" y="142" fill="#392552" font-family="Arial, Helvetica, sans-serif" font-size="103" font-weight="700" letter-spacing="-5">agent<tspan fill="#8652CF">Note</tspan></text>
+  <text x="263" y="197" fill="#7444C7" font-family="Arial, Helvetica, sans-serif" font-size="27" letter-spacing="2">LOCAL KNOWLEDGE FOR AGENTS</text>
+</svg>

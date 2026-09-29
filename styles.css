@@ -153,35 +153,13 @@
 .agentnote-hero-heading,
 .agentnote-share-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
-.agentnote-companion { flex: 0 0 44px; width: 44px; height: 50px; animation: agentnote-companion-float 4s ease-in-out infinite; }
-.agentnote-companion-page {
-  position: relative;
-  width: 38px;
-  height: 44px;
-  border: 2px solid color-mix(in srgb, var(--interactive-accent) 70%, var(--text-normal));
-  border-radius: 9px 13px 9px 9px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--interactive-accent) 32%, var(--background-primary)), var(--background-primary));
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--interactive-accent) 22%, transparent);
-  transform: rotate(-7deg);
-}
-.agentnote-companion-page::before {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 13px;
-  height: 13px;
-  border-bottom: 2px solid var(--interactive-accent);
-  border-left: 2px solid var(--interactive-accent);
-  border-radius: 0 9px 0 5px;
-  background: var(--background-secondary);
-  content: "";
-}
-.agentnote-companion-eye { position: absolute; top: 19px; left: 10px; width: 4px; height: 5px; border-radius: 50%; background: var(--text-normal); animation: agentnote-companion-blink 6s infinite; }
-.agentnote-companion-eye + .agentnote-companion-eye { left: 22px; }
-.agentnote-companion-smile { position: absolute; top: 27px; left: 14px; width: 10px; height: 5px; border-bottom: 2px solid var(--text-normal); border-radius: 0 0 10px 10px; }
+.agentnote-companion-feature { display: flex; align-items: center; gap: 12px; min-width: 0; margin: 14px 0; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--interactive-accent) 22%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-primary)); }
+.agentnote-companion-feature > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.agentnote-companion-feature strong { color: var(--text-normal); font-size: 1em; }
+.agentnote-companion-feature span { color: var(--text-muted); font-size: 0.82em; line-height: 1.45; }
+.agentnote-companion { display: block; flex: 0 0 92px; width: 92px; height: 92px; object-fit: contain; animation: agentnote-companion-float 4s ease-in-out infinite; }
 @keyframes agentnote-companion-float { 50% { transform: translateY(-4px); } }
-@keyframes agentnote-companion-blink { 0%, 46%, 50%, 100% { transform: scaleY(1); } 48% { transform: scaleY(0.15); } }
-@media (prefers-reduced-motion: reduce) { .agentnote-companion, .agentnote-companion-eye { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .agentnote-companion { animation: none; } }
 
 .agentnote-dashboard-hero h4,
 .agentnote-value-section h4,
@@ -651,7 +629,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.agentnote-share-brand-row .agentnote-companion { margin-right: 4px; }
+.agentnote-share-brand-row .agentnote-companion { flex-basis: 56px; width: 56px; height: 56px; margin-right: 4px; }
 
 .agentnote-share-card h2 {
   margin: 9px 0 0;
