@@ -94,7 +94,7 @@ Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always ap
 
 ## Documentation
 
-The reusable Xiaojian character, avatar, mark, and logo assets are in the [brand asset kit](assets/brand/README.md).
+The reusable Xiaojian character, mark, logo, and visual identity guide are in the [brand asset kit](assets/brand/README.md).
 
 For device-specific activity logs, see [Git activity sync](docs/Git%20Activity%20Sync.md). Each device appends to its own log; statistics merge all device logs. This does not resolve conflicts in note contents or other shared state.
 

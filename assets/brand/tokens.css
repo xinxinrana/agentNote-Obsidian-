@@ -1,0 +1,10 @@
+:root {
+  --agentnote-brand-purple: #8652cf;
+  --agentnote-brand-ink: #392552;
+  --agentnote-brand-fold: #d8b5ff;
+  --agentnote-brand-paper: #f8f3ff;
+  --agentnote-brand-blush: #f7a5c8;
+  --agentnote-brand-white: #ffffff;
+  --agentnote-brand-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --agentnote-brand-card-radius: 14px;
+}
