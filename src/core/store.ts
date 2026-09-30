@@ -591,6 +591,16 @@ export class VaultStore {
   }
 
   async resolveShare(id: string, context: ActivityContext = {}): Promise<ShareResult> {
+    const { share, result } = await this.readShare(id);
+    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId: await this.documentIdForTarget(share.target), targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link" }).catch(() => undefined);
+    return result;
+  }
+
+  async previewShare(id: string): Promise<ShareResult> {
+    return (await this.readShare(id)).result;
+  }
+
+  private async readShare(id: string): Promise<{ share: Share; result: ShareResult }> {
     const share = (await this.readShares()).find((candidate) => candidate.id === id);
     if (!share) throw new StoreError(404, `分享不存在: ${id}`);
     let result: ShareResult;
@@ -601,8 +611,7 @@ export class VaultStore {
       const { rel, abs } = this.vaultPath(target.path);
       result = target.kind === "file" ? await this.resolveFileShare(share, rel, abs) : await this.resolveFolderShare(share, rel, abs);
     }
-    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId: await this.documentIdForTarget(share.target), targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link" }).catch(() => undefined);
-    return result;
+    return { share, result };
   }
 
   async updateShareContent(id: string, content: string, context: ActivityContext = {}): Promise<ShareResult> {

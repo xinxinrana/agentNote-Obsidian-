@@ -304,7 +304,7 @@ export default class AgentNotePlugin extends Plugin {
   }
   async copyShareUrl(id: string): Promise<void> {
     const port = this.server?.port ?? this.settings.port;
-    const url = `http://127.0.0.1:${port}/api/shares/${id}/resolve`;
+    const url = `http://127.0.0.1:${port}/shares/${id}`;
     await navigator.clipboard.writeText(url);
     new Notice("分享地址已复制，直接发给 agent 即可。", 4000);
   }

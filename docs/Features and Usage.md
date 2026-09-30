@@ -39,10 +39,12 @@ Send the full address to an agent:
 
 ```text
 Please read this material and summarize it:
-http://127.0.0.1:27182/api/shares/s-xxxx/resolve
+http://127.0.0.1:27182/shares/s-xxxx
 ```
 
-The address is live: changes to the original file appear on the same link. Agents read through the link first, then update the shared content through the share API.
+The address opens a compact local card with a title, short summary, item type, update time, Open Graph metadata, and actions to open eligible files in Obsidian or copy the link. The note body is not included in the page. A connected agent extracts the share ID, reads JSON from `/api/shares/<id>/resolve`, and returns the card link in conversation. Legacy API links still work. Changes to the original file appear at the same address.
+
+The page remains available only on this computer. External chat services that fetch previews from their own servers cannot reach `127.0.0.1`, so an Open Graph card is not guaranteed; no vault content is uploaded.
 
 ## 2. Let an agent write notes
 
@@ -105,7 +107,7 @@ Local creation, editing, reading, and organization reflect the user's own work f
 
 Material titles appear as text links in the knowledge profile. Click one to open its original file in a new Obsidian tab and close the insights window. In **Privacy view**, titles are anonymized and the open-file action is hidden.
 
-Each successful share-link request counts as one use. If the request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
+Each successful JSON share API read counts as one use; loading the human page or fetching its metadata does not. If an API request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
 
 - **Profile**: a seven-day overview and reusable-note ranking.
 - **This week**: daily knowledge activity, reused material, and a document ranking that includes local work.

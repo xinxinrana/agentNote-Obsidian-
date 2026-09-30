@@ -1,6 +1,8 @@
 import * as http from "http";
+import { randomBytes } from "crypto";
 import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateNodeInput, VaultStore } from "./store";
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
+import { renderSharePage, shareCardImage, shareFavicon } from "./sharePage";
 
 export type AgentOperation = "read" | "created" | "updated" | "archived";
 export interface AgentActivity { operation: AgentOperation; title: string; nodeId?: string; shareId?: string; targetKind?: ShareTarget["kind"]; actor?: ActivityContext["actor"] }
@@ -33,17 +35,30 @@ export class AgentServer {
     return this.port!;
   }
   async stop(): Promise<void> { if (this.server) await new Promise<void>((resolve) => this.server!.close(() => resolve())); this.server = null; }
-  private shareLink(shareId: string): string { return `http://127.0.0.1:${this.port ?? this.opts.port}/api/shares/${shareId}/resolve`; }
+  private baseUrl(): string { return `http://127.0.0.1:${this.port ?? this.opts.port}`; }
+  private shareLink(shareId: string): string { return `${this.baseUrl()}/api/shares/${shareId}/resolve`; }
+  private displayLink(shareId: string): string { return `${this.baseUrl()}/shares/${shareId}`; }
   private notifyActivity(activity: AgentActivity): void { try { this.opts.onActivity?.(activity); } catch (error) { console.warn("agentNote activity notification failed", error); } }
   private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated", context: ActivityContext) {
     const share = await this.store.ensureShareForNode(node.id, context);
-    return { status, link: this.shareLink(share.id), ...nodeView(node) };
+    return { status, link: this.shareLink(share.id), displayLink: this.displayLink(share.id), ...nodeView(node) };
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
     const parts = url.pathname.split("/").filter(Boolean);
     const method = req.method ?? "GET";
+    if ((url.pathname === "/share-card.png" || url.pathname === "/share-icon.png") && (method === "GET" || method === "HEAD")) {
+      const picture = url.pathname === "/share-card.png" ? shareCardImage() : shareFavicon();
+      res.writeHead(200, { "content-type": "image/png", "content-length": picture.length, "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" });
+      return void res.end(method === "HEAD" ? undefined : picture);
+    }
+    if (parts[0] === "shares" && parts.length === 2 && (method === "GET" || method === "HEAD")) {
+      const nonce = randomBytes(16).toString("base64");
+      const page = renderSharePage(await this.store.previewShare(parts[1]), this.baseUrl(), this.store.root, nonce);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(page), "cache-control": "no-store", "content-security-policy": `default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'`, "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" });
+      return void res.end(method === "HEAD" ? undefined : page);
+    }
     if (url.pathname === "/api/health" && method === "GET") return send(res, 200, { ok: true, data: { status: "up", version: 2, vault: this.store.root } });
     if (parts[0] !== "api") return send(res, 404, { ok: false, error: "接口不存在" });
     const context = await this.store.resolveActivityContext(activityContext(req));
@@ -77,8 +92,10 @@ export class AgentServer {
     }
     if (parts[1] === "shares" && parts.length === 2 && method === "POST") {
       const body = await readBody(req) as { nodeId?: string; path?: string; background?: string; selection?: string };
-      if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context) });
-      if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context) });
+      if (body.nodeId || body.path) {
+        const share = body.nodeId ? await this.store.createShare(body.nodeId, body.selection, context) : await this.store.createPathShare(body.path!, body.background, body.selection, context);
+        return send(res, 201, { ok: true, data: { ...share, link: this.shareLink(share.id), displayLink: this.displayLink(share.id) } });
+      }
       throw new StoreError(400, "nodeId 或 path 至少提供一个");
     }
     if (parts[1] === "shares" && parts.length === 3 && (method === "PUT" || method === "PATCH")) {

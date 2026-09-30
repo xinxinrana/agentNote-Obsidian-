@@ -56,17 +56,17 @@ POST {{baseUrl}}/api/nodes
 
 写入时根据用户表达整理标题、正文、背景和标签；背景或标签不明确时可以留空。写入前不需要为了找旧笔记而搜索。
 
-写入成功的响应包含 \`status\` 和 \`link\`：\`link\` 是这条笔记的永久地址，写入后立即把它发给用户，并在后续对话中用它指代这条笔记。用户之后说"修改刚才那篇"时，直接用这条 link，不要重新搜索。
+写入成功的响应包含 \`status\`、\`link\` 和 \`displayLink\`。\`link\` 是供工具读取 JSON 的 API 地址；\`displayLink\` 是给人打开的网页地址。写入后立即把 \`displayLink\` 发给用户，并在后续对话中用它指代这条笔记。用户之后说"修改刚才那篇"时，使用同一分享 ID 更新，不要重新搜索。
 
 ## 分享地址
 
-用户提供 \`{{baseUrl}}/api/shares/s-x-.../resolve\` 时，直接 GET 并使用返回内容。
+用户提供 \`{{baseUrl}}/shares/s-x-...\` 或旧的 \`{{baseUrl}}/api/shares/s-x-.../resolve\` 时，从地址中取出分享 ID，使用 \`GET {{baseUrl}}/api/shares/<shareId>/resolve\` 读取 JSON。不要用命令读取网页地址；在对话中发给用户的地址始终使用 \`{{baseUrl}}/shares/<shareId>\`。
 
 - \`kind: text\`：正文和背景。
 - \`kind: file\`：文件地址、背景和当前文件内容。
 - \`kind: folder\`：文件夹地址、背景和第一层文件名称。
 
-追加 \`?raw=1\` 只获取内容文本。不要要求用户复制原文件或重新粘贴正文。
+在 API 地址后追加 \`?raw=1\` 只获取内容文本。不要要求用户复制原文件或重新粘贴正文。
 
 ## 固定身份与工作轨迹（必须携带）
 
@@ -86,7 +86,7 @@ X-AgentNote-Session-Title: <encodeURIComponent(根据当前具体工作填写的
 
 分享返回中的 \`filePath\` 是内容在本机的真实路径，\`hint\` 是使用规则：
 
-- 读取始终优先通过链接，它返回当前内容和背景。
+- 读取始终优先通过 JSON API 地址，它返回当前内容和背景；对话中分享 \`displayLink\` 网页地址。
 - 更新已分享内容时，PATCH \`/api/shares/<shareId>\`，请求体为 \`{ "content": "更新后的完整内容" }\`。
 
 ## 活动查询与总结

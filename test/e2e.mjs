@@ -41,7 +41,7 @@ try {
     assert.equal(result.status, 200); assert.equal(result.data.version, 2);
   });
 
-  let textId, textLink;
+  let textId, textLink, displayLink;
   await test("agent writes a normal note from a natural-language intent", async () => {
     const result = await api("POST", "/api/nodes", { title: "发布窗口", content: "周五晚间不发布生产版本。", background: "2026 年发布节奏约定，供部署任务参考。", source: "agent" }, { "x-agentnote-agent-name": "Codex", "x-agentnote-session-title": encodeURIComponent("发布流程验证") });
     assert.equal(result.status, 201); assert.equal(result.data.type, "snippet"); assert.equal(result.data.background.includes("发布节奏"), true); textId = result.data.id;
@@ -54,6 +54,8 @@ try {
     assert.equal(liveActivities.at(-1)?.actor?.sessionTitle, "发布流程验证");
     assert.ok(result.data.link.startsWith(base)); assert.match(result.data.link, /\/api\/shares\/s-x-[0-9a-f]+\/resolve$/);
     textLink = result.data.link;
+    displayLink = result.data.displayLink;
+    assert.equal(displayLink, textLink.replace("/api/shares/", "/shares/").replace("/resolve", ""));
   });
   await test("legacy shares do not turn successful writes into failed responses", async () => {
     const sharesPath = path.join(vault, "agentNote", "data", "shares.json");
@@ -77,6 +79,33 @@ try {
     assert.equal(liveActivities.at(-1)?.operation, "read");
     assert.equal(liveActivities.at(-1)?.title, "发布窗口");
     assert.equal(liveActivities.at(-1)?.shareId, textLink.split("/").at(-2));
+  });
+  await test("human share page has Open Graph metadata without changing API reads or activity", async () => {
+    const before = (await store.listActivity()).length;
+    const response = await fetch(displayLink);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /text\/html/);
+    assert.match(response.headers.get("content-security-policy"), /default-src 'none'/);
+    const nonce = /script-src 'nonce-([^']+)'/.exec(response.headers.get("content-security-policy"))?.[1];
+    assert.ok(nonce && html.includes(`<script nonce="${nonce}">`));
+    assert.match(html, /<meta property="og:title" content="发布窗口">/);
+    assert.match(html, /<meta property="og:description" content="2026 年发布节奏约定/);
+    assert.ok(html.includes(`<meta property="og:url" content="${displayLink}">`));
+    assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/share-card\.png">/);
+    assert.match(html, /obsidian:\/\/open\?path=/);
+    assert.match(html, /复制分享链接/);
+    assert.doesNotMatch(html, /周五晚间不发布生产版本/);
+    assert.equal((await store.listActivity()).length, before);
+    const picture = await fetch(`${base}/share-card.png`);
+    assert.equal(picture.headers.get("content-type"), "image/png");
+    assert.deepEqual([...new Uint8Array(await picture.arrayBuffer()).slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.match(html, /<link rel="icon" href="http:\/\/127\.0\.0\.1:\d+\/share-icon\.png" type="image\/png">/);
+    const favicon = await fetch(`${base}/share-icon.png`);
+    assert.equal(favicon.headers.get("content-type"), "image/png");
+    const head = await fetch(displayLink, { method: "HEAD" });
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), "");
   });
   await test("dashboard records successful link use and ranks reusable notes", async () => {
     const insights = await store.getDashboardInsights();
@@ -146,7 +175,9 @@ try {
   await test("updating a note returns the same permanent link", async () => {
     const result = await api("PATCH", `/api/nodes/${textId}`, { content: "周五全天不发布生产版本。" });
     assert.equal(result.data.status, "updated"); assert.equal(result.data.link, textLink);
+    assert.equal(result.data.displayLink, displayLink);
     const resolved = await api("GET", textLink.replace(base, "")); assert.match(resolved.data.content, /周五全天/);
+    assert.doesNotMatch(await (await fetch(displayLink)).text(), /周五全天/);
   });
   await test("PATCH updates shared text through its scoped share API", async () => {
     const shareId = textLink.split("/").at(-2);
@@ -210,6 +241,10 @@ try {
     assert.deepEqual(result.data.entries, ["nested/", "README.md"].sort((a, b) => a.localeCompare(b))); assert.equal(result.data.entries.includes("nested/hidden.md"), false); assert.equal(result.data.address, folder);
     assert.equal(result.data.filePath, folder);
     assert.equal(liveActivities.at(-1)?.targetKind, "folder");
+    const html = await (await fetch(created.data.displayLink)).text();
+    assert.match(html, /<span class="kind">文件夹<\/span>/);
+    assert.doesNotMatch(html, /README\.md/);
+    assert.doesNotMatch(html, /obsidian:\/\/open\?path=/);
   });
 
   await test("direct vault file sharing needs no user-entered background", async () => {
@@ -220,6 +255,22 @@ try {
     const updated = await api("PATCH", `/api/shares/${created.data.id}`, { content: "updated through the share API" });
     assert.equal(updated.status, 200); assert.equal(updated.data.content, "updated through the share API");
     assert.equal(await fsp.readFile(path.join(vault, "plain.md"), "utf8"), "updated through the share API");
+    assert.equal(created.data.displayLink, `${base}/shares/${created.data.id}`);
+  });
+  await test("share card uses background in embedded frontmatter without exposing the note body", async () => {
+    const node = await store.createNode({ title: "含属性的笔记", content: "---\nagentnote: true\nid: private-id\n背景: 一份用于测试的建模任务。\n---\n\n不应出现在网页里的原文。" });
+    const share = await store.createShare(node.id);
+    const html = await (await fetch(`${base}/shares/${share.id}`)).text();
+    assert.match(html, /<meta property="og:description" content="一份用于测试的建模任务。">/);
+    assert.doesNotMatch(html, /private-id|不应出现在网页里的原文|agentnote: true/);
+  });
+  await test("share page escapes note title and metadata", async () => {
+    const node = await store.createNode({ title: '说明"><script>alert(1)</script>', content: '</pre><script>alert(2)</script>', background: '背景"<危险>' });
+    const share = await store.createShare(node.id);
+    const html = await (await fetch(`${base}/shares/${share.id}`)).text();
+    assert.doesNotMatch(html, /<script>/);
+    assert.doesNotMatch(html, /alert\(2\)/);
+    assert.match(html, /背景&quot;&lt;危险&gt;/);
   });
   await test("legacy activity records recover their document title from the share", async () => {
     const created = await api("POST", "/api/shares", { path: "plain.md" });
@@ -586,6 +637,9 @@ try {
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
+    assert.match(prompt, /displayLink/);
+    assert.match(prompt, /\/shares\/s-x-/);
+    assert.match(prompt, /\/api\/shares\/<shareId>\/resolve/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
     const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); const identity = JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")); assert.equal(identity.id, "codex"); assert.equal(identity.name, "Codex"); assert.match(identity.skillHash, /^[a-f0-9]{64}$/); assert.match(identity.defaultTemplateHash, /^[a-f0-9]{64}$/); await fsp.rm(home, { recursive: true, force: true });
   });

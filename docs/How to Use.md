@@ -49,7 +49,7 @@ Use the smallest useful piece of context:
 | A file or folder | Right-click it and choose **agentNote: Share with agent**. |
 | Part of a note | Select the text, then run **agentNote: Share selected content**. |
 
-agentNote copies a local URL to your clipboard. Paste the complete URL into the conversation with your agent.
+agentNote copies a local page URL to your clipboard. Paste the complete URL into the conversation; a connected agent reads the matching JSON API and returns the page URL in its reply.
 
 <p align="center">
   <img src="img/how-to/03-share-from-obsidian.png" alt="Obsidian file context menu with agentNote Share with agent highlighted" width="780">

@@ -470,7 +470,7 @@ class InsightsModal extends Modal {
   }
   private renderTimeline(parent: HTMLElement, insights: DashboardInsights): void {
     const agents = new Set(insights.timeline.map((event) => event.actor?.name ?? event.actor?.id).filter(Boolean));
-    this.renderTabHero(parent, "ACTIVITY LOG", "协作时间线", "分享链接每次成功访问都会留下记录；本地阅读指文件在 Obsidian 中保持打开超过 20 秒。", [[insights.timeline.length, "记录活动"], [agents.size, "参与 agent"], [insights.summary.weekResolves, "本周使用"]]);
+    this.renderTabHero(parent, "ACTIVITY LOG", "协作时间线", "分享 JSON 接口的成功读取会留下记录；网页预览不计入使用。本地阅读指文件在 Obsidian 中保持打开超过 20 秒。", [[insights.timeline.length, "记录活动"], [agents.size, "参与 agent"], [insights.summary.weekResolves, "本周使用"]]);
     const filters = parent.createDiv({ cls: "agentnote-timeline-filters" });
     for (const [filter, label] of [["all", "全部"], ["construction", "建设"], ["reuse", "使用"], ["connection", "连接"], ["organization", "整理"]] as const) {
       const button = filters.createEl("button", { text: label, cls: this.timelineFilter === filter ? "is-active" : "" });
