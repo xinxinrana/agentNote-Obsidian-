@@ -1,9 +1,9 @@
 import * as http from "http";
 import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateNodeInput, VaultStore } from "./store";
-import { NodeType, qualityWarnings } from "./types";
+import { NodeType, ShareTarget, qualityWarnings } from "./types";
 
 export type AgentOperation = "read" | "created" | "updated" | "archived";
-export interface AgentActivity { operation: AgentOperation; title: string; actor?: ActivityContext["actor"] }
+export interface AgentActivity { operation: AgentOperation; title: string; nodeId?: string; shareId?: string; targetKind?: ShareTarget["kind"]; actor?: ActivityContext["actor"] }
 export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void }
 const nodeView = (node: Awaited<ReturnType<VaultStore["getNode"]>>) => ({ ...node, warnings: qualityWarnings(node) });
 
@@ -55,7 +55,7 @@ export class AgentServer {
         const idempotencyKey = req.headers["idempotency-key"]?.toString() ?? body.idempotencyKey;
         const node = await this.store.createNode(body, idempotencyKey, context);
         const data = await this.withLink(node, "created", context);
-        this.notifyActivity({ operation: "created", title: node.title, actor: context.actor });
+        this.notifyActivity({ operation: "created", title: node.title, nodeId: node.id, targetKind: node.type === "folder" ? "folder" : "node", actor: context.actor });
         return send(res, 201, { ok: true, data });
       }
     }
@@ -65,14 +65,14 @@ export class AgentServer {
       if (method === "PUT" || method === "PATCH") {
         const node = await this.store.updateNode(id, await readBody(req) as UpdateNodeInput, context);
         const data = await this.withLink(node, "updated", context);
-        this.notifyActivity({ operation: "updated", title: node.title, actor: context.actor });
+        this.notifyActivity({ operation: "updated", title: node.title, nodeId: node.id, targetKind: node.type === "folder" ? "folder" : "node", actor: context.actor });
         return send(res, 200, { ok: true, data });
       }
     }
     if (parts[1] === "nodes" && parts.length === 4 && parts[3] === "archive" && method === "POST") {
       const body = await readBody(req) as { archived?: boolean };
       const node = await this.store.archiveNode(parts[2], body.archived !== false, context);
-      this.notifyActivity({ operation: "archived", title: node.title, actor: context.actor });
+      this.notifyActivity({ operation: "archived", title: node.title, nodeId: node.id, targetKind: node.type === "folder" ? "folder" : "node", actor: context.actor });
       return send(res, 200, { ok: true, data: nodeView(node) });
     }
     if (parts[1] === "shares" && parts.length === 2 && method === "POST") {
@@ -85,12 +85,12 @@ export class AgentServer {
       const body = await readBody(req) as { content?: unknown };
       if (typeof body.content !== "string") throw new StoreError(400, "content 必须是字符串");
       const data = await this.store.updateShareContent(parts[2], body.content, context);
-      this.notifyActivity({ operation: "updated", title: data.title, actor: context.actor });
+      this.notifyActivity({ operation: "updated", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "text" ? "node" : "file", actor: context.actor });
       return send(res, 200, { ok: true, data });
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
       const data = await this.store.resolveShare(parts[2], context);
-      this.notifyActivity({ operation: "read", title: data.title, actor: context.actor });
+      this.notifyActivity({ operation: "read", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "text" ? "node" : "file", actor: context.actor });
       if (url.searchParams.get("raw") === "1") {
         const text = data.kind === "folder" ? data.entries.join("\n") : data.content;
         res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "content-length": Buffer.byteLength(text) });

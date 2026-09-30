@@ -50,6 +50,29 @@
   animation: agentnote-activity-highlight 3s ease-out;
 }
 
+.agentnote-panel button.agentnote-activity-row {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.agentnote-panel button.agentnote-activity-row:hover {
+  background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+}
+
+.agentnote-panel button.agentnote-activity-row:hover span { color: var(--text-accent); }
+.agentnote-panel button.agentnote-activity-row:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.agentnote-panel button.agentnote-activity-row.is-new { animation: agentnote-activity-highlight 3s ease-out; }
+
 @keyframes agentnote-activity-highlight {
   0% { background: color-mix(in srgb, var(--interactive-accent) 16%, transparent); }
   100% { background: transparent; }

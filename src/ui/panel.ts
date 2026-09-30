@@ -11,6 +11,7 @@ import { toBlob } from "html-to-image";
 import { ACTIVITY_WEIGHTS, type DashboardInsights, type DocumentContribution, type InsightEvent, type InsightNote } from "../core/store";
 
 export const AGENTNOTE_VIEW = "agentnote-view";
+type ActivityLinkTarget = Pick<InsightEvent, "nodeId" | "documentId" | "shareId" | "path"> & Partial<Pick<InsightEvent, "type" | "targetKind">>;
 
 const AGENT_ICONS: Record<string, string> = {
   "claude-code": claudeCodeIcon,
@@ -27,7 +28,7 @@ export class AgentNoteView extends ItemView {
   private recentActivityContainer: HTMLElement | null = null;
   private recentActivityList: HTMLElement | null = null;
   private recentActivityEmpty: HTMLElement | null = null;
-  private pendingAgentActivity: { surface: HTMLElement; copy: HTMLElement; time: HTMLElement; agentName: string; title: string; operations: LiveAgentActivity["operation"][]; receivedAt: number } | null = null;
+  private pendingAgentActivity: { surface: HTMLElement; copy: HTMLElement; time: HTMLElement; agentName: string; title: string; targetKey: string; operations: LiveAgentActivity["operation"][]; receivedAt: number } | null = null;
   constructor(leaf: WorkspaceLeaf, private plugin: AgentNotePlugin) { super(leaf); }
   getViewType(): string { return AGENTNOTE_VIEW; }
   getDisplayText(): string { return "agentNote 接入台"; }
@@ -89,6 +90,27 @@ export class AgentNoteView extends ItemView {
     if (agentName === "分享链接") return `分享链接刚刚被访问「${title}」`;
     return `${agentName} 已${operations.map((operation) => this.operationLabel(operation)).join("并")}「${title}」`;
   }
+  private activityTargetKey(target: ActivityLinkTarget): string {
+    if (target.nodeId) return `node:${target.nodeId}`;
+    if (target.documentId) return `document:${target.documentId}`;
+    if (target.shareId) return `share:${target.shareId}`;
+    return target.path ? `path:${target.path}` : "";
+  }
+  private activitySurface(item: HTMLElement, target: ActivityLinkTarget, title: string): HTMLElement {
+    const canOpen = target.type !== "local-deleted" && target.targetKind !== "folder" && !!this.activityTargetKey(target);
+    if (!canOpen) return item.createDiv({ cls: "agentnote-activity-row" });
+    const row = item.createEl("button", { cls: "agentnote-activity-row is-link", attr: { "aria-label": `打开「${title}」` } });
+    row.onclick = () => void this.openActivityTarget(target);
+    return row;
+  }
+  private async openActivityTarget(target: ActivityLinkTarget): Promise<void> {
+    try {
+      const path = await this.plugin.store.activityFilePath(target);
+      const file = path ? this.app.vault.getAbstractFileByPath(path) : null;
+      if (!(file instanceof TFile)) throw new Error("原文件已不存在或不是文件");
+      await this.app.workspace.getLeaf("tab").openFile(file);
+    } catch (error) { new Notice(`无法打开资料：${(error as Error).message}`); }
+  }
   showAgentActivity(activity: LiveAgentActivity): void {
     const container = this.recentActivityContainer;
     if (!container) return;
@@ -97,7 +119,8 @@ export class AgentNoteView extends ItemView {
     this.recentActivityList = list;
     const now = Date.now();
     const pending = this.pendingAgentActivity;
-    if (pending && pending.agentName === activity.agentName && pending.title === activity.title && now - pending.receivedAt < 6_000) {
+    const targetKey = this.activityTargetKey(activity);
+    if (pending && pending.agentName === activity.agentName && pending.title === activity.title && pending.targetKey === targetKey && now - pending.receivedAt < 6_000) {
       if (!pending.operations.includes(activity.operation)) pending.operations.push(activity.operation);
       pending.copy.setText(this.liveActivityText(activity.agentName, activity.title, pending.operations));
       pending.time.setText("刚刚");
@@ -107,12 +130,13 @@ export class AgentNoteView extends ItemView {
       return;
     }
     const item = list.createEl("li");
-    const surface = item.createDiv({ cls: "agentnote-activity-row is-new" });
+    const surface = this.activitySurface(item, activity, activity.title);
+    surface.addClass("is-new");
     const copy = surface.createEl("span", { text: this.liveActivityText(activity.agentName, activity.title, [activity.operation]) });
     const time = surface.createEl("time", { text: "刚刚" });
     list.prepend(item);
     while (list.children.length > 3) list.lastElementChild?.remove();
-    this.pendingAgentActivity = { surface, copy, time, agentName: activity.agentName, title: activity.title, operations: [activity.operation], receivedAt: now };
+    this.pendingAgentActivity = { surface, copy, time, agentName: activity.agentName, title: activity.title, targetKey, operations: [activity.operation], receivedAt: now };
     window.setTimeout(() => surface.removeClass("is-new"), 3_000);
     window.setTimeout(() => { if (time.isConnected) time.setText(this.timeText(activity.at)); }, 3_500);
   }
@@ -149,7 +173,7 @@ export class AgentNoteView extends ItemView {
       this.recentActivityList = list;
       for (const event of insights.activities.slice(0, 3)) {
         const item = list.createEl("li");
-        const row = item.createDiv({ cls: "agentnote-activity-row" });
+        const row = this.activitySurface(item, event, event.title ?? "资料");
         row.createEl("span", { text: this.activityText(event) });
         row.createEl("time", { text: this.timeText(event.at) });
       }

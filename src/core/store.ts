@@ -524,6 +524,20 @@ export class VaultStore {
   }
   private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
   async listShares(): Promise<Share[]> { return this.readShares(); }
+  async activityFilePath(activity: Pick<InsightEvent, "nodeId" | "documentId" | "shareId" | "path">): Promise<string | null> {
+    if (activity.nodeId) return this.nodeFilePath(activity.nodeId).catch(() => null);
+    if (activity.documentId) {
+      const document = (await this.readDocuments()).find((candidate) => candidate.id === activity.documentId && !candidate.deletedAt);
+      return document?.path ?? null;
+    }
+    if (activity.shareId) {
+      const share = (await this.readShares()).find((candidate) => candidate.id === activity.shareId);
+      if (!share) return null;
+      if (share.target.kind === "node") return this.nodeFilePath(share.target.nodeId).catch(() => null);
+      return share.target.kind === "file" ? share.target.path : null;
+    }
+    return activity.path ?? null;
+  }
   private async readRegisteredAgents(): Promise<RegisteredAgent[]> {
     return this.readDataFile("agents.json", (value): value is RegisteredAgent[] => Array.isArray(value) && value.every((agent) => isRecord(agent) && typeof agent.id === "string" && typeof agent.name === "string" && !!agent.id.trim() && !!agent.name.trim()), []);
   }

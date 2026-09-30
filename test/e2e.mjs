@@ -49,6 +49,7 @@ try {
     assert.equal(activityNotifications, 1);
     assert.equal(liveActivities.at(-1)?.operation, "created");
     assert.equal(liveActivities.at(-1)?.title, "发布窗口");
+    assert.equal(liveActivities.at(-1)?.nodeId, result.data.id);
     assert.equal(liveActivities.at(-1)?.actor?.name, "Codex");
     assert.equal(liveActivities.at(-1)?.actor?.sessionTitle, "发布流程验证");
     assert.ok(result.data.link.startsWith(base)); assert.match(result.data.link, /\/api\/shares\/s-x-[0-9a-f]+\/resolve$/);
@@ -75,6 +76,7 @@ try {
     assert.ok(path.isAbsolute(result.data.filePath)); assert.match(result.data.hint, /优先通过本链接/);
     assert.equal(liveActivities.at(-1)?.operation, "read");
     assert.equal(liveActivities.at(-1)?.title, "发布窗口");
+    assert.equal(liveActivities.at(-1)?.shareId, textLink.split("/").at(-2));
   });
   await test("dashboard records successful link use and ranks reusable notes", async () => {
     const insights = await store.getDashboardInsights();
@@ -207,6 +209,7 @@ try {
     const result = await api("GET", `/api/shares/${created.data.id}/resolve`);
     assert.deepEqual(result.data.entries, ["nested/", "README.md"].sort((a, b) => a.localeCompare(b))); assert.equal(result.data.entries.includes("nested/hidden.md"), false); assert.equal(result.data.address, folder);
     assert.equal(result.data.filePath, folder);
+    assert.equal(liveActivities.at(-1)?.targetKind, "folder");
   });
 
   await test("direct vault file sharing needs no user-entered background", async () => {
@@ -269,6 +272,37 @@ try {
     } finally {
       await fsp.rm(localVault, { recursive: true, force: true });
     }
+  });
+
+  await test("recent activity targets follow stable IDs through moves and never guess by title", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-activity-links-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      await fsp.mkdir(path.join(root, "first"), { recursive: true });
+      await fsp.mkdir(path.join(root, "second"), { recursive: true });
+      await fsp.writeFile(path.join(root, "first", "同名.md"), "first");
+      await fsp.writeFile(path.join(root, "second", "同名.md"), "second");
+      await isolated.recordLocalActivity("local-created", "first/同名.md");
+      await isolated.recordLocalActivity("local-created", "second/同名.md");
+      const firstEvent = (await isolated.listActivity()).find((event) => event.path === "first/同名.md");
+      const secondEvent = (await isolated.listActivity()).find((event) => event.path === "second/同名.md");
+      assert.equal(await isolated.activityFilePath(firstEvent), "first/同名.md");
+      assert.equal(await isolated.activityFilePath(secondEvent), "second/同名.md");
+      const share = await isolated.createPathShare("second/同名.md");
+      assert.equal(await isolated.activityFilePath({ shareId: share.id }), "second/同名.md");
+      await fsp.rename(path.join(root, "second", "同名.md"), path.join(root, "second", "已整理.md"));
+      await isolated.recordLocalActivity("local-moved", "second/已整理.md", "second/同名.md");
+      assert.equal(await isolated.activityFilePath(secondEvent), "second/已整理.md");
+      assert.equal(await isolated.activityFilePath({ shareId: share.id }), "second/已整理.md");
+      const folder = await isolated.createPathShare("first");
+      assert.equal(await isolated.activityFilePath({ shareId: folder.id }), null);
+      await fsp.rm(path.join(root, "second", "已整理.md"));
+      await isolated.recordLocalActivity("local-deleted", "second/已整理.md");
+      assert.equal(await isolated.activityFilePath(secondEvent), null);
+      assert.equal(await isolated.activityFilePath({ nodeId: "missing" }), null);
+      assert.equal(await isolated.activityFilePath({}), null);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
   await test("custom Obsidian config folders stay out of activity and archive suggestions", async () => {

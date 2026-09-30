@@ -91,6 +91,8 @@ Archiving moves a note into the vault's archive folder. It is not deletion: the 
 
 Select **View full insights** in the connection panel to review local activity. The profile includes recent work, weekly rhythm, all-time contributions, agent activity, a timeline, and cleanup suggestions. All data stays in the vault.
 
+In **Recent activity**, click a row with a source file to open it in Obsidian. The row gains a subtle theme-colored hover state. Deletion events and folder records have no open action; if the original file is missing, the plugin shows a notice.
+
 ### Knowledge contribution records
 
 agentNote records local actions that put knowledge to work: user-created files, completed edit sessions, reading for more than 20 seconds, agent use, adding a new note link, moving, renaming, archiving, and deleting. Existing genuine collaboration records remain available; the plugin starts listening only after initialization, so it does not treat pre-existing files as newly created. It does not rate people or upload activity. A day's knowledge activity value is simply the combined value of those actions.
