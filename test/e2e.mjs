@@ -613,6 +613,7 @@ try {
 
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
+    assert.match(prompt, /description: .*27182 端口的地址时，使用它读取，不要用网页抓取工具直接访问。/);
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     assert.match(prompt, /类型 ｜ 文档标题/); assert.match(prompt, /Obsidian Markdown/); assert.match(prompt, /多个分享地址/);
     assert.match(prompt, /GET  http:\/\/127\.0\.0\.1:\d+\/api\/shares\/<id>\/links/);

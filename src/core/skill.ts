@@ -31,7 +31,7 @@ const TEMPLATE_TOKENS = {
 
 export const DEFAULT_SKILL_TEMPLATE = `---
 name: agentnote
-description: 用户的 Obsidian 本地笔记和文件中转系统。用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”时，使用它把内容写入笔记；用户给出 agentNote 分享地址时，直接读取地址。
+description: 用户的 Obsidian 本地笔记和文件中转系统。用户说“写到 Obsidian”、“写到 agent 笔记”、“记到笔记里”时，使用它把内容写入笔记；用户给出 27182 端口的地址时，使用它读取，不要用网页抓取工具直接访问。
 ---
 
 # agentNote
