@@ -42,7 +42,7 @@ Please read this material and summarize it:
 http://127.0.0.1:27182/api/shares/s-xxxx/resolve
 ```
 
-The address is live: changes to the original file appear on the same link. Agents read through the link first, then update the shared content through the share API.
+The address is live: changes to the original file appear on the same link. For shared Markdown notes, the response also includes a link to open the original in Obsidian. Agents keep using the local share link to read and update content.
 
 ## 2. Let an agent write notes
 
@@ -52,7 +52,7 @@ After connecting an agent, use natural language:
 - “Save this to my agent notes.”
 - “Remember this in my notes.”
 
-You can add a desired title, tags, or background. The agent writes a normal note to the vault and receives a permanent link. Later, “update the note we just made” updates the same note instead of creating a duplicate.
+You can add a desired title, tags, or background. The agent writes a normal note to the vault, shows an Obsidian link to open it, and keeps the local share link for reads and updates. Later, “update the note we just made” updates the same note instead of creating a duplicate.
 
 ## 3. Connect an agent
 

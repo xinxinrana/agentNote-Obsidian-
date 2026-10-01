@@ -1,4 +1,5 @@
 import * as http from "http";
+import * as path from "path";
 import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateNodeInput, VaultStore } from "./store";
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
 
@@ -34,10 +35,21 @@ export class AgentServer {
   }
   async stop(): Promise<void> { if (this.server) await new Promise<void>((resolve) => this.server!.close(() => resolve())); this.server = null; }
   private shareLink(shareId: string): string { return `http://127.0.0.1:${this.port ?? this.opts.port}/api/shares/${shareId}/resolve`; }
+  private obsidianUrl(filePath: string): string | undefined {
+    const relative = path.relative(this.store.root, filePath);
+    if (!path.isAbsolute(filePath) || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || path.extname(filePath).toLowerCase() !== ".md") return undefined;
+    return `obsidian://open?path=${encodeURIComponent(filePath)}`;
+  }
+  private withObsidianUrl<T extends { kind: string; filePath: string; hint: string }>(data: T): T & { obsidianUrl?: string } {
+    const obsidianUrl = data.kind === "folder" ? undefined : this.obsidianUrl(data.filePath);
+    return obsidianUrl ? { ...data, obsidianUrl, hint: `${data.hint} 向用户展示 obsidianUrl，可直接在 Obsidian 打开笔记。` } : data;
+  }
   private notifyActivity(activity: AgentActivity): void { try { this.opts.onActivity?.(activity); } catch (error) { console.warn("agentNote activity notification failed", error); } }
   private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated", context: ActivityContext) {
     const share = await this.store.ensureShareForNode(node.id, context);
-    return { status, link: this.shareLink(share.id), ...nodeView(node) };
+    const filePath = node.type === "snippet" ? path.join(this.store.root, await this.store.nodeFilePath(node.id)) : node.type === "file" && node.path ? path.resolve(this.store.root, node.path) : "";
+    const obsidianUrl = filePath ? this.obsidianUrl(filePath) : undefined;
+    return { status, link: this.shareLink(share.id), ...nodeView(node), ...(obsidianUrl ? { obsidianUrl, hint: "向用户展示 obsidianUrl，可直接在 Obsidian 打开笔记；读取和修改仍使用 link。" } : {}) };
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -86,7 +98,7 @@ export class AgentServer {
       if (typeof body.content !== "string") throw new StoreError(400, "content 必须是字符串");
       const data = await this.store.updateShareContent(parts[2], body.content, context);
       this.notifyActivity({ operation: "updated", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "text" ? "node" : "file", actor: context.actor });
-      return send(res, 200, { ok: true, data });
+      return send(res, 200, { ok: true, data: this.withObsidianUrl(data) });
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
       const data = await this.store.resolveShare(parts[2], context);
@@ -96,7 +108,7 @@ export class AgentServer {
         res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "content-length": Buffer.byteLength(text) });
         return void res.end(text);
       }
-      return send(res, 200, { ok: true, data });
+      return send(res, 200, { ok: true, data: this.withObsidianUrl(data) });
     }
     if (parts[1] === "insights" && method === "GET") {
       if (parts[2] === "overview") return send(res, 200, { ok: true, data: await this.store.getDashboardInsights() });

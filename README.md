@@ -78,7 +78,7 @@ After connecting an agent, say one of the following:
 - “Save this to my agent notes.”
 - “Remember this in my notes.”
 
-The agentNote skill asks the agent to create a title, body, background, and tags, then write the result to the vault. The agent receives a permanent local link that can be used for later updates.
+The agentNote skill asks the agent to create a title, body, background, and tags, then write the result to the vault. It can show you an Obsidian link that opens the note directly, while keeping the local share link for later reads and updates.
 
 ### Connect an agent
 

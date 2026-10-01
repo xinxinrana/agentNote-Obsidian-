@@ -53,6 +53,8 @@ try {
     assert.equal(liveActivities.at(-1)?.actor?.name, "Codex");
     assert.equal(liveActivities.at(-1)?.actor?.sessionTitle, "发布流程验证");
     assert.ok(result.data.link.startsWith(base)); assert.match(result.data.link, /\/api\/shares\/s-x-[0-9a-f]+\/resolve$/);
+    assert.equal(result.data.obsidianUrl, `obsidian://open?path=${encodeURIComponent(path.join(vault, await store.nodeFilePath(textId)))}`);
+    assert.match(result.data.hint, /向用户展示 obsidianUrl/);
     textLink = result.data.link;
   });
   await test("legacy shares do not turn successful writes into failed responses", async () => {
@@ -74,6 +76,8 @@ try {
     const result = await api("GET", textLink.replace(base, ""), undefined, { "x-agentnote-agent-name": "Codex", "x-agentnote-session-title": encodeURIComponent("发布流程验证") });
     assert.equal(result.data.kind, "text"); assert.equal(result.data.content, "周五晚间不发布生产版本。");
     assert.ok(path.isAbsolute(result.data.filePath)); assert.match(result.data.hint, /优先通过本链接/);
+    assert.equal(result.data.obsidianUrl, `obsidian://open?path=${encodeURIComponent(result.data.filePath)}`);
+    assert.match(result.data.hint, /向用户展示 obsidianUrl/);
     assert.equal(liveActivities.at(-1)?.operation, "read");
     assert.equal(liveActivities.at(-1)?.title, "发布窗口");
     assert.equal(liveActivities.at(-1)?.shareId, textLink.split("/").at(-2));
@@ -146,12 +150,14 @@ try {
   await test("updating a note returns the same permanent link", async () => {
     const result = await api("PATCH", `/api/nodes/${textId}`, { content: "周五全天不发布生产版本。" });
     assert.equal(result.data.status, "updated"); assert.equal(result.data.link, textLink);
+    assert.equal(result.data.obsidianUrl, `obsidian://open?path=${encodeURIComponent(path.join(vault, await store.nodeFilePath(textId)))}`);
     const resolved = await api("GET", textLink.replace(base, "")); assert.match(resolved.data.content, /周五全天/);
   });
   await test("PATCH updates shared text through its scoped share API", async () => {
     const shareId = textLink.split("/").at(-2);
     const result = await api("PATCH", `/api/shares/${shareId}`, { content: "周五至周日不发布生产版本。" });
     assert.equal(result.status, 200); assert.equal(result.data.kind, "text"); assert.match(result.data.content, /周五至周日/);
+    assert.equal(result.data.obsidianUrl, `obsidian://open?path=${encodeURIComponent(result.data.filePath)}`);
     const resolved = await api("GET", textLink.replace(base, "")); assert.match(resolved.data.content, /周五至周日/);
   });
   await test("PATCH updates the archived state and returns the complete node", async () => {
@@ -209,6 +215,7 @@ try {
     const result = await api("GET", `/api/shares/${created.data.id}/resolve`);
     assert.deepEqual(result.data.entries, ["nested/", "README.md"].sort((a, b) => a.localeCompare(b))); assert.equal(result.data.entries.includes("nested/hidden.md"), false); assert.equal(result.data.address, folder);
     assert.equal(result.data.filePath, folder);
+    assert.equal(result.data.obsidianUrl, undefined);
     assert.equal(liveActivities.at(-1)?.targetKind, "folder");
   });
 
@@ -217,9 +224,21 @@ try {
     const created = await api("POST", "/api/shares", { path: "plain.md" });
     const result = await api("GET", `/api/shares/${created.data.id}/resolve`);
     assert.equal(result.data.kind, "file"); assert.equal(result.data.address, "plain.md"); assert.equal(result.data.background, "");
+    assert.equal(result.data.obsidianUrl, `obsidian://open?path=${encodeURIComponent(path.join(vault, "plain.md"))}`);
     const updated = await api("PATCH", `/api/shares/${created.data.id}`, { content: "updated through the share API" });
     assert.equal(updated.status, 200); assert.equal(updated.data.content, "updated through the share API");
     assert.equal(await fsp.readFile(path.join(vault, "plain.md"), "utf8"), "updated through the share API");
+  });
+  await test("Obsidian URLs encode note paths and skip non-notes", async () => {
+    const note = "会议 & 决策.md";
+    await fsp.writeFile(path.join(vault, note), "会议记录");
+    const sharedNote = await api("POST", "/api/shares", { path: note });
+    const resolvedNote = await api("GET", `/api/shares/${sharedNote.data.id}/resolve`);
+    assert.equal(resolvedNote.data.obsidianUrl, `obsidian://open?path=${encodeURIComponent(path.join(vault, note))}`);
+    await fsp.writeFile(path.join(vault, "data.txt"), "text");
+    const sharedText = await api("POST", "/api/shares", { path: "data.txt" });
+    const resolvedText = await api("GET", `/api/shares/${sharedText.data.id}/resolve`);
+    assert.equal(resolvedText.data.obsidianUrl, undefined);
   });
   await test("legacy activity records recover their document title from the share", async () => {
     const created = await api("POST", "/api/shares", { path: "plain.md" });
@@ -238,6 +257,7 @@ try {
     assert.equal(archived.data.archived, true);
     assert.ok(fs.existsSync(path.join(vault, "agentNote", "nodes", "归档", "发布窗口.md")));
     const resolved = await api("GET", `/api/shares/${share.data.id}/resolve`); assert.equal(resolved.status, 200);
+    assert.equal(resolved.data.obsidianUrl, `obsidian://open?path=${encodeURIComponent(path.join(vault, "agentNote", "nodes", "归档", "发布窗口.md"))}`);
     const documentAfter = (await store.getDashboardInsights()).documents.find((entry) => entry.document.id === documentBefore?.document.id);
     assert.ok(documentAfter); assert.match(documentAfter.document.path, /归档/);
     assert.ok(documentAfter.score >= documentBefore.score);
@@ -587,6 +607,7 @@ try {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     assert.match(prompt, /类型 ｜ 文档标题/); assert.match(prompt, /Obsidian Markdown/); assert.match(prompt, /多个分享地址/);
+    assert.match(prompt, /向用户展示 `obsidianUrl`/); assert.match(prompt, /`link` 留给你读取和修改/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
     const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); const identity = JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")); assert.equal(identity.id, "codex"); assert.equal(identity.name, "Codex"); assert.match(identity.skillHash, /^[a-f0-9]{64}$/); assert.match(identity.defaultTemplateHash, /^[a-f0-9]{64}$/); await fsp.rm(home, { recursive: true, force: true });
   });
