@@ -77,7 +77,7 @@ agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、W
 - “写到 agent 笔记。”
 - “记到笔记里。”
 
-agent 会整理标题、正文、背景与标签，并写入 vault。回复中可以给出点击后直达笔记的 Obsidian 链接；agent 则保留本地分享地址，用于后续读取和更新。
+agent 会整理标题、正文、背景与标签，并写入 vault。写入成功后会获得一条可供后续更新的永久本地地址。
 
 ### 接入 agent
 
