@@ -322,7 +322,7 @@ export default class AgentNotePlugin extends Plugin {
     }
     if (links.length) {
       try {
-        await navigator.clipboard.writeText(links.join("\n"));
+        await navigator.clipboard.writeText(links.join("\n\n---\n\n"));
         new Notice(`已复制 ${links.length} 个分享地址，直接发给 agent 即可。`, 4000);
       } catch (error) { new Notice(`复制分享地址失败：${(error as Error).message}`); }
     }
