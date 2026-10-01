@@ -71,7 +71,7 @@ POST {{baseUrl}}/api/nodes
 
 追加 \`?raw=1\` 只获取内容文本。不要要求用户复制原文件或重新粘贴正文。
 
-分享的 Markdown 笔记含双链时，如任务需要读取目标笔记，先 GET \`{{baseUrl}}/api/shares/<shareId>/links\` 查出 \`targetPath\`；再用该路径 POST \`{{baseUrl}}/api/shares\`（请求体 \`{"path":"<targetPath>"}\`），GET 新分享地址的 \`/resolve\` 读取内容。只按任务需要读取，不递归展开全部双链；查询双链不算使用目标，成功读取才会记录。
+按需读取分享笔记中的双链目标：GET \`{{baseUrl}}/api/shares/<id>/links\` 获取 \`targetPath\`，再 POST \`{{baseUrl}}/api/shares\`（\`{"path":"<targetPath>"}\`）并 GET 返回的 \`/resolve\`。
 
 ## 固定身份与工作轨迹（必须携带）
 
