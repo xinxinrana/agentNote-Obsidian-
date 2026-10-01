@@ -63,6 +63,7 @@ agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、W
 ### 分享资料给 agent
 
 - 右键文件或文件夹，选择 **agentNote: 分享给 agent**。
+- 在文件树中多选文件或文件夹后右键，选择 **agentNote: 分享选中项目给 agent**；剪贴板会得到逐项标注路径的分享地址，一次粘贴给 agent 即可。
 - 在编辑器中选中文本，使用 **agentNote: 分享选中文本**。
 - 把自动复制的本地地址发给 agent。
 

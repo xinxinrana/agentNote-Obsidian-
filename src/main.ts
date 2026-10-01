@@ -58,6 +58,10 @@ export default class AgentNotePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
+    this.registerEvent(this.app.workspace.on("files-menu", (menu, files) => {
+      if (files.length < 2) return;
+      menu.addItem((item) => item.setTitle("agentNote: 分享选中项目给 agent").setIcon("link").onClick(() => void this.sharePaths(files.map((file) => file.path))));
+    }));
     this.app.workspace.onLayoutReady(() => this.registerLocalActivityTracking());
     this.scheduleColdBackup();
     if (this.settings.autostartServer) await this.startServer(true);
@@ -302,10 +306,29 @@ export default class AgentNotePlugin extends Plugin {
     try { const share = await this.store.createPathShare(relPath, undefined, selection); await this.copyShareUrl(share.id); }
     catch (error) { new Notice(`分享失败：${(error as Error).message}`); }
   }
-  async copyShareUrl(id: string): Promise<void> {
+  private async sharePaths(paths: string[]): Promise<void> {
+    const links: string[] = [];
+    const failures: string[] = [];
+    for (const relPath of [...new Set(paths)]) {
+      try {
+        const share = await this.store.createPathShare(relPath);
+        links.push(`${relPath}: ${this.shareUrl(share.id)}`);
+      } catch (error) { failures.push(`${relPath}：${(error as Error).message}`); }
+    }
+    if (links.length) {
+      try {
+        await navigator.clipboard.writeText(links.join("\n"));
+        new Notice(`已复制 ${links.length} 个分享地址，直接发给 agent 即可。`, 4000);
+      } catch (error) { new Notice(`复制分享地址失败：${(error as Error).message}`); }
+    }
+    if (failures.length) new Notice(`有 ${failures.length} 项分享失败：${failures.join("；")}`, 7000);
+  }
+  private shareUrl(id: string): string {
     const port = this.server?.port ?? this.settings.port;
-    const url = `http://127.0.0.1:${port}/api/shares/${id}/resolve`;
-    await navigator.clipboard.writeText(url);
+    return `http://127.0.0.1:${port}/api/shares/${id}/resolve`;
+  }
+  async copyShareUrl(id: string): Promise<void> {
+    await navigator.clipboard.writeText(this.shareUrl(id));
     new Notice("分享地址已复制，直接发给 agent 即可。", 4000);
   }
   async loadSettings(): Promise<void> {

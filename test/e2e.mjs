@@ -586,6 +586,7 @@ try {
   await test("installed agent prompt recognizes writing to Obsidian and correct share forms", async () => {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
+    assert.match(prompt, /类型 ｜ 文档标题/); assert.match(prompt, /Obsidian Markdown/); assert.match(prompt, /多个分享地址/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
     const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); const identity = JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")); assert.equal(identity.id, "codex"); assert.equal(identity.name, "Codex"); assert.match(identity.skillHash, /^[a-f0-9]{64}$/); assert.match(identity.defaultTemplateHash, /^[a-f0-9]{64}$/); await fsp.rm(home, { recursive: true, force: true });
   });

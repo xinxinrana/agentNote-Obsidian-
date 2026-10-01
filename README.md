@@ -64,6 +64,7 @@ Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete
 ### Share content with an agent
 
 - Right-click a file or folder and choose **agentNote: Share with agent**.
+- Select multiple files or folders in the file explorer, then choose **agentNote: Share selected items with agent**. The clipboard contains one labeled link per item, ready to paste together.
 - Select text in the editor and use **agentNote: Share selected content**.
 - Send the copied local URL to your agent.
 
