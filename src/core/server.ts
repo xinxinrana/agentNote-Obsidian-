@@ -4,7 +4,8 @@ import { NodeType, ShareTarget, qualityWarnings } from "./types";
 
 export type AgentOperation = "read" | "created" | "updated" | "archived";
 export interface AgentActivity { operation: AgentOperation; title: string; nodeId?: string; shareId?: string; targetKind?: ShareTarget["kind"]; actor?: ActivityContext["actor"] }
-export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void }
+export interface ShareLinkInfo { original: string; link: string; displayText?: string; targetPath: string | null; subpath: string | null; status: "resolved" | "unresolved" }
+export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void; listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]> }
 const nodeView = (node: Awaited<ReturnType<VaultStore["getNode"]>>) => ({ ...node, warnings: qualityWarnings(node) });
 
 async function readBody(req: http.IncomingMessage): Promise<unknown> {
@@ -87,6 +88,11 @@ export class AgentServer {
       const data = await this.store.updateShareContent(parts[2], body.content, context);
       this.notifyActivity({ operation: "updated", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "text" ? "node" : "file", actor: context.actor });
       return send(res, 200, { ok: true, data });
+    }
+    if (parts[1] === "shares" && parts.length === 4 && parts[3] === "links" && method === "GET") {
+      const sourcePath = await this.store.shareSourcePath(parts[2]);
+      if (!this.opts.listLinks) throw new StoreError(503, "Obsidian 双链索引不可用");
+      return send(res, 200, { ok: true, data: { sourcePath, links: await this.opts.listLinks(sourcePath) } });
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
       const data = await this.store.resolveShare(parts[2], context);

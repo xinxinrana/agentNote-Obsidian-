@@ -524,6 +524,26 @@ export class VaultStore {
   }
   private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
   async listShares(): Promise<Share[]> { return this.readShares(); }
+  async shareSourcePath(id: string): Promise<string> {
+    const share = (await this.readShares()).find((candidate) => candidate.id === id);
+    if (!share) throw new StoreError(404, `分享不存在: ${id}`);
+    if (share.selection) throw new StoreError(400, "选段分享暂不支持查询双链");
+    if (share.target.kind === "folder") throw new StoreError(400, "文件夹分享不能查询双链");
+    let sourcePath: string;
+    if (share.target.kind === "file") sourcePath = this.vaultPath(share.target.path).rel;
+    else {
+      const node = await this.getNode(share.target.nodeId);
+      if (node.type === "folder") throw new StoreError(400, "文件夹分享不能查询双链");
+      if (node.type === "snippet") sourcePath = await this.nodeFilePath(node.id);
+      else {
+        if (!node.path) throw new StoreError(410, "笔记缺少文件地址");
+        sourcePath = path.relative(this.root, path.resolve(node.path)).split(path.sep).join("/");
+        if (sourcePath === ".." || sourcePath.startsWith("../") || path.isAbsolute(sourcePath)) throw new StoreError(400, "仅支持 vault 内的 Markdown 文件");
+      }
+    }
+    if (!sourcePath.toLowerCase().endsWith(".md")) throw new StoreError(400, "仅支持 Markdown 文件的双链查询");
+    return sourcePath;
+  }
   async activityFilePath(activity: Pick<InsightEvent, "nodeId" | "documentId" | "shareId" | "path">): Promise<string | null> {
     if (activity.nodeId) return this.nodeFilePath(activity.nodeId).catch(() => null);
     if (activity.documentId) {

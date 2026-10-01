@@ -23,7 +23,7 @@ async function localEventsPath(root) {
 const store = new VaultStore(vault);
 let activityNotifications = 0;
 const liveActivities = [];
-const server = new AgentServer(store, { port: 0, onActivity: (activity) => { activityNotifications++; liveActivities.push(activity); } });
+const server = new AgentServer(store, { port: 0, onActivity: (activity) => { activityNotifications++; liveActivities.push(activity); }, listLinks: async (sourcePath) => sourcePath === "linked-source.md" ? [{ original: "[[linked-target|目标]]", link: "linked-target", displayText: "目标", targetPath: "linked-target.md", subpath: null, status: "resolved" }] : [] });
 const port = await server.start();
 const base = `http://127.0.0.1:${port}`;
 let passed = 0;
@@ -220,6 +220,34 @@ try {
     const updated = await api("PATCH", `/api/shares/${created.data.id}`, { content: "updated through the share API" });
     assert.equal(updated.status, 200); assert.equal(updated.data.content, "updated through the share API");
     assert.equal(await fsp.readFile(path.join(vault, "plain.md"), "utf8"), "updated through the share API");
+  });
+  await test("linked target can be shared and read after a read-only link lookup", async () => {
+    await fsp.writeFile(path.join(vault, "linked-source.md"), "见 [[linked-target|目标]]");
+    await fsp.writeFile(path.join(vault, "linked-target.md"), "目标正文");
+    const source = await api("POST", "/api/shares", { path: "linked-source.md" });
+    assert.equal(source.status, 201);
+    const before = (await store.listActivity()).length;
+    const notifications = activityNotifications;
+    const links = await api("GET", `/api/shares/${source.data.id}/links`);
+    assert.equal(links.status, 200);
+    assert.equal(links.data.sourcePath, "linked-source.md");
+    assert.deepEqual(links.data.links, [{ original: "[[linked-target|目标]]", link: "linked-target", displayText: "目标", targetPath: "linked-target.md", subpath: null, status: "resolved" }]);
+    assert.equal((await store.listActivity()).length, before);
+    assert.equal(activityNotifications, notifications);
+    const target = await api("POST", "/api/shares", { path: links.data.links[0].targetPath });
+    assert.equal(target.status, 201);
+    const resolved = await api("GET", `/api/shares/${target.data.id}/resolve`);
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.data.content, "目标正文");
+    assert.ok((await store.listActivity()).some((event) => event.type === "share-resolved" && event.shareId === target.data.id));
+  });
+  await test("link lookup rejects shares without a whole Markdown source", async () => {
+    assert.equal((await api("GET", "/api/shares/missing/links")).status, 404);
+    await fsp.writeFile(path.join(vault, "other.txt"), "plain");
+    const txt = await api("POST", "/api/shares", { path: "other.txt" });
+    assert.equal((await api("GET", `/api/shares/${txt.data.id}/links`)).status, 400);
+    const selection = await api("POST", "/api/shares", { path: "linked-source.md", selection: "见" });
+    assert.equal((await api("GET", `/api/shares/${selection.data.id}/links`)).status, 400);
   });
   await test("legacy activity records recover their document title from the share", async () => {
     const created = await api("POST", "/api/shares", { path: "plain.md" });
@@ -587,6 +615,8 @@ try {
     const prompt = renderSkillMd({ port, instructions: "使用中文。", agentId: "codex", agentName: "Codex" });
     assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /agent 笔记/); assert.match(prompt, /background/); assert.match(prompt, /tags/); assert.match(prompt, /第一层文件名称/); assert.match(prompt, /filePath/); assert.match(prompt, /link/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /X-AgentNote-Agent-Id: codex/); assert.match(prompt, /X-AgentNote-Agent-Name: Codex/); assert.match(prompt, /X-AgentNote-Session-Title/); assert.doesNotMatch(prompt, /scenarios/);
     assert.match(prompt, /类型 ｜ 文档标题/); assert.match(prompt, /Obsidian Markdown/); assert.match(prompt, /多个分享地址/);
+    assert.match(prompt, /GET  http:\/\/127\.0\.0\.1:\d+\/api\/shares\/<id>\/links/);
+    assert.match(prompt, /成功读取才会记录/);
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-home-")); await fsp.mkdir(path.join(home, ".codex"));
     const codex = detectAgents(home).find((agent) => agent.id === "codex"); installSkill(codex.skillDir, { port, agentId: codex.id, agentName: codex.name }); assert.ok(fs.existsSync(path.join(codex.skillDir, "SKILL.md"))); const identity = JSON.parse(await fsp.readFile(path.join(codex.skillDir, "agentnote.identity.json"), "utf8")); assert.equal(identity.id, "codex"); assert.equal(identity.name, "Codex"); assert.match(identity.skillHash, /^[a-f0-9]{64}$/); assert.match(identity.defaultTemplateHash, /^[a-f0-9]{64}$/); await fsp.rm(home, { recursive: true, force: true });
   });

@@ -1,11 +1,11 @@
 import * as os from "os";
 import * as path from "path";
-import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile } from "obsidian";
+import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, parseLinktext } from "obsidian";
 import { AgentServer } from "./core/server";
-import type { AgentActivity } from "./core/server";
+import type { AgentActivity, ShareLinkInfo } from "./core/server";
 import { detectAgents, DetectedAgent, installSkill, uninstallSkill } from "./core/skill";
 import { isNewerVersion } from "./core/version";
-import { VaultStore } from "./core/store";
+import { StoreError, VaultStore } from "./core/store";
 import { isLocalActivityBurst } from "./core/activityLog";
 import { isNodeFile } from "./core/nodeFile";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
@@ -233,6 +233,17 @@ export default class AgentNotePlugin extends Plugin {
   private referenceTargets(file: TFile): string[] {
     return [...new Set((this.app.metadataCache.getFileCache(file)?.links ?? []).map((link) => this.app.metadataCache.getFirstLinkpathDest(link.link, file.path)?.path).filter((target): target is string => !!target && target.toLowerCase().endsWith(".md")))];
   }
+  private async listShareLinks(sourcePath: string): Promise<ShareLinkInfo[]> {
+    const file = this.app.vault.getFileByPath(sourcePath);
+    if (!file) throw new StoreError(404, `来源笔记不存在: ${sourcePath}`);
+    const cache = this.app.metadataCache.getFileCache(file);
+    if (!cache) throw new StoreError(503, "来源笔记的双链索引尚未就绪");
+    return (cache.links ?? []).map(({ original, link, displayText }) => {
+      const { path: linkPath, subpath } = parseLinktext(link);
+      const target = linkPath ? this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path) : file;
+      return { original, link, ...(displayText ? { displayText } : {}), targetPath: target?.path ?? null, subpath: subpath || null, status: target ? "resolved" : "unresolved" };
+    });
+  }
   private trackDocumentReferences(file: TFile, recordAdditions: boolean): void {
     if (!this.isTrackedMarkdown(file)) return;
     void this.store.recordDocumentReferences(file.path, this.referenceTargets(file), recordAdditions)
@@ -266,7 +277,7 @@ export default class AgentNotePlugin extends Plugin {
   }
   async startServer(quiet = false): Promise<void> {
     if (this.server) return;
-    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity) });
+    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity), listLinks: (sourcePath) => this.listShareLinks(sourcePath) });
     try { await this.server.start(); if (!quiet) new Notice(`agentNote 服务已启动：127.0.0.1:${this.server.port}`); }
     catch (error) { this.server = null; new Notice(`agentNote 服务启动失败：${(error as Error).message}`); }
     this.refreshPanels();
