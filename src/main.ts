@@ -60,7 +60,7 @@ export default class AgentNotePlugin extends Plugin {
     }));
     this.registerEvent(this.app.workspace.on("files-menu", (menu, files) => {
       if (files.length < 2) return;
-      menu.addItem((item) => item.setTitle("agentNote: 分享选中项目给 agent").setIcon("link").onClick(() => void this.sharePaths(files.map((file) => file.path))));
+      menu.addItem((item) => item.setTitle("agentNote: 分享选中项目给 agent").setIcon("link").onClick(() => void this.sharePaths(files)));
     }));
     this.app.workspace.onLayoutReady(() => this.registerLocalActivityTracking());
     this.scheduleColdBackup();
@@ -306,13 +306,18 @@ export default class AgentNotePlugin extends Plugin {
     try { const share = await this.store.createPathShare(relPath, undefined, selection); await this.copyShareUrl(share.id); }
     catch (error) { new Notice(`分享失败：${(error as Error).message}`); }
   }
-  private async sharePaths(paths: string[]): Promise<void> {
+  private async sharePaths(files: TAbstractFile[]): Promise<void> {
     const links: string[] = [];
     const failures: string[] = [];
-    for (const relPath of [...new Set(paths)]) {
+    const seen = new Set<string>();
+    for (const file of files) {
+      const relPath = file.path;
+      if (seen.has(relPath)) continue;
+      seen.add(relPath);
       try {
         const share = await this.store.createPathShare(relPath);
-        links.push(`${relPath}: ${this.shareUrl(share.id)}`);
+        const title = file instanceof TFile ? file.basename : file.name;
+        links.push(`${title}: ${this.shareUrl(share.id)}`);
       } catch (error) { failures.push(`${relPath}：${(error as Error).message}`); }
     }
     if (links.length) {
