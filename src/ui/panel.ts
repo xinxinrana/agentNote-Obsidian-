@@ -20,7 +20,11 @@ const AGENT_ICONS: Record<string, string> = {
 };
 
 function renderCompanion(parent: HTMLElement, pose: "idle" | "wave" = "idle"): void {
-  parent.createEl("img", { cls: "agentnote-companion", attr: { src: pose === "wave" ? xiaojiWave : xiaojiIdle, alt: "小记，agentNote 的笔记伙伴" } });
+  const companion = parent.createEl("img", { cls: "agentnote-companion", attr: { src: pose === "wave" ? xiaojiWave : xiaojiIdle, alt: "小记，agentNote 的笔记伙伴" } });
+  if (pose === "idle") {
+    companion.addEventListener("pointerenter", () => { companion.src = xiaojiWave; });
+    companion.addEventListener("pointerleave", () => { companion.src = xiaojiIdle; });
+  }
 }
 
 export class AgentNoteView extends ItemView {
@@ -151,12 +155,8 @@ export class AgentNoteView extends ItemView {
     const heroCopy = heroHeading.createDiv();
     heroCopy.createEl("span", { cls: "agentnote-eyebrow", text: "本地知识洞察" });
     heroCopy.createEl("h4", { text: "知识正在持续进入工作流" });
+    renderCompanion(heroHeading);
     overview.createEl("p", { text: insights.summary.weekActivityCount ? `本周完成 ${insights.summary.weekActivityCount} 次知识活动：建设 ${insights.summary.weekCreated}、维护与整理 ${insights.summary.weekUpdated}、分享 ${insights.summary.weekSharesCreated}、使用 ${insights.summary.weekResolves}。` : "创建、维护、使用或整理资料后，这里会留下完整的知识活动。" });
-    const companionCard = overview.createDiv({ cls: "agentnote-companion-feature" });
-    renderCompanion(companionCard);
-    const companionCopy = companionCard.createDiv();
-    companionCopy.createEl("strong", { text: "小记" });
-    companionCopy.createEl("span", { text: "陪你把本地资料带进每一次协作" });
     const stats = overview.createDiv({ cls: "agentnote-metric-strip" });
     for (const [value, label] of [[insights.summary.weekActivityScore, "知识活跃分"], [insights.summary.weekUpdated, "本周更新"], [insights.summary.weekResolves, "本周复用"]] as const) {
       const stat = stats.createDiv({ cls: "agentnote-metric" }); stat.createEl("strong", { text: String(value) }); stat.createEl("span", { text: label });
