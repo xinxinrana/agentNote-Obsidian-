@@ -19,6 +19,16 @@ const AGENT_ICONS: Record<string, string> = {
   workbuddy: workbuddyIcon,
 };
 
+function contributionShade(count: number, min: number, max: number): Record<string, string> {
+  const low = Math.log1p(min);
+  const high = Math.log1p(max);
+  const position = high === low ? 0.5 : (Math.log1p(count) - low) / (high - low);
+  return {
+    "--agentnote-activity-strength": `${Math.round(28 + position * 62)}%`,
+    "--agentnote-activity-darkness": `${Math.round(Math.max(0, position - 0.55) * 30)}%`,
+  };
+}
+
 function renderCompanion(parent: HTMLElement, pose: "idle" | "wave" = "idle"): void {
   const companion = parent.createEl("img", { cls: "agentnote-companion", attr: { src: pose === "wave" ? xiaojiWave : xiaojiIdle, alt: "小记，agentNote 的笔记伙伴" } });
   if (pose === "idle") {
@@ -452,6 +462,7 @@ class InsightsModal extends Modal {
     }
   }
   private renderContributionGraph(parent: HTMLElement, trend: { label: string; count: number }[], max: number): void {
+    const min = Math.min(...trend.filter((point) => point.count > 0).map((point) => point.count));
     const firstDate = new Date(`${trend[0]?.label ?? "1970-01-01"}T00:00:00`);
     const leadingDays = firstDate.getDay();
     const weeks = Math.ceil((leadingDays + trend.length) / 7);
@@ -474,7 +485,7 @@ class InsightsModal extends Modal {
         lastMonthColumn = column;
       }
       const cell = grid.createEl("span", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": `${point.label}：${point.count} 知识活跃分` } });
-      if (point.count) cell.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.18 + point.count / max * 0.58) * 100)}%` });
+      if (point.count) cell.setCssProps(contributionShade(point.count, min, max));
     }
   }
   private renderTimeline(parent: HTMLElement, insights: DashboardInsights): void {
@@ -591,6 +602,7 @@ class InsightShareModal extends Modal {
     const activeDays = this.activeDays();
     const trend = this.insights.allTimeTrend;
     const max = Math.max(1, ...trend.map((point) => point.count));
+    const min = Math.min(...trend.filter((point) => point.count > 0).map((point) => point.count));
     const start = new Date(this.insights.startedAt).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
     const brand = parent.createDiv({ cls: "agentnote-share-brand-row" });
     brand.createEl("span", { cls: "agentnote-share-brand", text: "agentNote · Local knowledge profile" });
@@ -622,7 +634,7 @@ class InsightShareModal extends Modal {
         lastMonthColumn = column;
       }
       const cell = grid.createEl("span", { cls: `agentnote-share-contribution-cell${point.count ? " is-active" : ""}`, attr: { title: `${point.label}：${point.count} 知识活跃分` } });
-      if (point.count) cell.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.18 + point.count / max * 0.58) * 100)}%` });
+      if (point.count) cell.setCssProps(contributionShade(point.count, min, max));
     }
     const top = parent.createDiv({ cls: "agentnote-share-top-note" });
     top.createEl("span", { text: "开始以来的协作资料" });

@@ -727,8 +727,9 @@
 
 .agentnote-share-contribution-cell.is-empty { visibility: hidden; }
 .agentnote-share-contribution-cell.is-active {
-  border-color: var(--interactive-accent);
+  border-color: color-mix(in srgb, var(--interactive-accent) var(--agentnote-activity-strength, 35%), var(--background-modifier-border));
   background: color-mix(in srgb, var(--interactive-accent) var(--agentnote-activity-strength, 35%), var(--background-primary));
+  box-shadow: inset 0 0 0 20px rgb(0 0 0 / var(--agentnote-activity-darkness, 0%));
 }
 
 .agentnote-share-top-note {
@@ -1087,8 +1088,9 @@
 }
 
 .agentnote-contribution-cell.is-active {
-  border-color: var(--interactive-accent);
+  border-color: color-mix(in srgb, var(--interactive-accent) var(--agentnote-activity-strength, 35%), var(--background-modifier-border));
   background: color-mix(in srgb, var(--interactive-accent) var(--agentnote-activity-strength, 35%), var(--background-primary));
+  box-shadow: inset 0 0 0 20px rgb(0 0 0 / var(--agentnote-activity-darkness, 0%));
 }
 
 .agentnote-period-ranking .agentnote-value-card {
