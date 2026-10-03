@@ -73,6 +73,8 @@ try {
     assert.equal(activityNotifications, notificationsBefore + 1);
     const concurrentPayload = { title: "并发幂等写入", content: "只创建一次。", idempotencyKey: "create-note-002" };
     const [parallelFirst, parallelSecond] = await Promise.all([api("POST", "/api/nodes", concurrentPayload), api("POST", "/api/nodes", concurrentPayload)]);
+    assert.equal(parallelFirst.ok, true, JSON.stringify(parallelFirst));
+    assert.equal(parallelSecond.ok, true, JSON.stringify(parallelSecond));
     assert.equal(parallelFirst.data.id, parallelSecond.data.id);
     assert.equal(activityNotifications, notificationsBefore + 2);
     const nodes = await api("GET", "/api/nodes?q=幂等写入");

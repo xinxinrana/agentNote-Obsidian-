@@ -380,11 +380,92 @@ class CreateNoteModal extends Modal {
 class AgentNoteSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app, plugin); }
   display(): void {
-    this.containerEl.empty(); new Setting(this.containerEl).setName("插件设置").setHeading();
-    new Setting(this.containerEl).setName("版本与更新").setHeading();
+    this.containerEl.empty();
+    new Setting(this.containerEl)
+      .setName("连接 Agent")
+      .setDesc("Agent 的安装和提示词在接入台管理；这里设置插件与 Agent 的连接方式。")
+      .setHeading();
+    new Setting(this.containerEl)
+      .setName("管理 Agent 接入")
+      .setDesc("查看接入状态、安装 Agent，或修改已接入的提示词。")
+      .addButton((button) => button.setButtonText("前往接入台").setCta().onClick(async () => {
+        (this.app as App & { setting: { close(): void } }).setting.close();
+        await this.plugin.activatePanel();
+      }));
+    new Setting(this.containerEl)
+      .setName("打开 Obsidian 时启动本地服务")
+      .setDesc("服务运行时，Agent 才能通过分享链接读取内容或写入笔记。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => {
+        this.plugin.settings.autostartServer = value;
+        await this.plugin.saveSettings();
+      }));
+    new Setting(this.containerEl)
+      .setName("本地服务端口")
+      .setDesc("通常无需修改。默认 27182；修改后重启 Obsidian，并让已接入的 Agent 使用新端口。")
+      .addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => {
+        const port = Number(value);
+        if (Number.isInteger(port) && port > 0 && port < 65536) {
+          this.plugin.settings.port = port;
+          await this.plugin.saveSettings();
+        }
+      }));
+
+    new Setting(this.containerEl)
+      .setName("活动记录")
+      .setDesc("决定大量本地文件变动是否显示为活动，并保存历史活动副本。")
+      .setHeading();
+    new Setting(this.containerEl).setName("一次改动很多文件时").setDesc("Git 同步或批量导入时，选择是否把这批变化记入活动；不影响文件内容和分享链接。")
+      .addDropdown((dropdown) => dropdown.addOptions({ ask: "先询问我", ignore: "不计入活动", record: "计入活动" }).setValue(this.plugin.settings.bulkActivityAction).onChange(async (value) => {
+        this.plugin.settings.bulkActivityAction = value as BulkActivityAction;
+        await this.plugin.saveSettings();
+      }));
+    new Setting(this.containerEl)
+      .setName("自动备份历史活动")
+      .setDesc("按天保留过去的活动记录副本；不备份笔记正文，也不影响活动统计。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.coldBackupEnabled).onChange(async (value) => {
+        this.plugin.settings.coldBackupEnabled = value;
+        await this.plugin.saveSettings();
+        this.plugin.scheduleColdBackup();
+        this.display();
+      }));
+    if (this.plugin.settings.coldBackupEnabled) {
+      new Setting(this.containerEl)
+        .setName("启动后多久备份")
+        .setDesc("打开 Obsidian 后等待 1–60 分钟再开始，避免影响启动。")
+        .addText((input) => input.setValue(String(this.plugin.settings.coldBackupDelayMinutes)).onChange(async (value) => {
+          const minutes = Number(value);
+          if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) return;
+          this.plugin.settings.coldBackupDelayMinutes = minutes;
+          await this.plugin.saveSettings();
+          this.plugin.scheduleColdBackup();
+        }));
+    }
+    new Setting(this.containerEl)
+      .setName("手动备份历史活动")
+      .setDesc("立即保存过去日期的活动记录；已有副本不会覆盖。")
+      .addButton((button) => button.setButtonText("立即备份").onClick(async () => {
+        button.setDisabled(true);
+        try {
+          const result = await this.plugin.runColdBackup();
+          new Notice(`活动记录备份完成：新增 ${result.created} 份，已有 ${result.existing} 份未改动。`);
+        } catch (error) { new Notice(`活动记录备份失败：${(error as Error).message}`); }
+        finally { button.setDisabled(false); }
+      }));
+
+    new Setting(this.containerEl).setName("帮助与更新").setHeading();
+    new Setting(this.containerEl)
+      .setName("接入教程")
+      .setDesc("在接入台顶部显示快速教程，也可以随时打开查看。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.showQuickStart).onChange(async (value) => {
+        this.plugin.settings.showQuickStart = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshPanels();
+        if (value) new Notice("快速教程已重新显示在接入台顶部。");
+      }))
+      .addButton((button) => button.setButtonText("打开教程").onClick(() => new QuickStartModal(this.app).open()));
     const update = new Setting(this.containerEl)
-      .setName(`当前版本 v${this.plugin.manifest.version} · 作者 Evan`)
-      .setDesc("更新来自 GitHub Releases 的构建产物，更新后插件自动重载。")
+      .setName(`当前版本 v${this.plugin.manifest.version}`)
+      .setDesc("作者 Evan。检查 GitHub 上的新版本；更新完成后插件会自动重载。")
       .addButton((check) => check.setButtonText("检查更新").onClick(async () => {
         check.setButtonText("检查中…").setDisabled(true);
         try {
@@ -405,56 +486,5 @@ class AgentNoteSettingTab extends PluginSettingTab {
           check.setButtonText("检查更新").setDisabled(false);
         }
       }));
-    new Setting(this.containerEl).setName("使用教程").setHeading();
-    new Setting(this.containerEl)
-      .setName("在接入台显示快速教程")
-      .setDesc("控制接入台顶部的教程卡片；需要回看时可直接打开教程。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.showQuickStart).onChange(async (value) => {
-        this.plugin.settings.showQuickStart = value;
-        await this.plugin.saveSettings();
-        this.plugin.refreshPanels();
-        if (value) new Notice("快速教程已重新显示在接入台顶部。");
-      }))
-      .addButton((button) => button.setButtonText("打开教程").onClick(() => new QuickStartModal(this.app).open()));
-    new Setting(this.containerEl).setName("本地服务").setHeading();
-    new Setting(this.containerEl).setName("本地服务端口").setDesc("agent 通过此端口读取分享和写入笔记。").addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => { const port = Number(value); if (Number.isInteger(port) && port > 0 && port < 65536) { this.plugin.settings.port = port; await this.plugin.saveSettings(); } }));
-    new Setting(this.containerEl).setName("启动 Obsidian 时运行服务").addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => { this.plugin.settings.autostartServer = value; await this.plugin.saveSettings(); }));
-    new Setting(this.containerEl).setName("批量本地操作").setHeading();
-    new Setting(this.containerEl).setName("检测到大量文件变动时").setDesc("1 秒内同类操作超过 3 次，或任意操作超过 10 次时生效；忽略活动仍会更新文档索引与分享目标。")
-      .addDropdown((dropdown) => dropdown.addOptions({ ask: "每次询问", ignore: "不计入活动（推荐）", record: "计入活动" }).setValue(this.plugin.settings.bulkActivityAction).onChange(async (value) => {
-        this.plugin.settings.bulkActivityAction = value as BulkActivityAction;
-        await this.plugin.saveSettings();
-      }));
-    new Setting(this.containerEl).setName("活动记录冷备份").setHeading();
-    new Setting(this.containerEl)
-      .setName("启动后自动备份")
-      .setDesc("按设备 ID 和本机日期留存历史活动记录；已有备份不会重写，也不参与统计。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.coldBackupEnabled).onChange(async (value) => {
-        this.plugin.settings.coldBackupEnabled = value;
-        await this.plugin.saveSettings();
-        this.plugin.scheduleColdBackup();
-      }));
-    new Setting(this.containerEl)
-      .setName("启动后延迟（分钟）")
-      .setDesc("自动备份延迟 1–60 分钟开始，按日期顺序处理。")
-      .addText((input) => input.setValue(String(this.plugin.settings.coldBackupDelayMinutes)).onChange(async (value) => {
-        const minutes = Number(value);
-        if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) return;
-        this.plugin.settings.coldBackupDelayMinutes = minutes;
-        await this.plugin.saveSettings();
-        this.plugin.scheduleColdBackup();
-      }));
-    new Setting(this.containerEl)
-      .setName("立即备份历史日期")
-      .setDesc("副本保存在 agentNote/data/cold-backups/；当天记录留待下一次备份。")
-      .addButton((button) => button.setButtonText("立即备份").onClick(async () => {
-        button.setDisabled(true);
-        try {
-          const result = await this.plugin.runColdBackup();
-          new Notice(`冷备份完成：新增 ${result.created} 份，已有 ${result.existing} 份未改动。`);
-        } catch (error) { new Notice(`冷备份失败：${(error as Error).message}`); }
-        finally { button.setDisabled(false); }
-      }));
-    this.containerEl.createEl("p", { text: "agent 的安装、提示词与接入状态在 agentNote 接入台中管理。" });
   }
 }
