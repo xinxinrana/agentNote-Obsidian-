@@ -545,6 +545,29 @@ try {
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
+  await test("cold backups from two devices have separate names and retain their own events", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-cold-backup-devices-"));
+    try {
+      const data = path.join(root, "agentNote", "data");
+      await fsp.mkdir(data, { recursive: true });
+      await fsp.writeFile(path.join(data, "events.json"), JSON.stringify([{ at: new Date(2026, 8, 27, 12).toISOString(), type: "local-read", title: "旧版共享记录" }]));
+      const logs = [];
+      for (const [index, id] of ["machine-a", "machine-b"].entries()) {
+        await fsp.writeFile(path.join(root, id), id);
+        const log = new ActivityLog(data, { deviceIdFile: path.join(root, id) });
+        logs.push(log);
+        await fsp.writeFile(await log.filePath(), JSON.stringify([{ at: new Date(2026, 8, 27, 12).toISOString(), type: "local-read", title: `设备 ${index + 1}` }]));
+      }
+      for (const log of logs) assert.deepEqual(await log.backupPastDays(new Date(2026, 8, 29, 12)), { created: 2, existing: 0 });
+      const backups = path.join(data, "cold-backups");
+      assert.deepEqual((await fsp.readdir(backups)).sort(), ["events.legacy.machine-a.2026-09-27.json", "events.legacy.machine-b.2026-09-27.json", "events.machine-a.2026-09-27.json", "events.machine-b.2026-09-27.json"]);
+      for (const [index, id] of ["machine-a", "machine-b"].entries()) {
+        const events = JSON.parse(await fsp.readFile(path.join(backups, `events.${id}.2026-09-27.json`), "utf8"));
+        assert.equal(events[0].title, `设备 ${index + 1}`);
+      }
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
   await test("concurrent writers on one device retain every operation and one identity", async () => {
     const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-writers-"));
     try {

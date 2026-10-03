@@ -429,7 +429,7 @@ class AgentNoteSettingTab extends PluginSettingTab {
     new Setting(this.containerEl).setName("活动记录冷备份").setHeading();
     new Setting(this.containerEl)
       .setName("启动后自动备份")
-      .setDesc("按本机日期留存历史活动记录；不会覆盖原日志或已有备份，也不参与统计。")
+      .setDesc("按设备 ID 和本机日期留存历史活动记录；已有备份不会重写，也不参与统计。")
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.coldBackupEnabled).onChange(async (value) => {
         this.plugin.settings.coldBackupEnabled = value;
         await this.plugin.saveSettings();
