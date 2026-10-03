@@ -58,22 +58,13 @@ You can add a desired title, tags, or background. The agent writes a normal note
 
 Open the **agentNote connection panel** in the Obsidian sidebar.
 
-### Recognized agents
+### Connection flow
 
-Claude Code, Codex, and WorkBuddy always appear. An uninstalled agent offers **Open official website**. For an installed agent:
+Claude Code, Codex, and WorkBuddy always appear. Select **接入其他 Agent** for another tool. Every entry copies the same task: the agent downloads the local `SKILL.md`, configures its fixed identity, and reports the actual installation path. Once reported, the card shows a green **已接入** button. You can then share a link or ask the agent to write a note naturally.
 
-1. Select **Connect agentNote**.
-2. agentNote writes its long-term usage instructions to that agent's skill directory.
-3. Restart the agent once.
-4. Share a link or ask it to write a note naturally.
+Select **已接入** to preview the full installed Skill. The additional-instructions box below changes only that agent's local file, and saving immediately updates the preview. You can also select **直接编辑全文** and accept the existing warning before editing the full document. The agent may need a new conversation to load changes.
 
-The panel distinguishes updated default instructions, customized instructions, and installations without version markers. Use **Update default instructions** when a newer default is available; customized instructions are not treated as an outdated default.
-
-Use **Manage prompt** to review the complete installed prompt. Select **Unlock editing**, acknowledge the risk, then make changes in the same editor. Saving and updating the installation locks the prompt again. Existing agent-specific instructions remain part of the complete prompt. Changes may require restarting the agent or opening a new conversation. **Remove connection** removes only agentNote's skill. No other skills, settings, conversations, or files are deleted.
-
-### Any other agent
-
-Select **Connect any agent manually**, copy the generated task, and send it to the target agent. It is instructed to find its own persistent instruction mechanism, install agentNote, and verify the local service.
+**删除** backs up and moves agentNote's `SKILL.md` out of the active Skill location. The dashboard retains earlier collaboration activity.
 
 ### Feedback
 

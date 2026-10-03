@@ -3,7 +3,8 @@ import * as path from "path";
 import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, parseLinktext } from "obsidian";
 import { AgentServer } from "./core/server";
 import type { AgentActivity, ShareLinkInfo } from "./core/server";
-import { detectAgents, DetectedAgent, installSkill, uninstallSkill } from "./core/skill";
+import { AgentConnections, localConnectionsFile } from "./core/agentConnections";
+import type { AgentConnection } from "./core/agentConnections";
 import { isNewerVersion } from "./core/version";
 import { StoreError, VaultStore } from "./core/store";
 import { isLocalActivityBurst } from "./core/activityLog";
@@ -24,6 +25,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export default class AgentNotePlugin extends Plugin {
   settings: AgentNoteSettings = DEFAULT_SETTINGS;
   store!: VaultStore;
+  connections!: AgentConnections;
   server: AgentServer | null = null;
   private panelRefreshTimer: number | null = null;
   private coldBackupTimer: number | null = null;
@@ -44,6 +46,7 @@ export default class AgentNotePlugin extends Plugin {
     if (!(adapter instanceof FileSystemAdapter)) { new Notice("agentNote 需要桌面端文件系统 vault。"); return; }
     this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
     await this.store.init();
+    this.connections = new AgentConnections(localConnectionsFile(os.homedir(), adapter.getBasePath()));
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
     this.addRibbonIcon("bot", "打开 agentNote 接入台", () => void this.activatePanel());
@@ -261,34 +264,19 @@ export default class AgentNotePlugin extends Plugin {
       .then(() => { if (recordAdditions) this.schedulePanelRefresh(); })
       .catch(() => undefined);
   }
-  detectedAgents(): DetectedAgent[] { return detectAgents(os.homedir()); }
-  profile(agentId: string): AgentProfile { return this.settings.agents[agentId] ?? { enabled: true, instructions: "" }; }
-  async saveProfile(agentId: string, profile: AgentProfile): Promise<void> { this.settings.agents[agentId] = profile; await this.saveSettings(); }
-  async installAgent(agent: DetectedAgent, overwriteExisting = false): Promise<void> {
-    const profile = this.profile(agent.id);
-    try {
-      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name, template: profile.template }, overwriteExisting);
-      await this.store.registerAgent({ id: agent.id, name: agent.name });
-      await this.saveProfile(agent.id, { ...profile, enabled: true });
-      new Notice(`${agent.name} 已接入 agentNote；重启 agent 后生效。`);
-    } catch (error) {
-      new Notice(`${agent.name} 接入失败：${(error as Error).message}`);
-    }
-    this.refreshPanels();
-  }
-  async disableAgent(agent: DetectedAgent): Promise<void> {
-    try {
-      uninstallSkill(agent.skillDir);
-      await this.saveProfile(agent.id, { ...this.profile(agent.id), enabled: false });
-      new Notice(`${agent.name} 的 agentNote 接入已移除。`);
-    } catch (error) {
-      new Notice(`${agent.name} 移除失败：${(error as Error).message}`);
-    }
+  connectedAgents(): Promise<AgentConnection[]> { return this.connections.list(); }
+  async forgetAgent(name: string): Promise<void> { await this.connections.remove(name); this.refreshPanels(); }
+  async saveConnectedSkill(connection: AgentConnection, expected: string, updated: string): Promise<void> {
+    await this.connections.saveSkill(connection, expected, updated);
     this.refreshPanels();
   }
   async startServer(quiet = false): Promise<void> {
     if (this.server) return;
-    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity), listLinks: (sourcePath) => this.listShareLinks(sourcePath) });
+    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity), listLinks: (sourcePath) => this.listShareLinks(sourcePath), registerAgent: async (name, skillPath) => {
+      const connection = await this.connections.register(name, skillPath);
+      this.refreshPanels();
+      return connection;
+    } });
     try { await this.server.start(); if (!quiet) new Notice(`agentNote 服务已启动：127.0.0.1:${this.server.port}`); }
     catch (error) { this.server = null; new Notice(`agentNote 服务启动失败：${(error as Error).message}`); }
     this.refreshPanels();

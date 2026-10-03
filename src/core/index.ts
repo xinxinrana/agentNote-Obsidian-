@@ -10,3 +10,4 @@ export * from "./server";
 export * from "./skill";
 export * from "./version";
 export * from "./activityLog";
+export * from "./agentConnections";

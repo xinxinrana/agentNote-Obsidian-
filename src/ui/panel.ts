@@ -1,7 +1,9 @@
-import { App, ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { existsSync } from "fs";
 import type AgentNotePlugin from "../main";
 import type { LiveAgentActivity } from "../main";
-import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, skillInstallConflict, skillStatus, type DetectedAgent } from "../core/skill";
+import { KNOWN_AGENTS, renderManualInstallPrompt } from "../core/skill";
+import { agentNameKey, splitSkillInstructions, withSkillInstructions, type AgentConnection } from "../core/agentConnections";
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
@@ -51,7 +53,9 @@ export class AgentNoteView extends ItemView {
     this.renderDashboard(insights);
     if (this.plugin.settings.showQuickStart) this.renderQuickStart();
     this.renderServer();
-    this.renderAgents(this.plugin.detectedAgents());
+    const connections = await this.plugin.connectedAgents();
+    if (version !== this.refreshVersion) return;
+    this.renderAgents(connections);
   }
   private renderQuickStart(): void {
     const guide = this.contentEl.createDiv({ cls: "agentnote-quick-start" });
@@ -199,48 +203,51 @@ export class AgentNoteView extends ItemView {
     const button = section.createEl("button", { text: running ? "停止服务" : "启动服务", cls: running ? "mod-warning" : "mod-cta" });
     button.onclick = () => void (this.plugin.server ? this.plugin.stopServer() : this.plugin.startServer());
   }
-  private renderAgents(agents: DetectedAgent[]): void {
+  private renderAgents(connections: AgentConnection[]): void {
     const section = this.contentEl.createDiv({ cls: "agentnote-section" });
     section.createEl("h4", { text: "接入 agent" });
-    section.createEl("p", { text: "接入会在该 agent 的长期 skill 目录写入一份 agentNote 使用说明。" });
-    const manual = section.createEl("button", { text: "手动接入任意 agent" });
-    manual.onclick = () => new ManualInstallModal(this.app, this.plugin).open();
-    for (const agent of agents) {
-      const profile = this.plugin.profile(agent.id);
+    section.createEl("p", { text: "把安装任务发给 agent；它安装后会回报本机 Skill 位置，随后可在这里编辑。" });
+    const manual = section.createEl("button", { text: "接入其他 Agent" });
+    manual.onclick = () => void this.copyInstallTask();
+    const presetNames = new Set(KNOWN_AGENTS.map((agent) => agentNameKey(agent.name)));
+    const entries = [
+      ...KNOWN_AGENTS.map((agent) => ({ name: agent.name, id: agent.id, connection: connections.find((item) => agentNameKey(item.name) === agentNameKey(agent.name)) })),
+      ...connections.filter((item) => !presetNames.has(agentNameKey(item.name))).map((item) => ({ name: item.name, id: "", connection: item })),
+    ];
+    for (const agent of entries) {
       const card = section.createDiv({ cls: "agentnote-agent-card" });
       const header = card.createDiv({ cls: "agentnote-agent-header" });
-      const icon = header.createEl("img", { cls: "agentnote-agent-icon", attr: { src: AGENT_ICONS[agent.id], alt: `${agent.name} 图标` } });
-      icon.decoding = "async";
+      if (agent.id) {
+        const icon = header.createEl("img", { cls: "agentnote-agent-icon", attr: { src: AGENT_ICONS[agent.id], alt: `${agent.name} 图标` } });
+        icon.decoding = "async";
+      } else setIcon(header.createSpan({ cls: "agentnote-agent-icon" }), "bot");
       const identity = header.createDiv();
       identity.createEl("strong", { text: agent.name });
-      const status = agent.installed && profile.enabled ? skillStatus(agent.skillDir, { port: this.plugin.server?.port ?? this.plugin.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name, template: profile.template }) : "unknown";
-      identity.createEl("div", { cls: `agentnote-agent-status ${agent.installed && profile.enabled ? "is-connected" : ""}`, text: !agent.available ? "未检测到安装" : !agent.installed || !profile.enabled ? "未接入" : status === "update" ? "默认说明有更新" : status === "custom" ? "已接入 · 自定义说明" : status === "unknown" ? "已接入 · 版本未标记" : "已接入" });
-      if (!agent.available) {
-        const actions = card.createDiv({ cls: "agentnote-node-actions" });
-        actions.createEl("a", { text: "前往官网安装", cls: "external-link", attr: { href: agent.website, target: "_blank", rel: "noopener noreferrer", "aria-label": `在浏览器中打开 ${agent.name} 官网` } });
-        continue;
+      const available = !!agent.connection && existsSync(agent.connection.skillPath);
+      if (!available) identity.createEl("div", { cls: "agentnote-agent-status", text: agent.connection ? "本机文件不可用" : "未接入" });
+      if (agent.connection) {
+        const location = card.createDiv({ cls: "agentnote-agent-path" });
+        location.createEl("span", { text: "Skill 位置" });
+        location.createEl("code", { text: agent.connection.skillPath });
       }
-      card.createEl("div", { cls: "agentnote-agent-path", text: `安装位置：${agent.skillDir}` });
-      const actions = card.createDiv({ cls: "agentnote-node-actions" });
-      const install = actions.createEl("button", { text: !agent.installed ? "接入 agentNote" : status === "update" ? "更新默认说明" : "更新接入", cls: "mod-cta" });
-      install.onclick = () => {
-        if (!skillInstallConflict(agent.skillDir, agent.id)) { void this.plugin.installAgent(agent); return; }
-        const confirm = new Modal(this.app);
-        confirm.contentEl.createEl("h3", { text: "保留现有技能后更新？" });
-        confirm.contentEl.createEl("p", { text: `${agent.name} 的技能或身份文件已被修改，或不是插件安装的版本。继续会先在原目录备份这些文件，再写入新的 agentNote 接入。` });
-        const actions = confirm.contentEl.createDiv({ cls: "agentnote-node-actions" });
-        actions.createEl("button", { text: "取消" }).onclick = () => confirm.close();
-        actions.createEl("button", { text: "备份并更新", cls: "mod-warning" }).onclick = () => { confirm.close(); void this.plugin.installAgent(agent, true); };
-        confirm.open();
-      };
-      const edit = actions.createEl("button", { text: "管理提示词" });
-      edit.onclick = () => new AgentPromptModal(this.app, this.plugin, agent, () => this.refresh()).open();
-      if (agent.installed) {
-        const disable = actions.createEl("button", { text: "移除接入", cls: "mod-warning" });
-        disable.onclick = () => new RemoveAgentModal(this.app, this.plugin, agent, () => this.refresh()).open();
+      const actions = card.createDiv({ cls: "agentnote-node-actions agentnote-agent-actions" });
+      if (!agent.connection) {
+        actions.createEl("button", { text: "接入", cls: "mod-cta" }).onclick = () => void this.copyInstallTask();
+      } else if (available) {
+        actions.createEl("button", { text: "已接入", cls: "agentnote-connected-button", attr: { "aria-label": `已接入 ${agent.name}，打开 Skill 编辑` } }).onclick = () => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open();
+        actions.createEl("button", { text: "修改" }).onclick = () => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh(), true).open();
+        actions.createEl("button", { text: "删除", cls: "mod-warning" }).onclick = () => new RemoveAgentModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open();
+      } else {
+        actions.createEl("button", { text: "重新接入", cls: "mod-cta" }).onclick = () => void this.copyInstallTask();
+        actions.createEl("button", { text: "删除", cls: "mod-warning" }).onclick = () => new RemoveAgentModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open();
       }
     }
     this.renderFooter(section);
+  }
+  private async copyInstallTask(): Promise<void> {
+    const prompt = renderManualInstallPrompt({ port: this.plugin.server?.port ?? this.plugin.settings.port });
+    try { await navigator.clipboard.writeText(prompt); new ManualInstallModal(this.app, this.plugin).open(); new Notice("已复制安装任务，可直接粘贴给 Agent。"); }
+    catch (error) { new Notice(`复制失败：${(error as Error).message}`); new ManualInstallModal(this.app, this.plugin).open(); }
   }
   private renderFooter(parent: HTMLElement): void {
     const footer = parent.createDiv({ cls: "agentnote-panel-footer" });
@@ -259,7 +266,7 @@ export class QuickStartModal extends Modal {
     this.contentEl.createEl("h2", { text: "三分钟开始使用" });
     this.contentEl.createEl("p", { text: "完成一次接入、一次分享和一次对话，你就已经掌握 agentNote 的核心流程。" });
     const steps = this.contentEl.createEl("ol", { cls: "agentnote-guide-steps" });
-    for (const [title, description] of [["确认本地服务", "在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。"], ["接入一个 agent", "在“接入 agent”中点击“接入 agentNote”，然后重启目标 agent 一次。未列出的 agent 可使用“手动接入任意 agent”。"], ["分享并开始工作", "右键文件或文件夹选择“agentNote: 分享给 agent”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。"]] as const) {
+    for (const [title, description] of [["确认本地服务", "在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。"], ["接入一个 agent", "点击目标 Agent 的“接入”，把复制的任务发给它。安装并上报成功后，接入台会显示“已接入”。"], ["分享并开始工作", "右键文件或文件夹选择“agentNote: 分享给 agent”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。"]] as const) {
       const item = steps.createEl("li"); item.createEl("strong", { text: title }); item.createEl("p", { text: description });
     }
     const example = this.contentEl.createDiv({ cls: "agentnote-guide-example" }); example.createEl("strong", { text: "可直接发送给 agent" }); example.createEl("code", { text: "请读取这个资料，整理重点、待办和风险：<粘贴 agentNote 地址>" });
@@ -698,18 +705,18 @@ export class BulkActivityModal extends Modal {
 }
 
 class RemoveAgentModal extends Modal {
-  constructor(app: App, private plugin: AgentNotePlugin, private agent: DetectedAgent, private done: () => Promise<void>) { super(app); }
+  constructor(app: App, private plugin: AgentNotePlugin, private agent: AgentConnection, private done: () => Promise<void>) { super(app); }
   onOpen(): void {
     this.contentEl.empty();
-    this.contentEl.createEl("h2", { text: `移除 ${this.agent.name} 接入？` });
-    this.contentEl.createEl("p", { text: "这会移除 agentNote 的长期提示词；不会删除该 agent 的其他 skill、配置或对话。" });
-    this.contentEl.createEl("code", { cls: "agentnote-skill-path", text: `${this.agent.skillDir}/SKILL.md` });
+    this.contentEl.createEl("h2", { text: `删除 ${this.agent.name} 的 agentNote 接入？` });
+    this.contentEl.createEl("p", { text: "Skill 文件会先备份，再从加载位置移走；Agent 将不再使用这项 Skill。看板中的协作历史仍会保留。" });
+    this.contentEl.createEl("code", { cls: "agentnote-skill-path", text: this.agent.skillPath });
     new Setting(this.contentEl).addButton((button) => button.setButtonText("取消").onClick(() => this.close()))
       .addButton((button) => {
         button.buttonEl.addClass("mod-warning");
-        button.setButtonText("确认移除").onClick(async () => {
-          await this.plugin.disableAgent(this.agent);
-          await this.done(); this.close();
+        button.setButtonText("确认删除").onClick(async () => {
+          try { await this.plugin.forgetAgent(this.agent.name); await this.done(); this.close(); }
+          catch (error) { new Notice(`移除失败：${(error as Error).message}`); }
         });
       });
   }
@@ -719,8 +726,8 @@ class ManualInstallModal extends Modal {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app); }
   onOpen(): void {
     this.contentEl.empty();
-    this.contentEl.createEl("h2", { text: "手动接入任意 agent" });
-    this.contentEl.createEl("p", { text: "复制下面的任务给目标 agent。它会自行识别自己的 skill 或长期指令机制、验证本地服务并完成安装。" });
+    this.contentEl.createEl("h2", { text: "接入 Agent" });
+    this.contentEl.createEl("p", { text: "安装任务已复制。将它发给目标 Agent；所有 Agent 使用同一个本地 Skill 地址与上报流程。" });
     const prompt = renderManualInstallPrompt({ port: this.plugin.server?.port ?? this.plugin.settings.port });
     const text = this.contentEl.createEl("textarea", { cls: "agentnote-manual-prompt" });
     text.value = prompt; text.readOnly = true;
@@ -731,24 +738,50 @@ class ManualInstallModal extends Modal {
 }
 
 class AgentPromptModal extends Modal {
-  constructor(app: App, private plugin: AgentNotePlugin, private agent: DetectedAgent, private done: () => Promise<void>) { super(app); }
-  onOpen(): void {
-    const profile = this.plugin.profile(this.agent.id);
-    this.contentEl.empty(); this.contentEl.createEl("h2", { text: `${this.agent.name} 的提示词` });
-    this.contentEl.createEl("p", { text: "先查看当前完整提示词；确认需要调整后再解锁编辑。" });
-    const source = renderSkillSource({ template: profile.template, instructions: profile.instructions });
-    const rendered = renderSkillMd({ port: this.plugin.server?.port ?? this.plugin.settings.port, template: profile.template, instructions: profile.instructions, agentId: this.agent.id, agentName: this.agent.name });
-    const prompt = this.contentEl.createEl("textarea", { cls: "agentnote-manual-prompt agentnote-prompt-editor" });
-    prompt.value = rendered; prompt.readOnly = true;
+  constructor(app: App, private plugin: AgentNotePlugin, private agent: AgentConnection, private done: () => Promise<void>, private focusAdditional = false) { super(app); }
+  onOpen(): void { void this.load(); }
+  private async load(): Promise<void> {
+    let original: string;
+    try { original = await this.plugin.connections.readSkill(this.agent); }
+    catch (error) { this.contentEl.empty(); this.contentEl.createEl("p", { text: `无法读取 Skill：${(error as Error).message}` }); return; }
+    const { base, additional } = splitSkillInstructions(original);
+    this.modalEl.addClass("agentnote-skill-modal");
+    this.contentEl.empty(); this.contentEl.createEl("h2", { text: `${this.agent.name} 的 Skill` });
+    this.contentEl.createEl("code", { cls: "agentnote-skill-path", text: this.agent.skillPath });
+    this.contentEl.createEl("h3", { text: "完整预览", cls: "agentnote-skill-editor-label" });
+    const preview = this.contentEl.createEl("textarea", { cls: "agentnote-manual-prompt agentnote-prompt-editor" });
+    preview.value = original; preview.readOnly = true;
+    this.contentEl.createEl("h3", { text: "附加要求", cls: "agentnote-skill-editor-label" });
+    const extra = this.contentEl.createEl("textarea", { cls: "agentnote-manual-prompt agentnote-additional-input", attr: { placeholder: "写给这个 Agent 的额外要求；保存后会显示在上方完整预览中。" } });
+    extra.value = additional;
+    if (this.focusAdditional) extra.focus();
     const actions = new Setting(this.contentEl);
-    actions.addButton((button) => button.setButtonText("解锁编辑").setCta().onClick(() => new UnlockPromptModal(this.app, () => {
-      prompt.value = source; prompt.readOnly = false; prompt.focus(); actions.controlEl.empty();
-      actions.addButton((save) => save.setButtonText("保存并更新安装").setCta().onClick(async () => {
-        if (!prompt.value.trim()) { new Notice("提示词不能为空。"); return; }
-        await this.plugin.saveProfile(this.agent.id, { enabled: true, instructions: "", template: prompt.value });
-        await this.plugin.installAgent(this.agent);
-        await this.done(); this.close();
-      })).addButton((cancel) => cancel.setButtonText("取消修改").onClick(() => this.close()));
+    let warned = false;
+    const saveAdditional = async () => {
+      const updated = withSkillInstructions(base, extra.value);
+      if (updated === original) { new Notice("没有需要保存的修改。"); return; }
+      try {
+        await this.plugin.saveConnectedSkill(this.agent, original, updated);
+        original = updated;
+        preview.value = updated;
+        await this.done();
+        new Notice("附加要求已保存；Agent 可能需要新会话才能读取更新。");
+      } catch (error) { new Notice(`保存失败：${(error as Error).message}`); }
+    };
+    actions.addButton((button) => button.setButtonText("保存附加要求").setCta().onClick(() => {
+      if (warned) { void saveAdditional(); return; }
+      new UnlockPromptModal(this.app, () => { warned = true; void saveAdditional(); }).open();
+    })).addButton((button) => button.setButtonText("直接编辑全文").onClick(() => new UnlockPromptModal(this.app, () => {
+      preview.readOnly = false; extra.readOnly = true; preview.focus(); actions.controlEl.empty();
+      actions.addButton((save) => save.setButtonText("保存全文").setCta().onClick(async () => {
+        if (!preview.value.trim()) { new Notice("提示词不能为空。"); return; }
+        try {
+          await this.plugin.saveConnectedSkill(this.agent, original, preview.value);
+          await this.done();
+          await this.load();
+          new Notice("Skill 已保存；Agent 可能需要新会话才能读取更新。");
+        } catch (error) { new Notice(`保存失败：${(error as Error).message}`); }
+      })).addButton((cancel) => cancel.setButtonText("取消修改").onClick(() => void this.load()));
     }).open())).addButton((button) => button.setButtonText("关闭").onClick(() => this.close()));
   }
 }

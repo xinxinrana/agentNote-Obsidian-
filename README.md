@@ -4,7 +4,7 @@ Share local Obsidian notes and files with AI agents through a private, local-onl
 
 > 中文说明：[README.zh-CN.md](README.zh-CN.md)
 
-agentNote is an Obsidian desktop plugin that connects your vault with agents such as Claude Code, Codex, and WorkBuddy. You choose what an agent can read, and the plugin creates a live local URL that always resolves to the current content.
+agentNote is an Obsidian desktop plugin that connects your vault with agents such as Claude Code, Codex, and WorkBuddy. Share selected material through a local URL and let an agent write its work back to your vault.
 
 <img src="assets/brand/xiaoji-wave.svg" alt="Xiaoji, the agentNote note companion" width="120">
 
@@ -21,7 +21,7 @@ agentNote is an Obsidian desktop plugin that connects your vault with agents suc
 - Let an agent create and update Markdown notes in your vault through natural language.
 - Keep share links live: updated files resolve to their latest content.
 - Show Claude Code, Codex, and WorkBuddy in the connection panel even when they are not installed.
-- Open the official website for an agent that is not detected locally.
+- Connect another agent through the same installation task used by the three presets.
 - Explore a local knowledge profile with reuse rankings, contribution history, activity, and archive suggestions.
 - Generate a privacy-aware PNG of all-time knowledge contributions for sharing.
 - Open a note directly from its title in the knowledge profile, and review its local activity history.
@@ -32,15 +32,14 @@ agentNote is an Obsidian desktop plugin that connects your vault with agents suc
 Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete first workflow. The short version is:
 
 1. Open the **agentNote connection panel** and confirm that the local service is running.
-2. Connect one detected agent, then restart that agent once.
+2. Select **接入**, send the copied installation task to an agent, and wait for it to report its installed Skill path.
 3. Right-click a vault file or folder, choose **agentNote: Share with agent**, and paste the copied link into the conversation.
 4. Ask the connected agent to read the link, or simply say “Write this to Obsidian.”
 
 <p align="center">
   <img src="docs/img/how-to/01-local-service.png" alt="agentNote local service running" height="300">
-  <img src="docs/img/how-to/02-connect-agent.png" alt="agentNote agents connected" height="300">
   <br>
-  <sub>Start the local service, connect one agent, then share a file from Obsidian.</sub>
+  <sub>Start the local service, connect an agent, then share a file from Obsidian.</sub>
 </p>
 
 ## Installation
@@ -82,7 +81,7 @@ The agentNote skill asks the agent to create a title, body, background, and tags
 
 ### Connect an agent
 
-Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always appear. An uninstalled agent offers **Open official website**; an installed agent can be connected or updated. The panel indicates when the default instructions have changed or an installed prompt is customized. You can also use **Connect any agent manually** for an agent that is not listed.
+Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always appear; use **接入其他 Agent** for another agent. Every entry copies the same task: the agent downloads the local `SKILL.md`, sets up its fixed identity, and reports its actual installation path. Once registered, you can preview and edit that local Skill or add instructions specific to the agent.
 
 ## Local service and privacy
 

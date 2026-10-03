@@ -1,11 +1,13 @@
 import * as http from "http";
 import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateNodeInput, VaultStore } from "./store";
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
+import { renderSharedSkillMd } from "./skill";
+import type { AgentConnection } from "./agentConnections";
 
 export type AgentOperation = "read" | "created" | "updated" | "archived";
 export interface AgentActivity { operation: AgentOperation; title: string; nodeId?: string; shareId?: string; targetKind?: ShareTarget["kind"]; actor?: ActivityContext["actor"] }
 export interface ShareLinkInfo { original: string; link: string; displayText?: string; targetPath: string | null; subpath: string | null; status: "resolved" | "unresolved" }
-export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void; listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]> }
+export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void; listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]>; registerAgent?: (name: string, skillPath: string) => Promise<AgentConnection> }
 const nodeView = (node: Awaited<ReturnType<VaultStore["getNode"]>>) => ({ ...node, warnings: qualityWarnings(node) });
 
 async function readBody(req: http.IncomingMessage): Promise<unknown> {
@@ -46,6 +48,18 @@ export class AgentServer {
     const parts = url.pathname.split("/").filter(Boolean);
     const method = req.method ?? "GET";
     if (url.pathname === "/api/health" && method === "GET") return send(res, 200, { ok: true, data: { status: "up", version: 2, vault: this.store.root } });
+    if (url.pathname === "/api/skill.md" && method === "GET") {
+      const body = renderSharedSkillMd(this.port ?? this.opts.port);
+      res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-store" });
+      return void res.end(body);
+    }
+    if (url.pathname === "/api/agents/register" && method === "POST") {
+      if (!this.opts.registerAgent) throw new StoreError(503, "Agent 接入登记不可用");
+      const body = await readBody(req) as { name?: unknown; skillPath?: unknown };
+      if (typeof body.name !== "string" || typeof body.skillPath !== "string") throw new StoreError(400, "请提供 name 和 skillPath");
+      try { return send(res, 200, { ok: true, data: await this.opts.registerAgent(body.name, body.skillPath) }); }
+      catch (error) { throw new StoreError(400, error instanceof Error ? error.message : String(error)); }
+    }
     if (parts[0] !== "api") return send(res, 404, { ok: false, error: "接口不存在" });
     const context = await this.store.resolveActivityContext(activityContext(req));
 

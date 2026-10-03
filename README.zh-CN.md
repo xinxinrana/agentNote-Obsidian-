@@ -4,7 +4,7 @@
 
 > English version: [README.md](README.md)
 
-agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、WorkBuddy 等 agent。你选择一份资料，插件会生成始终返回最新内容的本地地址；agent 产生的成果也能自然写回你的 vault。
+agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、WorkBuddy 等 agent。你可以把选中的资料通过本地地址交给 agent，并让成果写回 vault。
 
 <img src="assets/brand/xiaoji-wave.svg" alt="agentNote 的笔记伙伴小记" width="120">
 
@@ -31,15 +31,14 @@ agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、W
 完整图文步骤见 [如何使用 agentNote](docs/如何使用.md)。简版流程如下：
 
 1. 打开 **agentNote 接入台**，确认本地服务正在运行。
-2. 接入一个已检测到的 agent，然后重启该 agent 一次。
+2. 在接入台点击 **接入**，把复制的安装任务发给目标 agent；它上报安装位置后会显示 **已接入**。
 3. 在 vault 文件或文件夹上右键，选择 **agentNote: 分享给 agent**，把复制的地址粘贴到对话里。
 4. 请已接入的 agent 读取地址，或直接说“写到 Obsidian”。
 
 <p align="center">
   <img src="docs/img/how-to/01-local-service.png" alt="agentNote 本地服务正在运行" height="300">
-  <img src="docs/img/how-to/02-connect-agent.png" alt="agentNote 已接入的 agent" height="300">
   <br>
-  <sub>启动本地服务，接入一个 agent，然后从 Obsidian 分享资料。</sub>
+  <sub>启动本地服务，把接入任务交给 agent，然后从 Obsidian 分享资料。</sub>
 </p>
 
 ## 安装
@@ -81,7 +80,7 @@ agent 会整理标题、正文、背景与标签，并写入 vault。写入成�
 
 ### 接入 agent
 
-打开 **agentNote 接入台**。Claude Code、Codex、WorkBuddy 始终显示；未安装时可点击 **前往官网安装**，已安装时可接入或更新。接入台会提示默认说明有更新、自定义说明等状态。不在列表中的 agent 可使用 **手动接入任意 agent**。
+打开 **agentNote 接入台**。Claude Code、Codex、WorkBuddy 始终显示，其他 agent 可点击 **接入其他 Agent**。所有入口复制同一段安装任务：agent 下载本地 `SKILL.md`、配置固定身份，并上报实际安装路径。接入后可在本机预览和修改 Skill，也可填写只属于该 agent 的附加要求。
 
 ## 本地服务与隐私
 

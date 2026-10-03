@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, localConnectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -21,9 +21,10 @@ async function localEventsPath(root) {
   return path.join(root, "agentNote", "data", `events.${deviceId}.json`);
 }
 const store = new VaultStore(vault);
+const connections = new AgentConnections(localConnectionsFile(identityRoot, vault));
 let activityNotifications = 0;
 const liveActivities = [];
-const server = new AgentServer(store, { port: 0, onActivity: (activity) => { activityNotifications++; liveActivities.push(activity); }, listLinks: async (sourcePath) => sourcePath === "linked-source.md" ? [{ original: "[[linked-target|目标]]", link: "linked-target", displayText: "目标", targetPath: "linked-target.md", subpath: null, status: "resolved" }] : [] });
+const server = new AgentServer(store, { port: 0, onActivity: (activity) => { activityNotifications++; liveActivities.push(activity); }, listLinks: async (sourcePath) => sourcePath === "linked-source.md" ? [{ original: "[[linked-target|目标]]", link: "linked-target", displayText: "目标", targetPath: "linked-target.md", subpath: null, status: "resolved" }] : [], registerAgent: (name, skillPath) => connections.register(name, skillPath) });
 const port = await server.start();
 const base = `http://127.0.0.1:${port}`;
 let passed = 0;
@@ -693,12 +694,15 @@ try {
       assert.equal(skillInstallConflict(dir, "claude-code"), true);
     } finally { await fsp.rm(home, { recursive: true, force: true }); }
   });
-  await test("editable prompt templates retain dynamic service and identity values", async () => {
+  await test("downloadable skill is stable and independent of the target Agent", async () => {
     const template = "为 {{agentName}} 配置 {{baseUrl}}，身份是 {{agentId}}。";
     const prompt = renderSkillMd({ port, template, agentId: "codex", agentName: "Codex" });
     assert.equal(prompt, `为 Codex 配置 http://127.0.0.1:${port}，身份是 codex。\n`);
-    const manual = renderManualInstallPrompt({ port, template });
-    assert.match(manual, new RegExp(`为 未命名 agent 配置 http://127\\.0\\.0\\.1:${port}，身份是 agentnote。`));
+    const response = await fetch(`${base}/api/skill.md`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "text/markdown; charset=utf-8");
+    assert.equal(await response.text(), renderSharedSkillMd(port));
+    assert.match(renderSharedSkillMd(port), /X-AgentNote-Agent-Id: <读取 agentnote\.identity\.json/);
   });
   await test("built-in agents remain visible regardless of local installation", async () => {
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-agents-"));
@@ -718,9 +722,48 @@ try {
       await fsp.rm(home, { recursive: true, force: true });
     }
   });
-  await test("manual installation prompt is portable and asks the target agent to verify", async () => {
+  await test("installation prompt gives one shared skill, identity setup, and first report", async () => {
     const prompt = renderManualInstallPrompt({ port });
-    assert.match(prompt, /不要假设/); assert.match(prompt, /GET http:\/\/127\.0\.0\.1/); assert.match(prompt, /自行验证/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /写到 Obsidian/); assert.match(prompt, /filePath/); assert.match(prompt, /PATCH .*\/api\/shares/);
+    assert.match(prompt, /\/api\/skill\.md/); assert.match(prompt, /SKILL\.md/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /\/api\/agents\/register/); assert.match(prompt, /skillPath/); assert.match(prompt, /最后简单确认/);
+    assert.doesNotMatch(prompt, /\/api\/health/);
+  });
+  await test("first Agent report stores a local path and matches names case-insensitively", async () => {
+    const directory = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-onboarding-"));
+    const skillDir = path.join(directory, "agentnote");
+    await fsp.mkdir(skillDir);
+    const skillPath = path.join(skillDir, "SKILL.md");
+    try {
+      await fsp.writeFile(skillPath, renderSharedSkillMd(port));
+      await fsp.writeFile(path.join(skillDir, "agentnote.identity.json"), JSON.stringify({ id: "codex", name: "Codex" }));
+      assert.equal(agentNameKey("CODEX"), agentNameKey("Codex"));
+      const connected = await api("POST", "/api/agents/register", { name: "CODEX", skillPath });
+      assert.equal(connected.status, 200);
+      assert.equal(connected.data.skillPath, await fsp.realpath(skillPath));
+      assert.equal((await connections.list()).length, 1);
+      assert.equal((await api("POST", "/api/agents/register", { name: "Codex", skillPath })).status, 200);
+      assert.equal((await connections.list()).length, 1);
+      const invalid = await api("POST", "/api/agents/register", { name: "Claude Code", skillPath });
+      assert.equal(invalid.status, 400);
+      const original = await connections.readSkill((await connections.list())[0]);
+      await connections.saveSkill((await connections.list())[0], original, `${original}\n补充要求。\n`);
+      assert.match(await fsp.readFile(skillPath, "utf8"), /补充要求/);
+      assert.ok((await fsp.readdir(skillDir)).some((name) => name.startsWith("SKILL.md.agentnote-backup-")));
+      await assert.rejects(connections.saveSkill((await connections.list())[0], original, original), /其他程序修改/);
+      await connections.remove("CODEX");
+      assert.equal((await connections.list()).length, 0);
+      assert.equal(fs.existsSync(skillPath), false);
+      assert.ok((await fsp.readdir(skillDir)).filter((name) => name.startsWith("SKILL.md.agentnote-backup-")).length >= 2);
+    } finally { await fsp.rm(directory, { recursive: true, force: true }); }
+  });
+  await test("additional instructions update the preview without duplicating earlier additions", async () => {
+    const baseSkill = renderSharedSkillMd(port);
+    const first = withSkillInstructions(baseSkill, "使用中文回复。");
+    assert.equal(splitSkillInstructions(first).additional, "使用中文回复。");
+    const next = withSkillInstructions(splitSkillInstructions(first).base, "先核对来源，再写入笔记。");
+    assert.equal(splitSkillInstructions(next).additional, "先核对来源，再写入笔记。");
+    assert.equal(next.match(/## 附加要求/g)?.length, 1);
+    assert.doesNotMatch(next, /使用中文回复/);
+    assert.equal(withSkillInstructions(splitSkillInstructions(next).base, ""), baseSkill);
   });
 
   await test("version comparison drives self-update decisions", async () => {

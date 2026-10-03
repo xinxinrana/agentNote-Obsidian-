@@ -28,17 +28,12 @@ If it is not running, select **Start service**. The service stays on your comput
 
 ### 2. Connect one agent
 
-In **Connect an agent**, find Claude Code, Codex, or WorkBuddy and select **Connect agentNote**. Restart that agent once so it can load the installed skill.
+In the connection panel, find Claude Code, Codex, or WorkBuddy and select **接入**. Send the copied task to the agent. It downloads the local Skill, sets up its identity, and reports the installed path.
 
-All three agents remain visible even when not installed. Use **Open official website** to install one. If a connected agent shows that its default instructions have changed, select **Update default instructions**.
+All three presets remain visible. After the agent reports its installation, the card shows a green **已接入** button. Open it to preview the full Skill and add instructions for that agent.
 
-If your agent is not listed, choose **Connect any agent manually**, copy the generated task, and send it to that agent. The task tells it how to install and verify its own long-term instruction.
+For another agent, choose **接入其他 Agent**. It uses the same installation task. The agent only needs a simple check that the Skill loads in a new session.
 
-<p align="center">
-  <img src="img/how-to/02-connect-agent.png" alt="agentNote panel showing Claude Code, Codex, and WorkBuddy connected" width="520">
-  <br>
-  <sub>Step 2 — a connected state means the agent has agentNote instructions in its long-term skill directory.</sub>
-</p>
 
 ### 3. Share one file, folder, or text selection
 
@@ -100,7 +95,7 @@ Once the first workflow works, use agentNote for these repeatable jobs:
 | --- | --- |
 | The agent cannot open a link | Keep Obsidian open and confirm the local service is running. |
 | The agent does not know how to write notes | Connect or update the agent, then restart it once. |
-| The agent is not listed | Use **Connect any agent manually**. |
+| The agent is not listed | Select **接入其他 Agent**. |
 | You shared too much context | Share a text selection instead of the full file or folder. |
 | You want to keep a note out of cleanup suggestions | Select **Protect from archiving**. This never changes the note or its share link. |
 

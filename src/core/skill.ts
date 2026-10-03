@@ -135,6 +135,16 @@ export function renderSkillMd({ port, instructions = "", agentId = "agentnote", 
   return resolved;
 }
 
+/** The same downloadable skill is used by every installation entry. */
+export function renderSharedSkillMd(port: number): string {
+  return DEFAULT_SKILL_TEMPLATE
+    .replaceAll(TEMPLATE_TOKENS.baseUrl, `http://127.0.0.1:${port}`)
+    .replaceAll(TEMPLATE_TOKENS.encodedAgentId, "<读取 agentnote.identity.json 的 id 并进行 URL 编码>")
+    .replaceAll(TEMPLATE_TOKENS.encodedAgentName, "<读取 agentnote.identity.json 的 name 并进行 URL 编码>")
+    .replaceAll(TEMPLATE_TOKENS.agentId, "<agentnote.identity.json 的 id>")
+    .replaceAll(TEMPLATE_TOKENS.agentName, "<agentnote.identity.json 的 name>");
+}
+
 function digest(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 
 export function skillStatus(dir: string, options: AgentPromptOptions): SkillStatus {
@@ -178,22 +188,15 @@ export function installSkill(dir: string, options: AgentPromptOptions, overwrite
 }
 
 /** A portable task for agents outside the built-in registry. */
-export function renderManualInstallPrompt({ port, template }: Pick<AgentPromptOptions, "port" | "template">): string {
+export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "port">): string {
   const base = `http://127.0.0.1:${port}`;
-  const skill = renderSkillMd({ port, template });
-  return `请把 agentNote 安装为你自己可持久化使用的一项 skill、instruction 或工具说明。不要假设你必须使用某个固定目录；先识别你当前运行环境中用于保存长期技能/系统指令的正确机制，再自行创建或更新名为 agentnote 的条目。
+  return `请安装 agentNote Skill。它是用户的 Obsidian 本地笔记和文件中转工具，用于读取分享、查找和写入笔记。
 
-安装前先验证服务：GET ${base}/api/health。若连接失败，不要伪造安装成功；请告诉用户需要打开 Obsidian 或启动 agentNote 本地服务。
+1. 从 ${base}/api/skill.md 下载 Skill 文件，保存为你实际使用的技能目录中的 agentnote/SKILL.md，并完成当前 Agent 所需的技能配置。
+2. 在同一目录创建 agentnote.identity.json，填写你固定的 id 和 name，例如 {"id":"your-agent-id","name":"Your Agent Name"}。之后按 Skill 说明使用这份身份。
+3. 安装后 POST ${base}/api/agents/register，上报 {"name":"你的 Agent 名称","skillPath":"SKILL.md 的绝对路径"}。上报名称与身份文件中的 name 保持一致，供 Obsidian 管理这份 Skill。
 
-以下是内置 agent 使用的完整默认提示词。按你的运行环境采用可在后续会话自动加载的格式保存它：
-
-\`\`\`markdown
-${skill}
-\`\`\`
-
-同时创建 \`agentnote.identity.json\`，保存你自己的固定 \`id\` 与 \`name\`。将提示词中的请求头示例替换为该身份信息，并在每次 API 调用时使用它。
-
-完成后请自行验证：读取刚创建的 skill/instruction，确认内容完整；再 GET ${base}/api/health。最后向用户简短报告你把它安装在什么机制/位置，以及验证结果。`;
+最后简单确认新会话能够使用该 Skill。如果本地链接无法访问，提醒用户打开 Obsidian 的 agentNote 服务。`;
 }
 
 export function uninstallSkill(dir: string): void {
