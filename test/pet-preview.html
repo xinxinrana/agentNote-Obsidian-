@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>小记动效验收预览</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    body { margin: 0; padding: 32px; font: 14px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; background: #eef0f4; color: #392552; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { max-width: 720px; color: #635a70; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 28px; }
+    .controls button { padding: 8px 12px; border-radius: 8px; border: 1px solid #d3c8e0; background: #fff; cursor: pointer; }
+    .previews { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
+    .preview { box-sizing: border-box; width: 310px; min-height: 160px; padding: 16px; border-radius: 14px; background: #fff; color: #392552; --interactive-accent: #8652cf; }
+    .preview.dark { background: #282431; color: #f6f0ff; }
+    .preview.narrow { width: 230px; }
+    .preview .agentnote-hero-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .preview .agentnote-hero-heading > div { min-width: 0; }
+    .preview small { display: block; margin-bottom: 5px; opacity: .65; }
+    .preview h2 { margin: 0; font-size: 15px; line-height: 1.35; }
+    .preview > p { margin-top: 12px; font-size: 12px; color: inherit; opacity: .7; }
+  </style>
+</head>
+<body>
+  <h1>小记动效验收预览</h1>
+  <p>观察站立、步伐、停顿、跳跃和新文档反馈。角色保持原有侧栏占比，不遮挡文字。按下方按钮检查各动作，再观察自主行为。</p>
+  <div class="controls">
+    <button data-pet-action="blink">眨眼</button>
+    <button data-pet-action="look">观察</button>
+    <button data-pet-action="doze">发呆</button>
+    <button data-pet-action="walk">散步</button>
+    <button data-pet-action="hop">跳跃</button>
+    <button data-pet-action="celebrate">新文档反馈</button>
+  </div>
+  <div class="previews">
+    <section class="preview"><div class="agentnote-hero-heading"><div><small>浅色侧栏</small><h2>知识正在持续进入工作流</h2></div><span data-pet-mount></span></div><p>创建、维护、使用或整理资料后，这里会留下完整的知识活动。</p></section>
+    <section class="preview dark"><div class="agentnote-hero-heading"><div><small>深色侧栏</small><h2>知识正在持续进入工作流</h2></div><span data-pet-mount></span></div><p>本周完成 4 次知识活动。</p></section>
+    <section class="preview narrow"><div class="agentnote-hero-heading"><div><small>窄侧栏</small><h2>知识正在持续进入工作流</h2></div><span data-pet-mount></span></div><p>正文与角色保持各自空间。</p></section>
+  </div>
+  <script src="../dist/pet-preview.js"></script>
+</body>
+</html>

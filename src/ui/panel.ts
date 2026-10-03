@@ -5,8 +5,8 @@ import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, skillInsta
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
-import xiaojiIdle from "../../assets/brand/xiaoji-idle.svg";
 import xiaojiWave from "../../assets/brand/xiaoji-wave.svg";
+import { CompanionPet } from "./pet";
 import { toBlob } from "html-to-image";
 import { ACTIVITY_WEIGHTS, type DashboardInsights, type DocumentContribution, type InsightEvent, type InsightNote } from "../core/store";
 
@@ -29,16 +29,9 @@ function contributionShade(count: number, min: number, max: number): Record<stri
   };
 }
 
-function renderCompanion(parent: HTMLElement, pose: "idle" | "wave" = "idle"): void {
-  const companion = parent.createEl("img", { cls: "agentnote-companion", attr: { src: pose === "wave" ? xiaojiWave : xiaojiIdle, alt: "小记，agentNote 的笔记伙伴" } });
-  if (pose === "idle") {
-    companion.addEventListener("pointerenter", () => { companion.src = xiaojiWave; });
-    companion.addEventListener("pointerleave", () => { companion.src = xiaojiIdle; });
-  }
-}
-
 export class AgentNoteView extends ItemView {
   private refreshVersion = 0;
+  private pet: CompanionPet | null = null;
   private recentActivityContainer: HTMLElement | null = null;
   private recentActivityList: HTMLElement | null = null;
   private recentActivityEmpty: HTMLElement | null = null;
@@ -48,7 +41,7 @@ export class AgentNoteView extends ItemView {
   getDisplayText(): string { return "agentNote 接入台"; }
   getIcon(): string { return "bot"; }
   async onOpen(): Promise<void> { await this.refresh(); }
-  async onClose(): Promise<void> { this.refreshVersion++; this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null; this.pendingAgentActivity = null; this.contentEl.empty(); }
+  async onClose(): Promise<void> { this.refreshVersion++; this.pet?.dispose(); this.pet = null; this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null; this.pendingAgentActivity = null; this.contentEl.empty(); }
 
   async refresh(): Promise<void> {
     const version = ++this.refreshVersion;
@@ -126,6 +119,7 @@ export class AgentNoteView extends ItemView {
     } catch (error) { new Notice(`无法打开资料：${(error as Error).message}`); }
   }
   showAgentActivity(activity: LiveAgentActivity): void {
+    if (activity.operation === "created" && activity.targetKind !== "folder") this.pet?.celebrate();
     const container = this.recentActivityContainer;
     if (!container) return;
     if (this.recentActivityEmpty) { this.recentActivityEmpty.remove(); this.recentActivityEmpty = null; }
@@ -154,6 +148,7 @@ export class AgentNoteView extends ItemView {
     window.setTimeout(() => surface.removeClass("is-new"), 3_000);
     window.setTimeout(() => { if (time.isConnected) time.setText(this.timeText(activity.at)); }, 3_500);
   }
+  celebrateNewDocument(): void { this.pet?.celebrate(); }
   private renderDashboard(insights: DashboardInsights): void {
     this.recentActivityContainer = null;
     this.recentActivityList = null;
@@ -165,7 +160,8 @@ export class AgentNoteView extends ItemView {
     const heroCopy = heroHeading.createDiv();
     heroCopy.createEl("span", { cls: "agentnote-eyebrow", text: "本地知识洞察" });
     heroCopy.createEl("h4", { text: "知识正在持续进入工作流" });
-    renderCompanion(heroHeading);
+    if (!this.pet) this.pet = new CompanionPet();
+    this.pet.mount(heroHeading);
     overview.createEl("p", { text: insights.summary.weekActivityCount ? `本周完成 ${insights.summary.weekActivityCount} 次知识活动：建设 ${insights.summary.weekCreated}、维护与整理 ${insights.summary.weekUpdated}、分享 ${insights.summary.weekSharesCreated}、使用 ${insights.summary.weekResolves}。` : "创建、维护、使用或整理资料后，这里会留下完整的知识活动。" });
     const stats = overview.createDiv({ cls: "agentnote-metric-strip" });
     for (const [value, label] of [[insights.summary.weekActivityScore, "知识活跃分"], [insights.summary.weekUpdated, "本周更新"], [insights.summary.weekResolves, "本周复用"]] as const) {
@@ -606,7 +602,7 @@ class InsightShareModal extends Modal {
     const start = new Date(this.insights.startedAt).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
     const brand = parent.createDiv({ cls: "agentnote-share-brand-row" });
     brand.createEl("span", { cls: "agentnote-share-brand", text: "agentNote · Local knowledge profile" });
-    renderCompanion(brand, "wave");
+    brand.createEl("img", { cls: "agentnote-companion", attr: { src: xiaojiWave, alt: "小记，agentNote 的笔记伙伴" } });
     parent.createEl("h2", { text: "开始以来的知识贡献" });
     parent.createEl("p", { cls: "agentnote-share-subtitle", text: `从 ${start} 的第一条记录开始，持续积累可复用的本地资料。` });
     const metrics = parent.createDiv({ cls: "agentnote-share-metrics" });

@@ -102,10 +102,14 @@ export default class AgentNotePlugin extends Plugin {
       sessionTitle: activity.actor?.sessionTitle,
     };
     for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) if (leaf.view instanceof AgentNoteView) leaf.view.showAgentActivity(latest);
+    if (activity.operation === "created" && activity.targetKind !== "folder") this.schedulePanelRefresh(1_450);
   }
-  schedulePanelRefresh(): void {
-    if (this.panelRefreshTimer !== null) return;
-    this.panelRefreshTimer = window.setTimeout(() => { this.panelRefreshTimer = null; this.refreshPanels(); }, 500);
+  schedulePanelRefresh(delay = 500): void {
+    if (this.panelRefreshTimer !== null) {
+      if (delay === 500) return;
+      window.clearTimeout(this.panelRefreshTimer);
+    }
+    this.panelRefreshTimer = window.setTimeout(() => { this.panelRefreshTimer = null; this.refreshPanels(); }, delay);
   }
   private registerLocalActivityTracking(): void {
     this.registerEvent(this.app.vault.on("create", (file) => this.trackCreatedFile(file)));
@@ -159,7 +163,14 @@ export default class AgentNotePlugin extends Plugin {
       for (const item of batch) {
         try {
           const updated = await this.store.recordLocalActivity(item.type, item.path, item.oldPath, record);
-          if (updated && !unloading) this.schedulePanelRefresh();
+          if (record && updated && !unloading && item.type === "local-created") {
+            for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) {
+              if (leaf.view instanceof AgentNoteView) leaf.view.celebrateNewDocument();
+            }
+            this.schedulePanelRefresh(1_450);
+          } else if (updated && !unloading) {
+            this.schedulePanelRefresh();
+          }
           if (item.references) {
             const file = this.app.vault.getAbstractFileByPath(item.path);
             if (file instanceof TFile) this.trackDocumentReferences(file, record);

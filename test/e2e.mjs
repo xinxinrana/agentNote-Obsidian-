@@ -65,10 +65,18 @@ try {
   });
   await test("idempotency key creates exactly one note", async () => {
     const payload = { title: "幂等写入", content: "重复请求不能重复创建。", idempotencyKey: "create-note-001" };
+    const notificationsBefore = activityNotifications;
     const first = await api("POST", "/api/nodes", payload);
     const second = await api("POST", "/api/nodes", payload);
     assert.equal(first.ok, true); assert.equal(second.ok, true); assert.equal(second.data.id, first.data.id);
-    const nodes = await api("GET", "/api/nodes?q=幂等写入"); assert.equal(nodes.data.length, 1);
+    assert.equal(activityNotifications, notificationsBefore + 1);
+    const concurrentPayload = { title: "并发幂等写入", content: "只创建一次。", idempotencyKey: "create-note-002" };
+    const [parallelFirst, parallelSecond] = await Promise.all([api("POST", "/api/nodes", concurrentPayload), api("POST", "/api/nodes", concurrentPayload)]);
+    assert.equal(parallelFirst.data.id, parallelSecond.data.id);
+    assert.equal(activityNotifications, notificationsBefore + 2);
+    const nodes = await api("GET", "/api/nodes?q=幂等写入");
+    assert.equal(nodes.data.filter((node) => node.id === first.data.id).length, 1);
+    assert.equal(nodes.data.filter((node) => node.id === parallelFirst.data.id).length, 1);
   });
   await test("the write response link is the note's permanent address", async () => {
     const result = await api("GET", textLink.replace(base, ""), undefined, { "x-agentnote-agent-name": "Codex", "x-agentnote-session-title": encodeURIComponent("发布流程验证") });

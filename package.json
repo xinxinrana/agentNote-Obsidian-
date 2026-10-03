@@ -11,7 +11,8 @@
     "test": "npm run typecheck && npm run build && node test/e2e.mjs",
     "test:git-sync": "npm run build && node test/git-sync.mjs",
     "typecheck": "tsc --noEmit",
-    "deploy:test": "npm run build && node scripts/deploy-test.mjs"
+    "deploy:test": "npm run build && node scripts/deploy-test.mjs",
+    "preview:pet": "node scripts/build-pet-preview.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

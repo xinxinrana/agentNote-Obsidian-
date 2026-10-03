@@ -156,7 +156,7 @@ export class VaultStore {
   private readonly configDir: string;
   private cache = new Map<string, { mtimeMs: number; node: AgentNode }>();
   private idToPath = new Map<string, string>();
-  private idempotentCreates = new Map<string, Promise<AgentNode>>();
+  private idempotentCreates = new Map<string, Promise<{ node: AgentNode; created: boolean }>>();
   private readonly activityLog: ActivityLog;
   private documentWriteQueue: Promise<void> = Promise.resolve();
   private referenceWriteQueue: Promise<void> = Promise.resolve();
@@ -452,23 +452,26 @@ export class VaultStore {
   }
 
   async createNode(input: CreateNodeInput, idempotencyKey?: string, context: ActivityContext = {}): Promise<AgentNode> {
+    return (await this.createNodeResult(input, idempotencyKey, context)).node;
+  }
+  async createNodeResult(input: CreateNodeInput, idempotencyKey?: string, context: ActivityContext = {}): Promise<{ node: AgentNode; created: boolean }> {
     if (!input.title?.trim()) throw new StoreError(400, "标题不能为空");
     const key = idempotencyKey?.trim();
     if (key) {
       const active = this.idempotentCreates.get(key);
-      if (active) return active;
+      if (active) return { node: (await active).node, created: false };
       const operation = this.createNodeWithKey(input, key, context);
       this.idempotentCreates.set(key, operation);
       try { return await operation; } finally { this.idempotentCreates.delete(key); }
     }
     return this.createNodeWithKey(input, undefined, context);
   }
-  private async createNodeWithKey(input: CreateNodeInput, idempotencyKey?: string, context: ActivityContext = {}): Promise<AgentNode> {
+  private async createNodeWithKey(input: CreateNodeInput, idempotencyKey?: string, context: ActivityContext = {}): Promise<{ node: AgentNode; created: boolean }> {
     if (idempotencyKey) {
       const keys = await this.readIdempotencyKeys();
       const existingId = keys[idempotencyKey];
       if (existingId) {
-        try { return await this.getNode(existingId); }
+        try { return { node: await this.getNode(existingId), created: false }; }
         catch (error) { if (!(error instanceof StoreError) || error.statusCode !== 404) throw error; delete keys[idempotencyKey]; await this.writeIdempotencyKeys(keys); }
       }
     }
@@ -483,7 +486,7 @@ export class VaultStore {
       await this.writeIdempotencyKeys(keys);
     }
     await this.recordEvent({ type: "node-created", nodeId: node.id, documentId: await this.documentIdForNode(node.id), title: node.title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
-    return node;
+    return { node, created: true };
   }
   async updateNode(id: string, patch: UpdateNodeInput, context: ActivityContext = {}): Promise<AgentNode> {
     const node = await this.getNode(id);

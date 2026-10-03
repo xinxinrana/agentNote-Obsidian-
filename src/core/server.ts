@@ -54,9 +54,9 @@ export class AgentServer {
       if (method === "POST") {
         const body = await readBody(req) as CreateNodeInput;
         const idempotencyKey = req.headers["idempotency-key"]?.toString() ?? body.idempotencyKey;
-        const node = await this.store.createNode(body, idempotencyKey, context);
+        const { node, created } = await this.store.createNodeResult(body, idempotencyKey, context);
         const data = await this.withLink(node, "created", context);
-        this.notifyActivity({ operation: "created", title: node.title, nodeId: node.id, targetKind: node.type === "folder" ? "folder" : "node", actor: context.actor });
+        if (created) this.notifyActivity({ operation: "created", title: node.title, nodeId: node.id, targetKind: node.type === "folder" ? "folder" : "node", actor: context.actor });
         return send(res, 201, { ok: true, data });
       }
     }
