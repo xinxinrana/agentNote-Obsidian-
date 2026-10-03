@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, detectAgents, installSkill, skillStatus, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -639,6 +639,27 @@ try {
       assert.equal(skillStatus(dir, options), "unknown");
       await fsp.writeFile(path.join(dir, "SKILL.md"), renderSkillMd(options));
       assert.equal(skillStatus(dir, options), "current");
+    } finally { await fsp.rm(home, { recursive: true, force: true }); }
+  });
+  await test("skill updates preserve hand-edited files until explicitly backed up", async () => {
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-skill-backup-"));
+    const dir = path.join(home, "agentnote");
+    const options = { port, agentId: "codex", agentName: "Codex" };
+    try {
+      installSkill(dir, options);
+      assert.equal(skillInstallConflict(dir, "codex"), false);
+      const skillFile = path.join(dir, "SKILL.md");
+      await fsp.appendFile(skillFile, "\nUser's own instruction.\n");
+      const edited = await fsp.readFile(skillFile, "utf8");
+      assert.equal(skillInstallConflict(dir, "codex"), true);
+      assert.throws(() => installSkill(dir, options), /已停止覆盖/);
+      assert.equal(await fsp.readFile(skillFile, "utf8"), edited);
+      installSkill(dir, options, true);
+      const backup = (await fsp.readdir(dir)).find((name) => name.startsWith("SKILL.md.agentnote-backup-"));
+      assert.ok(backup);
+      assert.equal(await fsp.readFile(path.join(dir, backup), "utf8"), edited);
+      assert.equal(skillInstallConflict(dir, "codex"), false);
+      assert.equal(skillInstallConflict(dir, "claude-code"), true);
     } finally { await fsp.rm(home, { recursive: true, force: true }); }
   });
   await test("editable prompt templates retain dynamic service and identity values", async () => {

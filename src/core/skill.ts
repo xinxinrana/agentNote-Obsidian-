@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 
 export interface AgentTarget { id: string; name: string; detectRel: string; skillsRel: string; website: string }
 export interface DetectedAgent extends AgentTarget { skillDir: string; available: boolean; installed: boolean }
@@ -140,18 +140,38 @@ function digest(value: string): string { return createHash("sha256").update(valu
 export function skillStatus(dir: string, options: AgentPromptOptions): SkillStatus {
   const file = path.join(dir, "SKILL.md");
   if (!fs.existsSync(file)) return "unknown";
-  if (options.template !== undefined && options.template !== DEFAULT_SKILL_TEMPLATE) return "custom";
   try {
     const installed = digest(fs.readFileSync(file, "utf8"));
     const identity = JSON.parse(fs.readFileSync(path.join(dir, "agentnote.identity.json"), "utf8")) as Record<string, unknown>;
+    if (identity.id !== (options.agentId ?? "agentnote")) return "unknown";
+    if (options.template !== undefined && options.template !== DEFAULT_SKILL_TEMPLATE) return "custom";
     if (typeof identity.skillHash !== "string" || typeof identity.defaultTemplateHash !== "string") return installed === digest(renderSkillMd(options)) ? "current" : "unknown";
     if (installed !== identity.skillHash) return "custom";
     return identity.defaultTemplateHash === digest(DEFAULT_SKILL_TEMPLATE) ? "current" : "update";
   } catch { return "unknown"; }
 }
 
-export function installSkill(dir: string, options: AgentPromptOptions): void {
+export function skillInstallConflict(dir: string, agentId: string): boolean {
+  const skillFile = path.join(dir, "SKILL.md");
+  const identityFile = path.join(dir, "agentnote.identity.json");
+  if (!fs.existsSync(skillFile) && !fs.existsSync(identityFile)) return false;
+  try {
+    const identity = JSON.parse(fs.readFileSync(identityFile, "utf8")) as Record<string, unknown>;
+    return identity.id !== agentId || identity.skillHash !== digest(fs.readFileSync(skillFile, "utf8"));
+  } catch { return true; }
+}
+
+export function installSkill(dir: string, options: AgentPromptOptions, overwriteExisting = false): void {
+  const conflict = skillInstallConflict(dir, options.agentId ?? "agentnote");
+  if (conflict && !overwriteExisting) throw new Error("现有技能或身份文件不是该 agentNote 接入的未修改版本，已停止覆盖");
   fs.mkdirSync(dir, { recursive: true });
+  if (conflict) {
+    const suffix = `.agentnote-backup-${randomUUID()}`;
+    for (const name of ["SKILL.md", "agentnote.identity.json"]) {
+      const file = path.join(dir, name);
+      if (fs.existsSync(file)) fs.copyFileSync(file, `${file}${suffix}`, fs.constants.COPYFILE_EXCL);
+    }
+  }
   const skill = renderSkillMd(options);
   fs.writeFileSync(path.join(dir, "SKILL.md"), skill, "utf8");
   fs.writeFileSync(path.join(dir, "agentnote.identity.json"), JSON.stringify({ version: 1, id: options.agentId ?? "agentnote", name: options.agentName ?? "未命名 agent", skillHash: digest(skill), defaultTemplateHash: digest(DEFAULT_SKILL_TEMPLATE) }, null, 2), "utf8");

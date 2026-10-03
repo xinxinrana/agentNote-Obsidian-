@@ -253,10 +253,10 @@ export default class AgentNotePlugin extends Plugin {
   detectedAgents(): DetectedAgent[] { return detectAgents(os.homedir()); }
   profile(agentId: string): AgentProfile { return this.settings.agents[agentId] ?? { enabled: true, instructions: "" }; }
   async saveProfile(agentId: string, profile: AgentProfile): Promise<void> { this.settings.agents[agentId] = profile; await this.saveSettings(); }
-  async installAgent(agent: DetectedAgent): Promise<void> {
+  async installAgent(agent: DetectedAgent, overwriteExisting = false): Promise<void> {
     const profile = this.profile(agent.id);
     try {
-      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name, template: profile.template });
+      installSkill(agent.skillDir, { port: this.server?.port ?? this.settings.port, instructions: profile.instructions, agentId: agent.id, agentName: agent.name, template: profile.template }, overwriteExisting);
       await this.store.registerAgent({ id: agent.id, name: agent.name });
       await this.saveProfile(agent.id, { ...profile, enabled: true });
       new Notice(`${agent.name} 已接入 agentNote；重启 agent 后生效。`);

@@ -1,7 +1,7 @@
 import { App, ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import type AgentNotePlugin from "../main";
 import type { LiveAgentActivity } from "../main";
-import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, skillStatus, type DetectedAgent } from "../core/skill";
+import { renderManualInstallPrompt, renderSkillMd, renderSkillSource, skillInstallConflict, skillStatus, type DetectedAgent } from "../core/skill";
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
@@ -217,7 +217,16 @@ export class AgentNoteView extends ItemView {
       card.createEl("div", { cls: "agentnote-agent-path", text: `安装位置：${agent.skillDir}` });
       const actions = card.createDiv({ cls: "agentnote-node-actions" });
       const install = actions.createEl("button", { text: !agent.installed ? "接入 agentNote" : status === "update" ? "更新默认说明" : "更新接入", cls: "mod-cta" });
-      install.onclick = () => void this.plugin.installAgent(agent);
+      install.onclick = () => {
+        if (!skillInstallConflict(agent.skillDir, agent.id)) { void this.plugin.installAgent(agent); return; }
+        const confirm = new Modal(this.app);
+        confirm.contentEl.createEl("h3", { text: "保留现有技能后更新？" });
+        confirm.contentEl.createEl("p", { text: `${agent.name} 的技能或身份文件已被修改，或不是插件安装的版本。继续会先在原目录备份这些文件，再写入新的 agentNote 接入。` });
+        const actions = confirm.contentEl.createDiv({ cls: "agentnote-node-actions" });
+        actions.createEl("button", { text: "取消" }).onclick = () => confirm.close();
+        actions.createEl("button", { text: "备份并更新", cls: "mod-warning" }).onclick = () => { confirm.close(); void this.plugin.installAgent(agent, true); };
+        confirm.open();
+      };
       const edit = actions.createEl("button", { text: "管理提示词" });
       edit.onclick = () => new AgentPromptModal(this.app, this.plugin, agent, () => this.refresh()).open();
       if (agent.installed) {
