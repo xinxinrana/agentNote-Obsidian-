@@ -63,7 +63,7 @@ Then deploy the built plugin to a test vault and verify in Obsidian:
 - Shared files, folders, selections, and notes resolve correctly.
 - An agent can create and update notes through the intended local workflow.
 - Material titles in the knowledge profile open their original files; privacy view hides titles and open-file actions.
-- The feedback form copies the report and opens a pre-filled issue in the system default browser.
+- The feedback form copies the report and opens either a pre-filled GitHub Issue or the feedback site in the system default browser, as chosen by the user.
 
 Do not create a release until these checks pass.
 

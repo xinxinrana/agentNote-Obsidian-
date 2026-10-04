@@ -806,25 +806,35 @@ export class FeedbackModal extends Modal {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app); }
   onOpen(): void {
     this.contentEl.empty(); this.contentEl.createEl("h2", { text: "发送反馈" });
-    this.contentEl.createEl("p", { text: "反馈会先复制到剪贴板，再在系统默认浏览器打开 GitHub Issue。GitHub 登录由你的浏览器账户处理。" });
+    this.contentEl.createEl("p", { text: "填写反馈后，选择 GitHub 或反馈站提交。内容会先复制到剪贴板，再在系统默认浏览器打开对应页面。" });
     new Setting(this.contentEl).setName("类型").addDropdown((dropdown) => dropdown.addOptions({ "问题反馈": "问题反馈", "功能建议": "功能建议", "使用体验": "使用体验" }).setValue(this.type).onChange((value) => this.type = value));
     new Setting(this.contentEl).setName("标题").addText((input) => input.setPlaceholder("一句话说明反馈").onChange((value) => this.title = value));
     new Setting(this.contentEl).setName("详情").addTextArea((input) => { input.setPlaceholder("发生了什么、你的预期是什么、如何复现（如适用）。"); input.inputEl.addClass("agentnote-full-width"); input.onChange((value) => this.details = value); });
-    new Setting(this.contentEl).addButton((button) => button.setButtonText("复制反馈").onClick(() => void this.copy())).addButton((button) => button.setButtonText("复制并在浏览器提交").setCta().onClick(() => void this.submit()));
+    new Setting(this.contentEl).setName("GitHub Issue").setDesc("自动填好标题和详情，适合希望更快跟进的问题。")
+      .addButton((button) => button.setButtonText("前往 GitHub").onClick(() => void this.submit("github")));
+    new Setting(this.contentEl).setName("反馈站").setDesc("国内访问更方便；打开后粘贴反馈内容。首次打开可能需要稍等。")
+      .addButton((button) => button.setButtonText("前往反馈站").setCta().onClick(() => void this.submit("site")));
+    new Setting(this.contentEl).addButton((button) => button.setButtonText("仅复制反馈内容").onClick(() => void this.copy()));
   }
   private report(): string { return `## ${this.type}\n\n${this.details.trim() || "请补充具体情况。"}\n\n---\nagentNote ${this.plugin.manifest.version}`; }
   private valid(): boolean { if (this.title.trim()) return true; new Notice("请填写反馈标题。"); return false; }
   private async copy(): Promise<boolean> {
     if (!this.valid()) return false;
-    await navigator.clipboard.writeText(`# [${this.type}] ${this.title.trim()}\n\n${this.report()}`);
-    new Notice("反馈内容已复制。"); return true;
+    try {
+      await navigator.clipboard.writeText(`# [${this.type}] ${this.title.trim()}\n\n${this.report()}`);
+      new Notice("反馈内容已复制。"); return true;
+    } catch (error) { new Notice(`复制失败：${(error as Error).message}`); return false; }
   }
-  private async submit(): Promise<void> {
+  private async submit(target: "github" | "site"): Promise<void> {
     if (!await this.copy()) return;
     const params = new URLSearchParams({ title: `[${this.type}] ${this.title.trim()}`, body: this.report() });
     try {
       const { shell } = require("electron") as typeof import("electron");
-      await shell.openExternal(`https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`);
+      const url = target === "github"
+        ? `https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`
+        : "https://agentnote-feedback.pocketbay.app/";
+      await shell.openExternal(url);
+      if (target === "site") new Notice("反馈站已打开，请粘贴反馈内容；首次启动时可稍等片刻。", 6000);
       this.close();
     } catch (error) { new Notice(`无法打开系统浏览器：${(error as Error).message}`); }
   }
