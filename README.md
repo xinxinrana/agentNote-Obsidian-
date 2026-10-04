@@ -37,9 +37,9 @@ Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete
 4. Ask the connected agent to read the link, or simply say “Write this to Obsidian.”
 
 <p align="center">
-  <img src="docs/img/how-to/01-local-service.png" alt="agentNote local service running" height="300">
+  <img src="docs/img/agentnote-workflow.svg" alt="Animated workflow: connect an agent, share a note, send the local address, and write the result back to Obsidian" width="920">
   <br>
-  <sub>Start the local service, connect an agent, then share a file from Obsidian.</sub>
+  <sub>Connect an agent, share a note, send its local address, and write the result back.</sub>
 </p>
 
 ## Installation

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 354" role="img" aria-labelledby="title desc">
+  <title id="title">agentNote：接入、分享、读取、写回</title>
+  <desc id="desc">四步动画演示：在接入台接入 Agent，在 Obsidian 右键分享笔记，把本地地址发给 Agent，最后将结果写回 Obsidian。</desc>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .card { fill: #fff; stroke: #e4d9f3; stroke-width: 1.5; }
+    .bar { fill: #f5f0fc; }
+    .muted { fill: #766b84; }
+    .ink { fill: #30253d; }
+    .purple { fill: #824ccc; }
+    .small { font-size: 12px; }
+    .tiny { font-size: 10px; }
+    .step { font-size: 16px; font-weight: 700; }
+    .active { fill: none; stroke: #ab69ef; stroke-width: 3; opacity: 0; }
+    .active.one { animation: stage-one 16s linear infinite; }
+    .active.two { animation: stage-two 16s linear infinite; }
+    .active.three { animation: stage-three 16s linear infinite; }
+    .active.four { animation: stage-four 16s linear infinite; }
+    .cursor { fill: #30253d; stroke: #fff; stroke-width: 1.5; opacity: 0; }
+    .cursor.one { animation: cursor-one 16s linear infinite; }
+    .cursor.two { animation: cursor-two 16s linear infinite; }
+    .cursor.three { animation: cursor-three 16s linear infinite; }
+    .cursor.four { animation: cursor-four 16s linear infinite; }
+    .click { fill: none; stroke: #ab69ef; stroke-width: 3; opacity: 0; }
+    .click.one { animation: click-one 16s linear infinite; }
+    .click.two { animation: click-two 16s linear infinite; }
+    .click.three { animation: click-three 16s linear infinite; }
+    .click.four { animation: click-four 16s linear infinite; }
+    @keyframes stage-one { 0%, 22% { opacity: 1; } 25%, 100% { opacity: 0; } }
+    @keyframes stage-two { 0%, 24% { opacity: 0; } 27%, 47% { opacity: 1; } 50%, 100% { opacity: 0; } }
+    @keyframes stage-three { 0%, 49% { opacity: 0; } 52%, 72% { opacity: 1; } 75%, 100% { opacity: 0; } }
+    @keyframes stage-four { 0%, 74% { opacity: 0; } 77%, 97% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes cursor-one { 0% { opacity: 0; transform: translate(56px, 209px); } 5% { opacity: 1; } 15%, 20% { opacity: 1; transform: translate(78px, 220px); } 24%, 100% { opacity: 0; transform: translate(78px, 220px); } }
+    @keyframes cursor-two { 0%, 25% { opacity: 0; transform: translate(288px, 167px); } 29% { opacity: 1; } 39%, 45% { opacity: 1; transform: translate(346px, 226px); } 49%, 100% { opacity: 0; transform: translate(346px, 226px); } }
+    @keyframes cursor-three { 0%, 50% { opacity: 0; transform: translate(555px, 230px); } 54% { opacity: 1; } 64%, 70% { opacity: 1; transform: translate(659px, 245px); } 74%, 100% { opacity: 0; transform: translate(659px, 245px); } }
+    @keyframes cursor-four { 0%, 75% { opacity: 0; transform: translate(765px, 176px); } 79% { opacity: 1; } 89%, 95% { opacity: 1; transform: translate(829px, 207px); } 99%, 100% { opacity: 0; transform: translate(829px, 207px); } }
+    @keyframes click-one { 0%, 13% { opacity: 0; r: 3px; } 16% { opacity: 1; r: 12px; } 20%, 100% { opacity: 0; r: 20px; } }
+    @keyframes click-two { 0%, 37% { opacity: 0; r: 3px; } 40% { opacity: 1; r: 12px; } 44%, 100% { opacity: 0; r: 20px; } }
+    @keyframes click-three { 0%, 62% { opacity: 0; r: 3px; } 65% { opacity: 1; r: 12px; } 69%, 100% { opacity: 0; r: 20px; } }
+    @keyframes click-four { 0%, 87% { opacity: 0; r: 3px; } 90% { opacity: 1; r: 12px; } 94%, 100% { opacity: 0; r: 20px; } }
+    @media (prefers-reduced-motion: reduce) { .active, .cursor, .click { animation: none; } }
+  </style>
+
+  <rect width="960" height="354" rx="22" fill="#faf7ff"/>
+  <text x="28" y="36" class="ink" font-size="21" font-weight="700">从本地笔记到 Agent，再把成果带回来</text>
+  <text x="28" y="59" class="muted small">一次接入，右键分享，发出地址，用自然语言写回笔记</text>
+
+  <g id="connect">
+    <rect x="20" y="85" width="215" height="240" rx="14" class="card"/>
+    <rect x="20" y="85" width="215" height="240" rx="14" class="active one"/>
+    <circle cx="43" cy="109" r="13" fill="#ead9ff"/><text x="39" y="114" class="purple small" font-weight="700">1</text>
+    <text x="64" y="114" class="ink step">接入 Agent</text>
+    <rect x="36" y="133" width="183" height="161" rx="9" fill="#f8f5fc" stroke="#eee6f6"/>
+    <rect x="36" y="133" width="183" height="26" rx="9" class="bar"/>
+    <circle cx="49" cy="146" r="3" fill="#c5b5d8"/><circle cx="59" cy="146" r="3" fill="#c5b5d8"/><circle cx="69" cy="146" r="3" fill="#c5b5d8"/>
+    <text x="82" y="150" class="muted tiny">agentNote 接入台</text>
+    <rect x="47" y="170" width="161" height="110" rx="7" fill="#fff" stroke="#e4d9f3"/>
+    <circle cx="66" cy="190" r="10" fill="#e8dcf7"/><text x="83" y="194" class="ink small" font-weight="700">Codex</text>
+    <text x="54" y="219" class="muted tiny">选择 Agent，复制安装任务</text>
+    <rect x="54" y="230" width="79" height="30" rx="6" fill="#a961ea"/>
+    <text x="77" y="249" fill="#fff" class="small" font-weight="700">接入</text>
+    <text x="145" y="249" fill="#139b59" class="tiny">→ 已接入</text>
+  </g>
+
+  <path d="M239 205h12m-5-5 5 5-5 5" fill="none" stroke="#a981d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g id="share">
+    <rect x="253" y="85" width="215" height="240" rx="14" class="card"/>
+    <rect x="253" y="85" width="215" height="240" rx="14" class="active two"/>
+    <circle cx="276" cy="109" r="13" fill="#ead9ff"/><text x="272" y="114" class="purple small" font-weight="700">2</text>
+    <text x="297" y="114" class="ink step">右键分享</text>
+    <rect x="269" y="133" width="183" height="161" rx="9" fill="#f8f5fc" stroke="#eee6f6"/>
+    <rect x="269" y="133" width="183" height="26" rx="9" class="bar"/>
+    <circle cx="282" cy="146" r="3" fill="#c5b5d8"/><circle cx="292" cy="146" r="3" fill="#c5b5d8"/><circle cx="302" cy="146" r="3" fill="#c5b5d8"/>
+    <text x="315" y="150" class="muted tiny">Obsidian 笔记</text>
+    <rect x="281" y="171" width="151" height="27" rx="5" fill="#ece0fb"/>
+    <text x="291" y="189" class="ink small">▤  产品讨论.md</text>
+    <text x="291" y="217" class="muted small">▤  会议纪要.md</text>
+    <rect x="304" y="220" width="135" height="40" rx="6" fill="#fff" stroke="#d9cbe9"/>
+    <rect x="309" y="225" width="125" height="29" rx="4" fill="#a961ea"/>
+    <text x="316" y="244" fill="#fff" class="tiny" font-weight="700">分享给 Agent</text>
+    <text x="283" y="281" class="muted tiny">分享地址自动复制</text>
+  </g>
+
+  <path d="M472 205h12m-5-5 5 5-5 5" fill="none" stroke="#a981d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g id="read">
+    <rect x="486" y="85" width="215" height="240" rx="14" class="card"/>
+    <rect x="486" y="85" width="215" height="240" rx="14" class="active three"/>
+    <circle cx="509" cy="109" r="13" fill="#ead9ff"/><text x="505" y="114" class="purple small" font-weight="700">3</text>
+    <text x="530" y="114" class="ink step">发给 Agent</text>
+    <rect x="502" y="133" width="183" height="161" rx="9" fill="#f8f5fc" stroke="#eee6f6"/>
+    <rect x="502" y="133" width="183" height="26" rx="9" class="bar"/>
+    <circle cx="515" cy="146" r="3" fill="#c5b5d8"/><circle cx="525" cy="146" r="3" fill="#c5b5d8"/><circle cx="535" cy="146" r="3" fill="#c5b5d8"/>
+    <text x="548" y="150" class="muted tiny">Agent 对话</text>
+    <rect x="521" y="171" width="149" height="41" rx="8" fill="#ead9ff"/>
+    <text x="530" y="188" class="ink tiny">请读取这份资料</text>
+    <text x="530" y="202" class="purple tiny">127.0.0.1:27182/…</text>
+    <rect x="516" y="228" width="145" height="35" rx="8" fill="#fff" stroke="#e4d9f3"/>
+    <text x="525" y="244" class="ink tiny">已读取「产品讨论.md」</text>
+    <text x="525" y="256" class="muted tiny">找到 3 个重点</text>
+    <circle cx="670" cy="246" r="12" fill="#a961ea"/><path d="m666 246 8 0m-3-3 3 3-3 3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="514" y="281" class="muted tiny">本机地址，仅本机可访问</text>
+  </g>
+
+  <path d="M705 205h12m-5-5 5 5-5 5" fill="none" stroke="#a981d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g id="save">
+    <rect x="719" y="85" width="221" height="240" rx="14" class="card"/>
+    <rect x="719" y="85" width="221" height="240" rx="14" class="active four"/>
+    <circle cx="742" cy="109" r="13" fill="#ead9ff"/><text x="738" y="114" class="purple small" font-weight="700">4</text>
+    <text x="763" y="114" class="ink step">写回笔记</text>
+    <rect x="735" y="133" width="189" height="161" rx="9" fill="#f8f5fc" stroke="#eee6f6"/>
+    <rect x="735" y="133" width="189" height="26" rx="9" class="bar"/>
+    <circle cx="748" cy="146" r="3" fill="#c5b5d8"/><circle cx="758" cy="146" r="3" fill="#c5b5d8"/><circle cx="768" cy="146" r="3" fill="#c5b5d8"/>
+    <text x="781" y="150" class="muted tiny">Obsidian 笔记</text>
+    <text x="750" y="183" class="ink small">▤  产品讨论.md</text>
+    <rect x="746" y="197" width="166" height="31" rx="6" fill="#ead9ff"/>
+    <text x="750" y="217" class="purple small" font-weight="700">▤  产品讨论结论.md</text>
+    <rect x="746" y="241" width="166" height="38" rx="6" fill="#fff" stroke="#e4d9f3"/>
+    <text x="756" y="256" class="muted tiny">对 Agent 说：</text>
+    <text x="756" y="270" class="ink tiny" font-weight="700">“把结论写到 Obsidian”</text>
+  </g>
+
+  <path class="cursor one" d="M0 0v21l5-6 5 10 5-3-5-10 8-1z"/>
+  <path class="cursor two" d="M0 0v21l5-6 5 10 5-3-5-10 8-1z"/>
+  <path class="cursor three" d="M0 0v21l5-6 5 10 5-3-5-10 8-1z"/>
+  <path class="cursor four" d="M0 0v21l5-6 5 10 5-3-5-10 8-1z"/>
+  <circle class="click one" cx="88" cy="244" r="3"/>
+  <circle class="click two" cx="355" cy="239" r="3"/>
+  <circle class="click three" cx="670" cy="246" r="3"/>
+  <circle class="click four" cx="829" cy="211" r="3"/>
+</svg>

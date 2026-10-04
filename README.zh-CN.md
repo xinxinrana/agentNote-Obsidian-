@@ -36,9 +36,9 @@ agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、W
 4. 请已接入的 agent 读取地址，或直接说“写到 Obsidian”。
 
 <p align="center">
-  <img src="docs/img/how-to/01-local-service.png" alt="agentNote 本地服务正在运行" height="300">
+  <img src="docs/img/agentnote-workflow.svg" alt="操作动画：接入 Agent、右键分享笔记、发送本地地址、把成果写回 Obsidian" width="920">
   <br>
-  <sub>启动本地服务，把接入任务交给 agent，然后从 Obsidian 分享资料。</sub>
+  <sub>接入 Agent，分享笔记，发送本地地址，再把成果写回 Obsidian。</sub>
 </p>
 
 ## 安装
