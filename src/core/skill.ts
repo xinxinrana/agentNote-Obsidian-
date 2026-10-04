@@ -196,6 +196,8 @@ export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "po
 2. 在同一目录创建 agentnote.identity.json，填写你固定的 id 和 name，例如 {"id":"your-agent-id","name":"Your Agent Name"}。之后按 Skill 说明使用这份身份。
 3. 安装后 POST ${base}/api/agents/register，上报 {"name":"你的 Agent 名称","skillPath":"SKILL.md 的绝对路径"}。上报名称与身份文件中的 name 保持一致，供 Obsidian 管理这份 Skill。
 
+如当前 Agent 支持为 Skill 设置图标，推荐从 ${base}/api/skill-icon.svg 下载并使用；不支持则跳过。
+
 最后简单确认新会话能够使用该 Skill。如果本地链接无法访问，提醒用户打开 Obsidian 的 agentNote 服务。`;
 }
 

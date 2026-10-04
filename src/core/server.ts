@@ -3,6 +3,7 @@ import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateN
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
 import { renderSharedSkillMd } from "./skill";
 import type { AgentConnection } from "./agentConnections";
+import xiaojiMarkUrl from "../../assets/brand/xiaoji-mark.svg";
 
 export type AgentOperation = "read" | "created" | "updated" | "archived";
 export interface AgentActivity { operation: AgentOperation; title: string; nodeId?: string; shareId?: string; targetKind?: ShareTarget["kind"]; actor?: ActivityContext["actor"] }
@@ -51,6 +52,11 @@ export class AgentServer {
     if (url.pathname === "/api/skill.md" && method === "GET") {
       const body = renderSharedSkillMd(this.port ?? this.opts.port);
       res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-store" });
+      return void res.end(body);
+    }
+    if (url.pathname === "/api/skill-icon.svg" && method === "GET") {
+      const body = decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1));
+      res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-store" });
       return void res.end(body);
     }
     if (url.pathname === "/api/agents/register" && method === "POST") {

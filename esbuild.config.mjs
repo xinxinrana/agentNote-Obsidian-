@@ -52,6 +52,7 @@ const coreConfig = {
   sourcemap: false,
   minify: false,
   treeShaking: true,
+  loader: { ".svg": "dataurl" },
   outfile: "test/core-bundle.cjs",
 };
 

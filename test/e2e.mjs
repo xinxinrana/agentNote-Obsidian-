@@ -706,6 +706,12 @@ try {
     assert.equal(await response.text(), renderSharedSkillMd(port));
     assert.match(renderSharedSkillMd(port), /X-AgentNote-Agent-Id: <读取 agentnote\.identity\.json/);
   });
+  await test("optional Skill icon serves the existing product SVG", async () => {
+    const response = await fetch(`${base}/api/skill-icon.svg`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/svg+xml; charset=utf-8");
+    assert.equal(await response.text(), await fsp.readFile("assets/brand/xiaoji-mark.svg", "utf8"));
+  });
   await test("built-in agents remain visible regardless of local installation", async () => {
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-agents-"));
     try {
@@ -727,6 +733,7 @@ try {
   await test("installation prompt gives one shared skill, identity setup, and first report", async () => {
     const prompt = renderManualInstallPrompt({ port });
     assert.match(prompt, /\/api\/skill\.md/); assert.match(prompt, /SKILL\.md/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /\/api\/agents\/register/); assert.match(prompt, /skillPath/); assert.match(prompt, /最后简单确认/);
+    assert.match(prompt, /如当前 Agent 支持为 Skill 设置图标，推荐从 http:\/\/127\.0\.0\.1:\d+\/api\/skill-icon\.svg 下载并使用；不支持则跳过/);
     assert.doesNotMatch(prompt, /\/api\/health/);
   });
   await test("first Agent report stores a local path and matches names case-insensitively", async () => {
