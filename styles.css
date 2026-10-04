@@ -123,6 +123,183 @@
 .agentnote-quick-start-modal h2 { margin: 4px 0 8px; }
 .agentnote-quick-start-modal > .modal-content > p { margin: 0; color: var(--text-muted); line-height: 1.55; }
 
+.agentnote-workflow-demo { margin-top: 18px; }
+.agentnote-demo-viewport {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  min-height: 220px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  font-size: 12px;
+}
+.agentnote-demo-app {
+  position: relative;
+  min-width: 0;
+  min-height: 198px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  background: var(--background-primary);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .06);
+}
+.agentnote-demo-app-wide { grid-column: 1 / -1; }
+.agentnote-demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.agentnote-demo-dots,
+.agentnote-demo-dots::before,
+.agentnote-demo-dots::after { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--text-faint); }
+.agentnote-demo-dots { position: relative; margin-right: 13px; }
+.agentnote-demo-dots::before,
+.agentnote-demo-dots::after { position: absolute; top: 0; content: ""; }
+.agentnote-demo-dots::before { left: 8px; }
+.agentnote-demo-dots::after { left: 16px; }
+.agentnote-demo-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 12px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  color: var(--text-normal);
+  white-space: nowrap;
+}
+.agentnote-demo-file-icon { position: relative; width: 12px; height: 15px; border: 1.5px solid var(--interactive-accent); border-radius: 2px; }
+.agentnote-demo-file-icon::after { position: absolute; top: 2px; right: 2px; width: 3px; height: 3px; border-top: 1px solid var(--interactive-accent); border-right: 1px solid var(--interactive-accent); content: ""; }
+.agentnote-demo-agent-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin: 16px 12px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+}
+.agentnote-demo-agent-card strong { font-size: 13px; }
+.agentnote-demo-agent-card .agentnote-demo-before { color: var(--text-muted); }
+.agentnote-demo-agent-card .agentnote-demo-after { grid-column: 2; grid-row: 1; color: var(--text-success); opacity: 0; }
+.agentnote-demo-agent-card b { grid-column: 1 / -1; width: max-content; padding: 5px 12px; border-radius: 5px; color: var(--text-on-accent); background: var(--interactive-accent); font-size: 11px; }
+.agentnote-demo-menu {
+  position: absolute;
+  z-index: 2;
+  top: 52px;
+  left: 43%;
+  width: 205px;
+  padding: 5px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  opacity: 0;
+}
+.agentnote-demo-menu div,
+.agentnote-demo-menu strong { display: block; padding: 8px; border-radius: 5px; font-size: 11px; font-weight: 500; }
+.agentnote-demo-menu strong { color: var(--text-on-accent); background: var(--interactive-accent); }
+.agentnote-demo-toast {
+  position: absolute;
+  right: 15px;
+  bottom: 14px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  opacity: 0;
+}
+.agentnote-demo-cursor {
+  position: absolute;
+  z-index: 3;
+  top: 63px;
+  left: 23%;
+  width: 18px;
+  height: 23px;
+  background: var(--text-normal);
+  clip-path: polygon(0 0, 0 100%, 5px 76%, 10px 95%, 13px 93%, 8px 74%, 17px 73%);
+  filter: drop-shadow(1px 1px var(--background-primary));
+}
+.agentnote-demo-link { margin: 22px 12px; padding: 9px; overflow: hidden; border: 1px dashed var(--interactive-accent); border-radius: 6px; color: var(--text-accent); white-space: nowrap; text-overflow: ellipsis; }
+.agentnote-demo-chat .agentnote-demo-message,
+.agentnote-demo-chat .agentnote-demo-reply { max-width: calc(100% - 24px); margin: 12px; padding: 8px; border-radius: 7px; line-height: 1.35; }
+.agentnote-demo-chat .agentnote-demo-message { margin-left: auto; color: var(--text-on-accent); background: var(--interactive-accent); }
+.agentnote-demo-chat .agentnote-demo-reply { background: var(--background-secondary); opacity: 0; }
+.agentnote-demo-compose {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  left: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.agentnote-demo-compose b { padding: 2px 5px; border-radius: 4px; color: var(--text-on-accent); background: var(--interactive-accent); }
+.agentnote-demo-created { color: var(--text-accent); background: color-mix(in srgb, var(--interactive-accent) 12%, transparent); opacity: 0; }
+.agentnote-demo-caption { margin: 10px 1px !important; min-height: 2.8em; color: var(--text-normal) !important; font-size: .9em; }
+.agentnote-demo-controls { display: flex; gap: 7px; }
+.agentnote-demo-controls button { flex: 1; min-width: 0; padding: 7px 5px; font-size: .8em; }
+.agentnote-demo-controls button.is-active { color: var(--text-on-accent); background: var(--interactive-accent); }
+
+[data-step="分享笔记"] .agentnote-demo-target { animation: agentnote-demo-highlight 5.6s both; }
+[data-step="接入 Agent"] .agentnote-demo-cursor { animation: agentnote-demo-connect-cursor 5.6s both; }
+[data-step="接入 Agent"] .agentnote-demo-toast { animation: agentnote-demo-appear 5.6s both; }
+[data-step="接入 Agent"] .agentnote-demo-before,
+[data-step="接入 Agent"] .agentnote-demo-agent-card b { animation: agentnote-demo-fade-out 5.6s both; }
+[data-step="接入 Agent"] .agentnote-demo-after,
+[data-step="接入 Agent"] .agentnote-demo-reply { animation: agentnote-demo-late 5.6s both; }
+[data-step="分享笔记"] .agentnote-demo-menu { animation: agentnote-demo-appear 5.6s both; }
+[data-step="分享笔记"] .agentnote-demo-toast { animation: agentnote-demo-late 5.6s both; }
+[data-step="分享笔记"] .agentnote-demo-cursor { animation: agentnote-demo-share-cursor 5.6s both; }
+[data-step="发送地址"] .agentnote-demo-reply,
+[data-step="写回笔记"] .agentnote-demo-reply,
+[data-step="写回笔记"] .agentnote-demo-created { animation: agentnote-demo-late 5.6s both; }
+[data-step="发送地址"] .agentnote-demo-cursor,
+[data-step="写回笔记"] .agentnote-demo-cursor { animation: agentnote-demo-send-cursor 5.6s both; }
+
+@keyframes agentnote-demo-highlight { 0%, 12% { background: transparent; } 22%, 100% { background: color-mix(in srgb, var(--interactive-accent) 12%, transparent); } }
+@keyframes agentnote-demo-appear { 0%, 24% { opacity: 0; transform: translateY(-5px); } 32%, 100% { opacity: 1; transform: translateY(0); } }
+@keyframes agentnote-demo-fade-out { 0%, 53% { opacity: 1; } 63%, 100% { opacity: 0; } }
+@keyframes agentnote-demo-late { 0%, 53% { opacity: 0; transform: translateY(6px); } 63%, 100% { opacity: 1; transform: translateY(0); } }
+@keyframes agentnote-demo-connect-cursor { 0%, 12% { top: 51px; left: 18%; } 34%, 100% { top: 112px; left: 66%; } }
+@keyframes agentnote-demo-share-cursor { 0%, 12% { transform: translate(0, 0); } 30% { transform: translate(16px, 0); } 53%, 100% { transform: translate(145px, 37px); } }
+@keyframes agentnote-demo-send-cursor { 0%, 20% { top: 56px; left: 35%; } 50%, 100% { top: 156px; left: 86%; } }
+
+@media (max-width: 520px) {
+  .agentnote-demo-viewport { font-size: 10px; }
+  .agentnote-demo-menu { left: 32%; width: min(205px, 63%); }
+  .agentnote-demo-chat .agentnote-demo-message,
+  .agentnote-demo-chat .agentnote-demo-reply { font-size: 10px; }
+  .agentnote-demo-compose { font-size: 9px; }
+  .agentnote-demo-controls button { font-size: .72em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agentnote-demo-viewport * { animation: none !important; transition: none !important; }
+  .agentnote-demo-menu,
+  .agentnote-demo-toast,
+  .agentnote-demo-reply,
+  .agentnote-demo-after,
+  .agentnote-demo-created { opacity: 1; }
+  .agentnote-demo-before,
+  .agentnote-demo-agent-card b { display: none; }
+  .agentnote-demo-cursor { display: none; }
+}
+
 .agentnote-guide-steps {
   display: grid;
   gap: 10px;

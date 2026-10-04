@@ -9,6 +9,7 @@ import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
 import xiaojiWave from "../../assets/brand/xiaoji-wave.svg";
 import { CompanionPet } from "./pet";
+import { renderWorkflowDemo } from "./workflowDemo";
 import { toBlob } from "html-to-image";
 import { ACTIVITY_WEIGHTS, type DashboardInsights, type DocumentContribution, type InsightEvent, type InsightNote } from "../core/store";
 
@@ -69,7 +70,7 @@ export class AgentNoteView extends ItemView {
       this.plugin.settings.showQuickStart = false;
       await this.plugin.saveSettings();
       this.plugin.refreshPanels();
-      new Notice("快速教程已隐藏；可在“设置 → 插件设置 → 使用教程”中直接查看。", 5000);
+      new Notice("快速教程已隐藏；可在“设置 → agentNote → 帮助与更新”中重新打开。", 5000);
     };
     const steps = guide.createDiv({ cls: "agentnote-quick-start-steps" });
     for (const [number, titleText, description] of [["01", "接入一个 agent", "在下方选择已安装的 agent 并完成接入。"], ["02", "分享一份资料", "右键文件或文件夹，复制 agentNote 地址。"], ["03", "直接开始对话", "把地址发给 agent，或说“写到 Obsidian”。"]] as const) {
@@ -259,12 +260,14 @@ export class AgentNoteView extends ItemView {
 }
 
 export class QuickStartModal extends Modal {
+  private stopDemo: (() => void) | null = null;
   onOpen(): void {
     this.modalEl.addClass("agentnote-quick-start-modal");
     this.contentEl.empty();
     this.contentEl.createEl("span", { cls: "agentnote-eyebrow", text: "AGENTNOTE · QUICK START" });
     this.contentEl.createEl("h2", { text: "三分钟开始使用" });
     this.contentEl.createEl("p", { text: "完成一次接入、一次分享和一次对话，你就已经掌握 agentNote 的核心流程。" });
+    this.stopDemo = renderWorkflowDemo(this.contentEl);
     const steps = this.contentEl.createEl("ol", { cls: "agentnote-guide-steps" });
     for (const [title, description] of [["确认本地服务", "在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。"], ["接入一个 agent", "点击目标 Agent 的“接入”，把复制的任务发给它。安装并上报成功后，接入台会显示“已接入”。"], ["分享并开始工作", "右键文件或文件夹选择“agentNote: 分享给 agent”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。"]] as const) {
       const item = steps.createEl("li"); item.createEl("strong", { text: title }); item.createEl("p", { text: description });
@@ -272,6 +275,7 @@ export class QuickStartModal extends Modal {
     const example = this.contentEl.createDiv({ cls: "agentnote-guide-example" }); example.createEl("strong", { text: "可直接发送给 agent" }); example.createEl("code", { text: "请读取这个资料，整理重点、待办和风险：<粘贴 agentNote 地址>" });
     const help = this.contentEl.createDiv({ cls: "agentnote-guide-help" }); help.createEl("span", { text: "需要完整图文说明？" }); help.createEl("a", { text: "打开 How to Use guide", cls: "external-link", attr: { href: "https://github.com/xinxinrana/agentNote-Obsidian-/blob/main/docs/How%20to%20Use.md", target: "_blank", rel: "noopener noreferrer" } });
   }
+  onClose(): void { this.stopDemo?.(); this.stopDemo = null; }
 }
 
 type InsightTab = "overview" | "week" | "month" | "agents" | "timeline" | "archive";

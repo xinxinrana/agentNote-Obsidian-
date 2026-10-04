@@ -2,6 +2,8 @@
 
 agentNote has one simple loop: **start the local service → connect an agent → share a local item → continue the work in natural language**. This guide gets you through the first loop in about three minutes.
 
+Select **View tutorial** at the top of the connection panel for an animated walkthrough of connecting an agent, sharing a note, sending its link, and writing a result back to Obsidian.
+
 > Looking for Chinese instructions? Read [功能与使用](功能与使用.md).
 >
 > 中文快速上手：[如何使用 agentNote](如何使用.md)
