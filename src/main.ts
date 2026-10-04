@@ -1,6 +1,6 @@
 import * as os from "os";
 import * as path from "path";
-import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, parseLinktext } from "obsidian";
+import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, addIcon, parseLinktext, removeIcon } from "obsidian";
 import { AgentServer } from "./core/server";
 import type { AgentActivity, ShareLinkInfo } from "./core/server";
 import { AgentConnections, localConnectionsFile } from "./core/agentConnections";
@@ -11,6 +11,7 @@ import { isLocalActivityBurst } from "./core/activityLog";
 import { isNodeFile } from "./core/nodeFile";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
 import { AGENTNOTE_VIEW, AgentNoteView, BulkActivityModal, QuickStartModal } from "./ui/panel";
+import xiaojiMarkUrl from "../assets/brand/xiaoji-mark.svg";
 
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
@@ -49,7 +50,10 @@ export default class AgentNotePlugin extends Plugin {
     this.connections = new AgentConnections(localConnectionsFile(os.homedir(), adapter.getBasePath()));
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
-    this.addRibbonIcon("bot", "打开 agentNote 接入台", () => void this.activatePanel());
+    const mark = new DOMParser().parseFromString(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1)), "image/svg+xml").documentElement;
+    mark.querySelector("title")?.remove();
+    addIcon("agentnote-mark", `<g transform="scale(0.78125)">${mark.innerHTML}</g>`);
+    this.addRibbonIcon("agentnote-mark", "打开 agentNote 接入台", () => void this.activatePanel());
     this.addCommand({ id: "open-panel", name: "打开接入台", callback: () => void this.activatePanel() });
     this.addCommand({ id: "create-note", name: "新建笔记", callback: () => this.openCreateNoteModal() });
     this.addCommand({ id: "share-selection", name: "分享选中内容", editorCallback: (editor) => void this.shareSelection(editor) });
@@ -70,6 +74,7 @@ export default class AgentNotePlugin extends Plugin {
     if (this.settings.autostartServer) await this.startServer(true);
   }
   onunload(): void {
+    removeIcon("agentnote-mark");
     this.bulkModal?.close();
     if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer);
     if (this.coldBackupTimer !== null) window.clearTimeout(this.coldBackupTimer);
