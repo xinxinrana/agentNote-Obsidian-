@@ -2,62 +2,82 @@ const steps = [
   {
     title: "接入 Agent",
     caption: "点击“接入”复制任务，发给 Agent；安装并上报后，状态会变成“已接入”。",
-    scene: `<div class="agentnote-demo-app">
-      <div class="agentnote-demo-bar"><span class="agentnote-demo-dots"></span>agentNote · 接入台</div>
-      <div class="agentnote-demo-agent-card"><strong>Codex</strong><span class="agentnote-demo-before">未接入</span><span class="agentnote-demo-after">已接入</span><b>接入</b></div>
-      <div class="agentnote-demo-toast">✓ 安装任务已复制</div>
-      <span class="agentnote-demo-cursor" aria-hidden="true"></span>
-    </div>
-    <div class="agentnote-demo-app agentnote-demo-chat">
-      <div class="agentnote-demo-bar"><span class="agentnote-demo-dots"></span>Codex 对话</div>
-      <div class="agentnote-demo-message">请安装 agentNote Skill</div>
-      <div class="agentnote-demo-reply">安装完成，已上报接入信息。</div>
-    </div>`,
   },
   {
     title: "分享笔记",
     caption: "右键一份笔记，选择“agentNote: 分享给 agent”，地址会自动复制。",
-    scene: `<div class="agentnote-demo-app agentnote-demo-app-wide">
-      <div class="agentnote-demo-bar"><span class="agentnote-demo-dots"></span>Obsidian · 我的笔记</div>
-      <div class="agentnote-demo-file agentnote-demo-target"><span class="agentnote-demo-file-icon"></span>产品讨论.md</div>
-      <div class="agentnote-demo-file"><span class="agentnote-demo-file-icon"></span>会议纪要.md</div>
-      <div class="agentnote-demo-menu"><div>打开文件</div><strong>agentNote: 分享给 agent</strong></div>
-      <div class="agentnote-demo-toast">✓ 分享地址已复制</div>
-      <span class="agentnote-demo-cursor" aria-hidden="true"></span>
-    </div>`,
   },
   {
     title: "发送地址",
     caption: "把地址粘贴到 Agent 对话并发送，Agent 就能读取这份资料。",
-    scene: `<div class="agentnote-demo-app">
-      <div class="agentnote-demo-bar"><span class="agentnote-demo-dots"></span>Obsidian</div>
-      <div class="agentnote-demo-file"><span class="agentnote-demo-file-icon"></span>产品讨论.md</div>
-      <div class="agentnote-demo-link">127.0.0.1:27182/…/resolve</div>
-    </div>
-    <div class="agentnote-demo-app agentnote-demo-chat">
-      <div class="agentnote-demo-bar"><span class="agentnote-demo-dots"></span>Agent 对话</div>
-      <div class="agentnote-demo-message">请读取这份资料并整理重点</div>
-      <div class="agentnote-demo-compose">粘贴 agentNote 地址 <b>➜</b></div>
-      <div class="agentnote-demo-reply">已读取「产品讨论.md」，找到 3 个重点。</div>
-      <span class="agentnote-demo-cursor" aria-hidden="true"></span>
-    </div>`,
   },
   {
     title: "写回笔记",
     caption: "继续说“写到 Obsidian”，新笔记会出现在你的本地库中。",
-    scene: `<div class="agentnote-demo-app agentnote-demo-chat">
-      <div class="agentnote-demo-bar"><span class="agentnote-demo-dots"></span>Agent 对话</div>
-      <div class="agentnote-demo-message">把结论写到 Obsidian</div>
-      <div class="agentnote-demo-reply">已写入「产品讨论结论」，可以继续修改。</div>
-      <span class="agentnote-demo-cursor" aria-hidden="true"></span>
-    </div>
-    <div class="agentnote-demo-app">
-      <div class="agentnote-demo-bar"><span class="agentnote-demo-dots"></span>Obsidian · 我的笔记</div>
-      <div class="agentnote-demo-file"><span class="agentnote-demo-file-icon"></span>产品讨论.md</div>
-      <div class="agentnote-demo-file agentnote-demo-created"><span class="agentnote-demo-file-icon"></span>产品讨论结论.md</div>
-    </div>`,
   },
 ] as const;
+
+function createApp(parent: HTMLElement, title: string, extraClass = ""): HTMLElement {
+  const app = parent.createDiv({ cls: `agentnote-demo-app ${extraClass}`.trim() });
+  const bar = app.createDiv({ cls: "agentnote-demo-bar" });
+  bar.createSpan({ cls: "agentnote-demo-dots" });
+  bar.createSpan({ text: title });
+  return app;
+}
+
+function createFile(parent: HTMLElement, name: string, extraClass = ""): void {
+  const file = parent.createDiv({ cls: `agentnote-demo-file ${extraClass}`.trim() });
+  file.createSpan({ cls: "agentnote-demo-file-icon" });
+  file.createSpan({ text: name });
+}
+
+function createCursor(parent: HTMLElement): void {
+  parent.createSpan({ cls: "agentnote-demo-cursor", attr: { "aria-hidden": "true" } });
+}
+
+function renderScene(parent: HTMLElement, index: number): void {
+  if (index === 0) {
+    const connection = createApp(parent, "agentNote · 接入台");
+    const card = connection.createDiv({ cls: "agentnote-demo-agent-card" });
+    card.createEl("strong", { text: "Codex" });
+    card.createSpan({ cls: "agentnote-demo-before", text: "未接入" });
+    card.createSpan({ cls: "agentnote-demo-after", text: "已接入" });
+    card.createEl("b", { text: "接入" });
+    connection.createDiv({ cls: "agentnote-demo-toast", text: "✓ 安装任务已复制" });
+    createCursor(connection);
+    const chat = createApp(parent, "Codex 对话", "agentnote-demo-chat");
+    chat.createDiv({ cls: "agentnote-demo-message", text: "请安装 agentNote Skill" });
+    chat.createDiv({ cls: "agentnote-demo-reply", text: "安装完成，已上报接入信息。" });
+  } else if (index === 1) {
+    const notes = createApp(parent, "Obsidian · 我的笔记", "agentnote-demo-app-wide");
+    createFile(notes, "产品讨论.md", "agentnote-demo-target");
+    createFile(notes, "会议纪要.md");
+    const menu = notes.createDiv({ cls: "agentnote-demo-menu" });
+    menu.createDiv({ text: "打开文件" });
+    menu.createEl("strong", { text: "agentNote: 分享给 agent" });
+    notes.createDiv({ cls: "agentnote-demo-toast", text: "✓ 分享地址已复制" });
+    createCursor(notes);
+  } else if (index === 2) {
+    const notes = createApp(parent, "Obsidian");
+    createFile(notes, "产品讨论.md");
+    notes.createDiv({ cls: "agentnote-demo-link", text: "127.0.0.1:27182/…/resolve" });
+    const chat = createApp(parent, "Agent 对话", "agentnote-demo-chat");
+    chat.createDiv({ cls: "agentnote-demo-message", text: "请读取这份资料并整理重点" });
+    const compose = chat.createDiv({ cls: "agentnote-demo-compose" });
+    compose.createSpan({ text: "粘贴 agentNote 地址" });
+    compose.createEl("b", { text: "➜" });
+    chat.createDiv({ cls: "agentnote-demo-reply", text: "已读取「产品讨论.md」，找到 3 个重点。" });
+    createCursor(chat);
+  } else {
+    const chat = createApp(parent, "Agent 对话", "agentnote-demo-chat");
+    chat.createDiv({ cls: "agentnote-demo-message", text: "把结论写到 Obsidian" });
+    chat.createDiv({ cls: "agentnote-demo-reply", text: "已写入「产品讨论结论」，可以继续修改。" });
+    createCursor(chat);
+    const notes = createApp(parent, "Obsidian · 我的笔记");
+    createFile(notes, "产品讨论.md");
+    createFile(notes, "产品讨论结论.md", "agentnote-demo-created");
+  }
+}
 
 export function renderWorkflowDemo(parent: HTMLElement): () => void {
   const demo = parent.createDiv({ cls: "agentnote-workflow-demo" });
@@ -75,7 +95,8 @@ export function renderWorkflowDemo(parent: HTMLElement): () => void {
   function show(index: number): void {
     current = index;
     viewport.dataset.step = steps[index].title;
-    viewport.innerHTML = steps[index].scene;
+    viewport.empty();
+    renderScene(viewport, index);
     caption.setText(steps[index].caption);
     buttons.forEach((button, buttonIndex) => {
       button.classList.toggle("is-active", buttonIndex === index);
