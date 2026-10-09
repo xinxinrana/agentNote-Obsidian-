@@ -32,7 +32,7 @@ agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、W
 
 1. 打开 **agentNote 接入台**，确认本地服务正在运行。
 2. 在接入台点击 **接入**，把复制的安装任务发给目标 agent；它上报安装位置后会显示 **已接入**。
-3. 在 vault 文件或文件夹上右键，选择 **agentNote: 分享给 agent**，把复制的地址粘贴到对话里。
+3. 在 vault 文件或文件夹上右键，选择 **agentNote: 分享给 agent**，把复制的文件名链接粘贴到对话里。
 4. 请已接入的 agent 读取地址，或直接说“写到 Obsidian”。
 
 <p align="center">

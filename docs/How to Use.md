@@ -46,7 +46,7 @@ Use the smallest useful piece of context:
 | A file or folder | Right-click it and choose **agentNote: Share with agent**. |
 | Part of a note | Select the text, then run **agentNote: Share selected content**. |
 
-agentNote copies a local URL to your clipboard. Paste the complete URL into the conversation with your agent.
+agentNote copies a link labeled with the file name. Rich-text chat fields can show a clickable name; plain-text fields receive a Markdown link such as `[Meeting notes.md](http://127.0.0.1:27182/api/shares/s-x-.../resolve)`. The URL remains accessible only on your computer.
 
 <p align="center">
   <img src="img/how-to/03-share-from-obsidian.png" alt="Obsidian file context menu with agentNote Share with agent highlighted" width="780">

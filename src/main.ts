@@ -312,17 +312,17 @@ export default class AgentNotePlugin extends Plugin {
     const selection = editor.getSelection();
     if (!selection) return;
     const nodeId = await this.currentNodeId();
-    if (nodeId) { const share = await this.store.createShare(nodeId, selection); await this.copyShareUrl(share.id); return; }
+    if (nodeId) { const share = await this.store.createShare(nodeId, selection); await this.copyShareLink(share.id, (await this.store.getNode(nodeId)).title); return; }
     const file = this.app.workspace.getActiveFile();
     if (file) await this.sharePath(file.path, selection);
   }
   private async shareCurrentFile(): Promise<void> { const file = this.app.workspace.getActiveFile(); if (file) await this.sharePath(file.path); }
   private async sharePath(relPath: string, selection?: string): Promise<void> {
-    try { const share = await this.store.createPathShare(relPath, undefined, selection); await this.copyShareUrl(share.id); }
+    try { const share = await this.store.createPathShare(relPath, undefined, selection); await this.copyShareLink(share.id, path.basename(relPath)); }
     catch (error) { new Notice(`分享失败：${(error as Error).message}`); }
   }
   private async sharePaths(files: TAbstractFile[]): Promise<void> {
-    const links: string[] = [];
+    const links: { id: string; title: string }[] = [];
     const failures: string[] = [];
     const seen = new Set<string>();
     for (const file of files) {
@@ -331,14 +331,13 @@ export default class AgentNotePlugin extends Plugin {
       seen.add(relPath);
       try {
         const share = await this.store.createPathShare(relPath);
-        const title = file instanceof TFile ? file.basename : file.name;
-        links.push(`${title}: ${this.shareUrl(share.id)}`);
+        links.push({ id: share.id, title: file.name });
       } catch (error) { failures.push(`${relPath}：${(error as Error).message}`); }
     }
     if (links.length) {
       try {
-        await navigator.clipboard.writeText(links.join("\n\n---\n\n"));
-        new Notice(`已复制 ${links.length} 个分享地址，直接发给 agent 即可。`, 4000);
+        const rich = await this.writeShareLinks(links);
+        new Notice(rich ? `已复制 ${links.length} 个分享链接，直接发给 agent 即可。` : `已复制 ${links.length} 个纯文本分享链接。`, 4000);
       } catch (error) { new Notice(`复制分享地址失败：${(error as Error).message}`); }
     }
     if (failures.length) new Notice(`有 ${failures.length} 项分享失败：${failures.join("；")}`, 7000);
@@ -347,9 +346,30 @@ export default class AgentNotePlugin extends Plugin {
     const port = this.server?.port ?? this.settings.port;
     return `http://127.0.0.1:${port}/api/shares/${id}/resolve`;
   }
-  async copyShareUrl(id: string): Promise<void> {
-    await navigator.clipboard.writeText(this.shareUrl(id));
-    new Notice("分享地址已复制，直接发给 agent 即可。", 4000);
+  private shareMarkdownLink(id: string, title: string): string {
+    const label = title.replace(/[\\[\]]/g, (character) => `\\${character}`);
+    return `[${label}](${this.shareUrl(id)})`;
+  }
+  private async writeShareLinks(links: { id: string; title: string }[]): Promise<boolean> {
+    const text = links.map(({ id, title }) => this.shareMarkdownLink(id, title)).join("\n\n---\n\n");
+    const html = links.map(({ id, title }) => {
+      const label = title.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+      return `<a href="${this.shareUrl(id)}">${label}</a>`;
+    }).join("<br><br>");
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/plain": new Blob([text], { type: "text/plain" }),
+        "text/html": new Blob([html], { type: "text/html" }),
+      })]);
+      return true;
+    } catch {
+      await navigator.clipboard.writeText(text);
+      return false;
+    }
+  }
+  async copyShareLink(id: string, title: string): Promise<void> {
+    const rich = await this.writeShareLinks([{ id, title }]);
+    new Notice(rich ? "分享链接已复制，直接发给 agent 即可。" : "已复制纯文本分享链接。", 4000);
   }
   async loadSettings(): Promise<void> {
     const saved: unknown = await this.loadData() as unknown;

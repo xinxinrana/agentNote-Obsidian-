@@ -33,7 +33,7 @@ Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete
 
 1. Open the **agentNote connection panel** and confirm that the local service is running.
 2. Select **接入**, send the copied installation task to an agent, and wait for it to report its installed Skill path.
-3. Right-click a vault file or folder, choose **agentNote: Share with agent**, and paste the copied link into the conversation.
+3. Right-click a vault file or folder, choose **agentNote: Share with agent**, and paste the copied Markdown link with its file name into the conversation.
 4. Ask the connected agent to read the link, or simply say “Write this to Obsidian.”
 
 <p align="center">

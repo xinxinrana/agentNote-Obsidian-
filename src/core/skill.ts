@@ -63,7 +63,9 @@ POST {{baseUrl}}/api/nodes
 ## 分享地址
 
 用户提供 \`{{baseUrl}}/api/shares/s-x-.../resolve\` 时，直接 GET 并使用返回内容。
+用户提供 \`[文件名]({{baseUrl}}/api/shares/s-x-.../resolve)\` 时，提取括号内地址，同样直接 GET。
 用户一次提供多个分享地址时，逐一读取，再结合任务处理。
+向用户返回分享地址时，用 \`[文档标题](完整地址)\` 展示；API 请求仍使用原始地址。
 
 - \`kind: text\`：正文和背景。
 - \`kind: file\`：文件地址、背景和当前文件内容。
