@@ -292,12 +292,13 @@ class InsightsModal extends Modal {
   private timeText(iso: string): string { return new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
   private dateText(iso: string): string { return new Date(iso).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" }); }
   private displayTitle(title: string): string { return this.privateView ? "已匿名资料" : title; }
-  private fileTitle(parent: HTMLElement, title: string, path: () => Promise<string>): void {
+  private fileTitle(parent: HTMLElement, title: string, path: () => Promise<string | null>): void {
     if (this.privateView) { parent.createEl("strong", { text: this.displayTitle(title) }); return; }
     const button = parent.createEl("button", { cls: "agentnote-file-link", text: title, attr: { title: `打开「${title}」` } });
     button.onclick = () => void (async () => {
       try {
-        const file = this.app.vault.getAbstractFileByPath(await path());
+        const filePath = await path();
+        const file = filePath ? this.app.vault.getAbstractFileByPath(filePath) : null;
         if (!(file instanceof TFile)) throw new Error("文件已不存在");
         await this.app.workspace.getLeaf("tab").openFile(file);
         this.close();
@@ -316,7 +317,7 @@ class InsightsModal extends Modal {
     if (event.type === "local-moved") return `整理「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "local-deleted") return `删除「${this.displayTitle(event.title ?? "未命名文档")}」`;
     if (event.type === "document-linked") return `连接「${this.displayTitle(event.title ?? "未命名文档")}」`;
-    if (event.type === "share-created") return `分享「${event.title ?? "资料"}」`;
+    if (event.type === "share-created") return `分享「${this.displayTitle(event.title ?? "资料")}」`;
     return `访问分享链接「${this.displayTitle(event.title ?? "分享资料")}」`;
   }
   private async render(): Promise<void> {
@@ -510,7 +511,11 @@ class InsightsModal extends Modal {
       const item = list.createEl("li");
       const detail = item.createDiv();
       const chip = event.type === "document-linked" ? "连接" : ["share-resolved", "local-read"].includes(event.type) ? "使用" : event.type === "share-created" ? "分享" : ["node-created", "local-created"].includes(event.type) ? "创建" : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? "整理" : "维护";
-      const title = detail.createDiv({ cls: "agentnote-timeline-title" }); title.createEl("strong", { text: this.activityText(event) }); title.createEl("span", { cls: `agentnote-event-chip is-${event.type}`, text: chip });
+      const title = detail.createDiv({ cls: "agentnote-timeline-title" });
+      const canOpen = !this.privateView && event.type !== "local-deleted" && event.targetKind !== "folder" && !!(event.nodeId || event.documentId || event.shareId || event.path);
+      if (canOpen) this.fileTitle(title, this.activityText(event), () => this.plugin.store.activityFilePath(event));
+      else title.createEl("strong", { text: this.activityText(event) });
+      title.createEl("span", { cls: `agentnote-event-chip is-${event.type}`, text: chip });
       detail.createEl("span", { text: [event.actor?.name ?? event.actor?.id ?? (event.type === "share-resolved" ? "访问方未识别" : event.origin === "local" ? "本地操作" : "未申报 agent"), event.actor?.sessionTitle, event.targetKind === "folder" ? "文件夹" : event.targetKind === "node" ? "笔记" : event.targetKind === "file" ? "文件" : undefined].filter(Boolean).join(" · ") });
       item.createEl("time", { text: this.timeText(event.at) });
     }

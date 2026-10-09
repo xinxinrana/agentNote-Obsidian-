@@ -101,7 +101,7 @@ Each successful share-link request counts as one use. If the request has no agen
 - **Profile**: a seven-day overview and reusable-note ranking.
 - **This week**: daily knowledge activity, reused material, and a document ranking that includes local work.
 - **All time**: totals and note rankings retain the full history. The contribution grid shows a rolling 40 weeks, opens at the latest dates, and keeps breathing room on the right; deeper color represents more knowledge work that day.
-- **Agent and timeline**: filter local and agent activity by construction, reuse, connection, and organization.
+- **Agent and timeline**: filter local and agent activity by construction, reuse, connection, and organization. Click an existing file's timeline entry to open it in a new Obsidian tab; deleted files and folders are not linked.
 - **Cleanup**: low-use notes that may be archived; protected notes never appear here.
 
 Use **Generate sharing image** in the profile to preview and copy a PNG summary. Enable **Privacy view** first to anonymize note titles.

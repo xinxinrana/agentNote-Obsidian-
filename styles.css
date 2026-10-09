@@ -1463,6 +1463,8 @@ button.agentnote-pet,
 .agentnote-timeline li:hover { border-color: var(--background-modifier-border-hover); background: var(--background-primary-alt); }
 
 .agentnote-timeline-title { display: flex; align-items: center; gap: 8px; }
+.agentnote-insights-modal .agentnote-timeline-title button.agentnote-file-link { color: var(--text-normal); }
+.agentnote-insights-modal .agentnote-timeline-title button.agentnote-file-link:hover { color: var(--text-accent); }
 .agentnote-event-chip {
   padding: 3px 7px;
   border-radius: 999px;
