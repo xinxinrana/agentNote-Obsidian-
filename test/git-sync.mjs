@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 
-const { ActivityLog } = createRequire(import.meta.url)("./core-bundle.cjs");
+const { ActivityLog, VaultStore } = createRequire(import.meta.url)("./core-bundle.cjs");
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "agentnote-git-sync-"));
 const repository = path.join(root, "vault");
 const data = path.join(repository, "agentNote", "data");
@@ -54,7 +54,29 @@ try {
   assert.equal(await fs.readFile(legacyPath, "utf8"), legacy);
   git("-c", "commit.gpgsign=false", "merge", "--no-edit", "mac");
   assert.equal((await mac.read()).length, 5);
-  console.log("Git sync passed: both devices modify separate existing logs, merge without conflicts, preserve history, and count each event once.");
+
+  git("switch", "-c", "share-base");
+  const macStore = new VaultStore(repository, ".obsidian", { deviceIdFile: path.join(root, "mac-local", "device-id") });
+  const windowsStore = new VaultStore(repository, ".obsidian", { deviceIdFile: path.join(root, "windows-local", "device-id") });
+  await macStore.init();
+  const note = await macStore.createNode({ title: "Shared note", content: "Shared content" });
+  git("add", "agentNote");
+  git("-c", "commit.gpgsign=false", "commit", "-m", "Share baseline");
+
+  git("switch", "-c", "mac-shares");
+  const macShare = await macStore.createShare(note.id);
+  commit("Mac share");
+  git("switch", "-c", "windows-shares", "share-base");
+  const windowsShare = await windowsStore.createShare(note.id);
+  commit("Windows share");
+  git("-c", "commit.gpgsign=false", "merge", "--no-edit", "mac-shares");
+  assert.equal(git("diff", "--name-only", "--diff-filter=U"), "");
+  assert.equal(git("status", "--porcelain"), "");
+  assert.equal((await windowsStore.listShares()).length, 2);
+  assert.equal((await windowsStore.resolveShare(macShare.id)).content, "Shared content");
+  assert.equal((await windowsStore.resolveShare(windowsShare.id)).content, "Shared content");
+  assert.deepEqual((await fs.readdir(path.join(data, "shares"))).sort(), [`${macShare.id}.json`, `${windowsShare.id}.json`].sort());
+  console.log("Git sync passed: device logs and independent shares merge without conflicts; links and history remain intact.");
 } finally {
   await fs.rm(root, { recursive: true, force: true });
 }

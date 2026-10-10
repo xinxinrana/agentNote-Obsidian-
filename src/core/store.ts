@@ -161,6 +161,7 @@ export class VaultStore {
   private documentWriteQueue: Promise<void> = Promise.resolve();
   private referenceWriteQueue: Promise<void> = Promise.resolve();
   private suppressedLocalPaths = new Map<string, number>();
+  private reportedShareErrors = new Set<string>();
 
   constructor(vaultRoot: string, configDir = ".obsidian", activityOptions: ActivityLogOptions = {}) {
     this.root = path.resolve(vaultRoot);
@@ -175,9 +176,7 @@ export class VaultStore {
   }
 
   async init(): Promise<void> {
-    await Promise.all([fsp.mkdir(this.p("nodes"), { recursive: true }), fsp.mkdir(this.p("data"), { recursive: true })]);
-    const shares = this.p("data", "shares.json");
-    if (!fs.existsSync(shares)) await fsp.writeFile(shares, "[]", "utf8");
+    await Promise.all([fsp.mkdir(this.p("nodes"), { recursive: true }), fsp.mkdir(this.p("data", "shares"), { recursive: true })]);
     await this.activityLog.init();
     const documents = this.p("data", "documents.json");
     if (!fs.existsSync(documents)) await fsp.writeFile(documents, "[]", "utf8");
@@ -292,14 +291,11 @@ export class VaultStore {
   private async moveShareTargets(oldPath: string, newPath: string): Promise<void> {
     const oldNormalized = this.normalizeVaultPath(oldPath);
     const newNormalized = this.normalizeVaultPath(newPath);
-    const shares = await this.readShares();
-    let changed = false;
-    for (const share of shares) {
+    for (const share of await this.readShares()) {
       if (share.target.kind !== "file" || this.normalizeVaultPath(share.target.path) !== oldNormalized) continue;
       share.target.path = newNormalized;
-      changed = true;
+      await this.writeShare(share);
     }
-    if (changed) await this.writeShares(shares);
   }
   private async readReferences(): Promise<Record<string, string[]>> {
     return this.readDataFile("references.json", (value): value is Record<string, string[]> => isRecord(value) && Object.values(value).every((targets) => Array.isArray(targets) && targets.every((target) => typeof target === "string")));
@@ -517,19 +513,68 @@ export class VaultStore {
     return changed;
   }
 
-  private async readShares(): Promise<Share[]> {
-    const shares = await this.readDataFile("shares.json", (value): value is Share[] => Array.isArray(value) && value.every((share) => {
-      if (!isRecord(share) || typeof share.id !== "string" || typeof share.created !== "string") return false;
-      const target = share.target ?? (typeof share.nodeId === "string" ? { kind: "node", nodeId: share.nodeId } : undefined);
-      return isRecord(target) && ((target.kind === "node" && typeof target.nodeId === "string") || ((target.kind === "file" || target.kind === "folder") && typeof target.path === "string")) && (share.selection === undefined || typeof share.selection === "string") && (share.background === undefined || typeof share.background === "string");
-    }));
+  private validShare(value: unknown): value is Share {
+    if (!isRecord(value) || typeof value.id !== "string" || typeof value.created !== "string") return false;
+    const target = value.target ?? (typeof value.nodeId === "string" ? { kind: "node", nodeId: value.nodeId } : undefined);
+    return isRecord(target) && ((target.kind === "node" && typeof target.nodeId === "string") || ((target.kind === "file" || target.kind === "folder") && typeof target.path === "string")) && (value.selection === undefined || typeof value.selection === "string") && (value.background === undefined || typeof value.background === "string");
+  }
+  private shareFile(id: string): string {
+    if (!/^s-x-[a-zA-Z0-9-]{1,120}$/.test(id)) throw new StoreError(400, "分享 ID 无效");
+    return this.p("data", "shares", `${id}.json`);
+  }
+  private async readLegacyShares(): Promise<Share[]> {
+    const shares = await this.readDataFile("shares.json", (value): value is Share[] => Array.isArray(value) && value.every((share) => this.validShare(share)), []);
     return shares.map((share) => ({ ...share, target: shareTarget(share) }));
   }
-  private async writeShares(shares: Share[]): Promise<void> { await fsp.writeFile(this.p("data", "shares.json"), JSON.stringify(shares, null, 2), "utf8"); }
+  private async readShareFile(id: string): Promise<Share | null> {
+    this.shareFile(id);
+    const share = await this.readDataFile<Share | null>(`shares/${id}.json`, (value): value is Share | null => this.validShare(value) && value.id === id, null);
+    return share ? { ...share, target: shareTarget(share) } : null;
+  }
+  private reportShareError(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    if (this.reportedShareErrors.has(message)) return;
+    this.reportedShareErrors.add(message);
+    console.warn(`agentNote: ${message}；原文件已保留，其他分享仍可使用。`);
+  }
+  private async readShares(): Promise<Share[]> {
+    let legacy: Share[];
+    try { legacy = await this.readLegacyShares(); }
+    catch (error) { this.reportShareError(error); legacy = []; }
+    const shares = new Map<string, Share>();
+    const names = await fsp.readdir(this.p("data", "shares"));
+    const shareFiles = names.filter((file) => /^s-x-[a-zA-Z0-9-]{1,120}\.json$/.test(file)).sort();
+    const independentIds = new Set(shareFiles.map((file) => file.slice(0, -5)));
+    for (const name of shareFiles) {
+      try {
+        const share = await this.readShareFile(name.slice(0, -5));
+        if (share) shares.set(share.id, share);
+      } catch (error) { this.reportShareError(error); }
+    }
+    for (const share of legacy) if (!independentIds.has(share.id)) shares.set(share.id, share);
+    return [...shares.values()].sort((first, second) => first.created.localeCompare(second.created) || first.id.localeCompare(second.id));
+  }
+  private async getShare(id: string): Promise<Share> {
+    if (!/^s-x-[a-zA-Z0-9-]{1,120}$/.test(id)) throw new StoreError(404, `分享不存在: ${id}`);
+    const share = await this.readShareFile(id);
+    if (share) return share;
+    const legacy = (await this.readLegacyShares()).find((candidate) => candidate.id === id);
+    if (!legacy) throw new StoreError(404, `分享不存在: ${id}`);
+    return legacy;
+  }
+  private async writeShare(share: Share, create = false): Promise<void> {
+    const file = this.shareFile(share.id);
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    const temporary = `${file}.${randomBytes(8).toString("hex")}.tmp`;
+    try {
+      await fsp.writeFile(temporary, JSON.stringify(share, null, 2), { flag: "wx" });
+      if (create) await fsp.link(temporary, file);
+      else await fsp.rename(temporary, file);
+    } finally { await fsp.rm(temporary, { force: true }); }
+  }
   async listShares(): Promise<Share[]> { return this.readShares(); }
   async shareSourcePath(id: string): Promise<string> {
-    const share = (await this.readShares()).find((candidate) => candidate.id === id);
-    if (!share) throw new StoreError(404, `分享不存在: ${id}`);
+    const share = await this.getShare(id);
     if (share.selection) throw new StoreError(400, "选段分享暂不支持查询双链");
     if (share.target.kind === "folder") throw new StoreError(400, "文件夹分享不能查询双链");
     let sourcePath: string;
@@ -582,8 +627,9 @@ export class VaultStore {
   }
   private async appendShare(target: ShareTarget, selection?: string, background?: string, context: ActivityContext = {}, title?: string): Promise<Share> {
     const share: Share = { id: newId("s-x"), target, selection, background: background?.trim() || undefined, created: new Date().toISOString() };
-    const shares = await this.readShares(); shares.push(share); await this.writeShares(shares);
-    await this.recordEvent({ type: "share-created", shareId: share.id, nodeId: target.kind === "node" ? target.nodeId : undefined, documentId: await this.documentIdForTarget(target), targetKind: target.kind, title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
+    await this.writeShare(share, true);
+    const documentId = await this.documentIdForTarget(target).catch(() => undefined);
+    await this.recordEvent({ type: "share-created", shareId: share.id, nodeId: target.kind === "node" ? target.nodeId : undefined, documentId, targetKind: target.kind, title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
     return share;
   }
   async createShare(nodeId: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
@@ -614,8 +660,7 @@ export class VaultStore {
   }
 
   async resolveShare(id: string, context: ActivityContext = {}): Promise<ShareResult> {
-    const share = (await this.readShares()).find((candidate) => candidate.id === id);
-    if (!share) throw new StoreError(404, `分享不存在: ${id}`);
+    const share = await this.getShare(id);
     let result: ShareResult;
     if (share.target.kind === "node") {
       result = await this.resolveNodeShare(share, await this.getNode(share.target.nodeId));
@@ -624,13 +669,13 @@ export class VaultStore {
       const { rel, abs } = this.vaultPath(target.path);
       result = target.kind === "file" ? await this.resolveFileShare(share, rel, abs) : await this.resolveFolderShare(share, rel, abs);
     }
-    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId: await this.documentIdForTarget(share.target), targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link" }).catch(() => undefined);
+    const documentId = await this.documentIdForTarget(share.target).catch(() => undefined);
+    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId, targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link" }).catch(() => undefined);
     return result;
   }
 
   async updateShareContent(id: string, content: string, context: ActivityContext = {}): Promise<ShareResult> {
-    const share = (await this.readShares()).find((candidate) => candidate.id === id);
-    if (!share) throw new StoreError(404, `分享不存在: ${id}`);
+    const share = await this.getShare(id);
     if (share.target.kind === "folder") throw new StoreError(400, "文件夹分享不支持通过接口直接修改");
 
     if (share.target.kind === "node") {
@@ -654,11 +699,7 @@ export class VaultStore {
   }
 
   private async replaceShare(share: Share): Promise<void> {
-    const shares = await this.readShares();
-    const index = shares.findIndex((candidate) => candidate.id === share.id);
-    if (index === -1) throw new StoreError(404, `分享不存在: ${share.id}`);
-    shares[index] = share;
-    await this.writeShares(shares);
+    await this.writeShare(share);
   }
 
   private async updateSharedFile(share: Share, address: string, abs: string, content: string, context: ActivityContext, nodeId?: string, background?: string, title?: string): Promise<ShareResult> {
@@ -669,7 +710,8 @@ export class VaultStore {
     if (share.selection) { share.selection = content; await this.replaceShare(share); }
     this.suppressLocalActivity(abs);
     await fsp.writeFile(abs, nextContent, "utf8");
-    await this.recordEvent({ type: "node-updated", shareId: share.id, nodeId, documentId: nodeId ? await this.documentIdForNode(nodeId) : (address.toLowerCase().endsWith(".md") ? (await this.ensureDocument(address)).id : undefined), targetKind: share.target.kind, title: title ?? path.basename(address).replace(/\.md$/i, ""), actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
+    const documentId = await this.documentIdForTarget(share.target).catch(() => undefined);
+    await this.recordEvent({ type: "node-updated", shareId: share.id, nodeId, documentId, targetKind: share.target.kind, title: title ?? path.basename(address).replace(/\.md$/i, ""), actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
     return this.resolveFileShare(share, address, abs, background, title);
   }
 

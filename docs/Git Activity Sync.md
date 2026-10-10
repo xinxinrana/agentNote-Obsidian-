@@ -2,7 +2,7 @@
 
 > 中文主文档：[Git 活动记录同步](Git活动记录同步.md)
 
-This covers activity logs and their statistics, not automatic merging of the whole vault. Notes, shares, document indexes, and references still follow their existing storage rules.
+Activity logs are stored per device, and new share records are stored per link. Notes, document indexes, and references still require normal synchronization. The plugin does not automatically merge the whole vault.
 
 ## Per-device logs
 
@@ -24,10 +24,14 @@ The plugin skips an existing snapshot rather than regenerating or overwriting it
 
 Keep `events.*.json` and any existing `events.json` when syncing a vault. Different devices write different log paths, reducing conflicts between activity logs. Update the plugin on every syncing device; older versions may still write to the shared legacy log.
 
-This does not merge conflicts in Markdown, `shares.json`, `documents.json`, `references.json`, `agents.json`, or `idempotency.json`. If shared JSON is unreadable or invalid, affected operations report an error instead of replacing existing data with empty values. Inspect and resolve the conflict before retrying; do not delete the original file to dismiss the error.
+New links are stored in `agentNote/data/shares/<share ID>.json` instead of repeatedly rewriting `shares.json`. The existing `shares.json` remains read-only history; legacy links still work. Updating a legacy link or moving its target creates a separate record for that link without changing the old file. Keep the entire `shares/` directory and any existing `shares.json` when syncing. Concurrent edits to the same link can still conflict.
+
+If the legacy `shares.json` is damaged, its original bytes remain untouched while new and independent shares continue to work. Legacy-only links report an error until that file is repaired. A damaged per-link file affects only that link. Share listings omit damaged records and log the error; an omitted record is not necessarily deleted.
+
+Conflicts in Markdown, `documents.json`, `references.json`, `agents.json`, and `idempotency.json` are not automatically merged. If a shared JSON file is unreadable or invalid, dependent operations report an error rather than replacing old data with empty values. Inspect and resolve conflicts; do not delete the original file to dismiss the error.
 
 Git pulls may still trigger Obsidian file activity. Event-ID deduplication only merges the same recorded event; it cannot infer that two independently observed file changes were a single action. Avoid concurrent writes to the same vault from multiple processes on one device, and pause vault activity during synchronization where practical.
 
 ## Verification
 
-`npm test` covers identity persistence, merged logs, legacy history, deduplication, serialized appends, and corrupt-log protection. `npm run test:git-sync` uses a temporary Git repository to simulate two devices changing their own logs, then verifies a real merge. Git must be installed locally.
+`npm test` covers identity persistence, merged logs, legacy history, deduplication, serialized appends, and corrupt-log protection. `npm run test:git-sync` uses a temporary Git repository to merge activity and independent share records from two devices and verifies both links. Git must be installed locally.

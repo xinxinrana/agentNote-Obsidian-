@@ -58,11 +58,13 @@ try {
   });
   await test("legacy shares do not turn successful writes into failed responses", async () => {
     const sharesPath = path.join(vault, "agentNote", "data", "shares.json");
-    const shares = JSON.parse(await fsp.readFile(sharesPath, "utf8"));
-    shares.push({ id: "s-x-legacy", nodeId: textId, created: new Date().toISOString() });
-    await fsp.writeFile(sharesPath, JSON.stringify(shares));
+    const legacy = [{ id: "s-x-legacy", nodeId: textId, created: new Date().toISOString() }];
+    const original = JSON.stringify(legacy);
+    await fsp.writeFile(sharesPath, original);
     const result = await api("POST", "/api/nodes", { title: "兼容性验证", content: "旧分享记录存在时也应正常返回。" });
     assert.equal(result.status, 201); assert.equal(result.ok, true); assert.ok(result.data.id); assert.ok(result.data.created); assert.ok(result.data.updated);
+    assert.equal(await fsp.readFile(sharesPath, "utf8"), original);
+    assert.equal((await api("GET", "/api/shares/s-x-legacy/resolve")).status, 200);
   });
   await test("idempotency key creates exactly one note", async () => {
     const payload = { title: "幂等写入", content: "重复请求不能重复创建。", idempotencyKey: "create-note-001" };
@@ -613,7 +615,7 @@ try {
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
-  await test("damaged shared data stops writes and remains recoverable", async () => {
+  await test("damaged shared indexes stop affected writes and remain recoverable", async () => {
     const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-shared-damaged-"));
     try {
       const isolated = new VaultStore(root);
@@ -623,7 +625,6 @@ try {
       for (const [name, operation] of [
         ["documents.json", () => isolated.recordLocalActivity("local-edited", "note.md")],
         ["references.json", () => isolated.recordDocumentReferences("note.md", ["target.md"])],
-        ["shares.json", () => isolated.createShare(node.id)],
         ["agents.json", () => isolated.registerAgent({ id: "codex", name: "Codex" })],
         ["idempotency.json", () => isolated.createNode({ title: "不应创建" }, "key-1")],
       ]) {
@@ -642,6 +643,77 @@ try {
       await fsp.writeFile(documents, '[{"id":"partial"}]');
       await assert.rejects(isolated.recordLocalActivity("local-edited", "note.md"), (error) => error.statusCode === 409);
       assert.equal(await fsp.readFile(documents, "utf8"), '[{"id":"partial"}]');
+      await fsp.writeFile(path.join(root, "note.md"), "before");
+      const fileShare = await isolated.createPathShare("note.md");
+      assert.equal((await isolated.resolveShare(fileShare.id)).content, "before");
+      assert.equal((await isolated.updateShareContent(fileShare.id, "after")).content, "after");
+      assert.equal(await fsp.readFile(documents, "utf8"), '[{"id":"partial"}]');
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("new shares survive damaged legacy registry and preserve its bytes", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-share-recovery-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      const node = await isolated.createNode({ title: "恢复分享", content: "初始正文" });
+      const data = path.join(root, "agentNote", "data");
+      const legacyPath = path.join(data, "shares.json");
+      assert.equal(fs.existsSync(legacyPath), false);
+      const legacy = JSON.stringify([{ id: "s-x-legacy", nodeId: node.id, created: new Date().toISOString() }]);
+      await fsp.writeFile(legacyPath, legacy);
+      assert.equal((await isolated.resolveShare("s-x-legacy")).content, "初始正文");
+      const damaged = "<<<<<<< HEAD\n[]\n=======\n{}\n>>>>>>> branch\n";
+      await fsp.writeFile(legacyPath, damaged);
+      const created = await isolated.createShare(node.id);
+      const sharePath = path.join(data, "shares", `${created.id}.json`);
+      assert.equal(JSON.parse(await fsp.readFile(sharePath, "utf8")).id, created.id);
+      assert.equal((await isolated.resolveShare(created.id)).content, "初始正文");
+      assert.equal((await isolated.updateShareContent(created.id, "更新后的正文")).content, "更新后的正文");
+      assert.equal((await isolated.listShares()).some((share) => share.id === created.id), true);
+      await assert.rejects(isolated.resolveShare("s-x-legacy"), (error) => error.statusCode === 409 && error.message.includes("shares.json"));
+      assert.equal(await fsp.readFile(legacyPath, "utf8"), damaged);
+      await fsp.writeFile(legacyPath, legacy);
+      assert.equal((await isolated.resolveShare("s-x-legacy")).content, "更新后的正文");
+      assert.equal(await fsp.readFile(legacyPath, "utf8"), legacy);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("editing a legacy selection creates an independent record without rewriting history", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-legacy-share-edit-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      const node = await isolated.createNode({ title: "旧选段", content: "alpha beta" });
+      const legacyPath = path.join(root, "agentNote", "data", "shares.json");
+      const original = JSON.stringify([{ id: "s-x-legacy-selection", nodeId: node.id, selection: "beta", created: new Date().toISOString() }]);
+      await fsp.writeFile(legacyPath, original);
+      assert.equal((await isolated.updateShareContent("s-x-legacy-selection", "gamma")).content, "gamma");
+      assert.equal((await isolated.resolveShare("s-x-legacy-selection")).content, "gamma");
+      assert.equal((await isolated.getNode(node.id)).content, "alpha gamma");
+      assert.equal(await fsp.readFile(legacyPath, "utf8"), original);
+      const overlay = JSON.parse(await fsp.readFile(path.join(root, "agentNote", "data", "shares", "s-x-legacy-selection.json"), "utf8"));
+      assert.equal(overlay.selection, "gamma");
+      assert.equal((await isolated.listShares()).filter((share) => share.id === overlay.id).length, 1);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("a damaged share file does not block healthy links or overwrite either file", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-share-isolation-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      const node = await isolated.createNode({ title: "隔离分享", content: "内容" });
+      const broken = await isolated.createShare(node.id);
+      const healthy = await isolated.createShare(node.id);
+      const brokenPath = path.join(root, "agentNote", "data", "shares", `${broken.id}.json`);
+      const damaged = "invalid share JSON";
+      await fsp.writeFile(brokenPath, damaged);
+      assert.equal((await isolated.resolveShare(healthy.id)).content, "内容");
+      assert.equal((await isolated.listShares()).some((share) => share.id === healthy.id), true);
+      await assert.rejects(isolated.resolveShare(broken.id), (error) => error.statusCode === 409 && error.message.includes(broken.id));
+      assert.equal(await fsp.readFile(brokenPath, "utf8"), damaged);
+      await assert.rejects(isolated.resolveShare("s-x-../documents"), (error) => error.statusCode === 404);
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
