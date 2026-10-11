@@ -1,13 +1,14 @@
+import { t } from "../i18n";
 import petSvgUrl from "../../assets/brand/xiaoji-pet.svg";
 
 type PetState = "idle" | "blink" | "look" | "doze" | "walk" | "hop" | "celebrate";
 
 function petArtwork(): SVGSVGElement {
   const separator = petSvgUrl.indexOf(",");
-  if (separator < 0) throw new Error("小记矢量资源无效");
+  if (separator < 0) throw new Error(t("小记矢量资源无效"));
   const encoded = petSvgUrl.slice(separator + 1);
   const svg = new DOMParser().parseFromString(decodeURIComponent(encoded), "image/svg+xml").documentElement;
-  if (svg.localName !== "svg") throw new Error("小记矢量资源无法解析");
+  if (svg.localName !== "svg") throw new Error(t("小记矢量资源无法解析"));
   const element = document.importNode(svg, true) as unknown as SVGSVGElement;
   element.classList.add("agentnote-pet-art");
   element.setAttribute("aria-hidden", "true");
@@ -31,8 +32,8 @@ export class CompanionPet {
     this.element = document.createElement("button");
     this.element.type = "button";
     this.element.className = "agentnote-pet";
-    this.element.setAttribute("aria-label", "和小记互动");
-    this.element.title = "点一下小记";
+    this.element.setAttribute("aria-label", t("和小记互动"));
+    this.element.title = t("点一下小记");
     this.element.dataset.state = "idle";
     this.traveler = document.createElement("span");
     this.traveler.className = "agentnote-pet-traveler";

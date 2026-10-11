@@ -11,3 +11,4 @@ export * from "./skill";
 export * from "./version";
 export * from "./activityLog";
 export * from "./agentConnections";
+export * from "../i18n";

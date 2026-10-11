@@ -1,6 +1,7 @@
+import { setLanguage, t } from "./i18n";
 import * as os from "os";
 import * as path from "path";
-import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, addIcon, parseLinktext, removeIcon } from "obsidian";
+import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, addIcon, getLanguage, parseLinktext, removeIcon } from "obsidian";
 import { AgentServer } from "./core/server";
 import type { AgentActivity, ShareLinkInfo } from "./core/server";
 import { AgentConnections, localConnectionsFile } from "./core/agentConnections";
@@ -42,9 +43,10 @@ export default class AgentNotePlugin extends Plugin {
   private suppressedLocalRenames = new Set<string>();
 
   async onload(): Promise<void> {
+    setLanguage(typeof getLanguage === "function" ? getLanguage() : null);
     await this.loadSettings();
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) { new Notice("agentNote 需要桌面端文件系统 vault。"); return; }
+    if (!(adapter instanceof FileSystemAdapter)) { new Notice(t("agentNote 需要桌面端文件系统 vault。")); return; }
     this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
     await this.store.init();
     this.connections = new AgentConnections(localConnectionsFile(os.homedir(), adapter.getBasePath()));
@@ -53,21 +55,21 @@ export default class AgentNotePlugin extends Plugin {
     const mark = new DOMParser().parseFromString(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1)), "image/svg+xml").documentElement;
     mark.querySelector("title")?.remove();
     addIcon("agentnote-mark", `<g transform="scale(0.78125)">${mark.innerHTML}</g>`);
-    this.addRibbonIcon("agentnote-mark", "打开 agentNote 接入台", () => void this.activatePanel());
-    this.addCommand({ id: "open-panel", name: "打开接入台", callback: () => void this.activatePanel() });
-    this.addCommand({ id: "create-note", name: "新建笔记", callback: () => this.openCreateNoteModal() });
-    this.addCommand({ id: "share-selection", name: "分享选中内容", editorCallback: (editor) => void this.shareSelection(editor) });
-    this.addCommand({ id: "share-current-note", name: "分享当前文件", callback: () => void this.shareCurrentFile() });
+    this.addRibbonIcon("agentnote-mark", t("打开 agentNote 接入台"), () => void this.activatePanel());
+    this.addCommand({ id: "open-panel", name: t("打开接入台"), callback: () => void this.activatePanel() });
+    this.addCommand({ id: "create-note", name: t("新建笔记"), callback: () => this.openCreateNoteModal() });
+    this.addCommand({ id: "share-selection", name: t("分享选中内容"), editorCallback: (editor) => void this.shareSelection(editor) });
+    this.addCommand({ id: "share-current-note", name: t("分享当前文件"), callback: () => void this.shareCurrentFile() });
     this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
       if (!editor.getSelection()) return;
-      menu.addItem((item) => item.setTitle("agentNote: 分享选中内容").setIcon("link").onClick(() => void this.shareSelection(editor)));
+      menu.addItem((item) => item.setTitle(t("agentNote: 分享选中内容")).setIcon("link").onClick(() => void this.shareSelection(editor)));
     }));
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      menu.addItem((item) => item.setTitle("agentNote: 分享给 agent").setIcon("link").onClick(() => void this.sharePath(file.path)));
+      menu.addItem((item) => item.setTitle(t("agentNote: 分享给 agent")).setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
     this.registerEvent(this.app.workspace.on("files-menu", (menu, files) => {
       if (files.length < 2) return;
-      menu.addItem((item) => item.setTitle("agentNote: 分享选中项目给 agent").setIcon("link").onClick(() => void this.sharePaths(files)));
+      menu.addItem((item) => item.setTitle(t("agentNote: 分享选中项目给 agent")).setIcon("link").onClick(() => void this.sharePaths(files)));
     }));
     this.app.workspace.onLayoutReady(() => this.registerLocalActivityTracking());
     this.scheduleColdBackup();
@@ -95,7 +97,7 @@ export default class AgentNotePlugin extends Plugin {
     if (!this.settings.coldBackupEnabled) return;
     this.coldBackupTimer = window.setTimeout(() => {
       this.coldBackupTimer = null;
-      void this.runColdBackup().catch((error: Error) => new Notice(`冷备份失败：${error.message}`));
+      void this.runColdBackup().catch((error: Error) => new Notice(t("冷备份失败：{0}", error.message)));
     }, this.settings.coldBackupDelayMinutes * 60_000);
   }
   runColdBackup(): Promise<{ created: number; existing: number }> {
@@ -106,7 +108,7 @@ export default class AgentNotePlugin extends Plugin {
     const latest: LiveAgentActivity = {
       ...activity,
       at: new Date().toISOString(),
-      agentName: activity.actor?.name ?? activity.actor?.id ?? (activity.operation === "read" ? "分享链接" : "未识别 agent"),
+      agentName: activity.actor?.name ?? activity.actor?.id ?? (activity.operation === "read" ? t("分享链接") : t("未识别 agent")),
       sessionTitle: activity.actor?.sessionTitle,
     };
     for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) if (leaf.view instanceof AgentNoteView) leaf.view.showAgentActivity(latest);
@@ -218,19 +220,19 @@ export default class AgentNotePlugin extends Plugin {
   }
   async moveVaultDocument(sourcePath: string, destinationPath: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(sourcePath);
-    if (!(file instanceof TFile)) throw new Error("原文档不存在");
-    if (this.app.vault.getAbstractFileByPath(destinationPath)) throw new Error("目标位置已有同名文档");
+    if (!(file instanceof TFile)) throw new Error(t("原文档不存在"));
+    if (this.app.vault.getAbstractFileByPath(destinationPath)) throw new Error(t("目标位置已有同名文档"));
     this.suppressedLocalRenames.add(sourcePath);
     try { await this.app.fileManager.renameFile(file, destinationPath); }
     catch (error) { this.suppressedLocalRenames.delete(sourcePath); throw error; }
     window.setTimeout(() => this.suppressedLocalRenames.delete(sourcePath), 5_000);
     try { await this.store.recordLocalActivity("local-moved", destinationPath, sourcePath); }
-    catch { new Notice("文档已移动，但活动记录未更新；请检查已有分享链接。"); }
+    catch { new Notice(t("文档已移动，但活动记录未更新；请检查已有分享链接。")); }
     this.schedulePanelRefresh();
   }
   async archiveVaultDocument(sourcePath: string): Promise<string> {
     const file = this.app.vault.getAbstractFileByPath(sourcePath);
-    if (!(file instanceof TFile)) throw new Error("原文档不存在");
+    if (!(file instanceof TFile)) throw new Error(t("原文档不存在"));
     const folderPath = "agentNote/归档文件";
     if (!this.app.vault.getAbstractFileByPath(folderPath)) await this.app.vault.createFolder(folderPath);
     let destinationPath = `${folderPath}/${file.name}`;
@@ -254,9 +256,9 @@ export default class AgentNotePlugin extends Plugin {
   }
   private async listShareLinks(sourcePath: string): Promise<ShareLinkInfo[]> {
     const file = this.app.vault.getFileByPath(sourcePath);
-    if (!file) throw new StoreError(404, `来源笔记不存在: ${sourcePath}`);
+    if (!file) throw new StoreError(404, t("来源笔记不存在: {0}", sourcePath));
     const cache = this.app.metadataCache.getFileCache(file);
-    if (!cache) throw new StoreError(503, "来源笔记的双链索引尚未就绪");
+    if (!cache) throw new StoreError(503, t("来源笔记的双链索引尚未就绪"));
     return (cache.links ?? []).map(({ original, link, displayText }) => {
       const { path: linkPath, subpath } = parseLinktext(link);
       const target = linkPath ? this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path) : file;
@@ -282,17 +284,17 @@ export default class AgentNotePlugin extends Plugin {
       this.refreshPanels();
       return connection;
     } });
-    try { await this.server.start(); if (!quiet) new Notice(`agentNote 服务已启动：127.0.0.1:${this.server.port}`); }
-    catch (error) { this.server = null; new Notice(`agentNote 服务启动失败：${(error as Error).message}`); }
+    try { await this.server.start(); if (!quiet) new Notice(t("agentNote 服务已启动：127.0.0.1:{0}", this.server.port)); }
+    catch (error) { this.server = null; new Notice(t("agentNote 服务启动失败：{0}", (error as Error).message)); }
     this.refreshPanels();
   }
-  async stopServer(quiet = false): Promise<void> { if (!this.server) return; await this.server.stop(); this.server = null; if (!quiet) new Notice("agentNote 服务已停止。"); this.refreshPanels(); }
+  async stopServer(quiet = false): Promise<void> { if (!this.server) return; await this.server.stop(); this.server = null; if (!quiet) new Notice(t("agentNote 服务已停止。")); this.refreshPanels(); }
   async applyUpdate(release: ReleaseInfo): Promise<void> {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) throw new Error("agentNote 需要桌面端文件系统 vault。");
+    if (!(adapter instanceof FileSystemAdapter)) throw new Error(t("agentNote 需要桌面端文件系统 vault。"));
     const dir = path.join(adapter.getBasePath(), this.manifest.dir ?? path.join(this.app.vault.configDir, "plugins", this.manifest.id));
     await installRelease(dir, release);
-    new Notice(`agentNote 已更新到 v${release.version}，正在重载插件。`);
+    new Notice(t("agentNote 已更新到 v{0}，正在重载插件。", release.version));
     const plugins = (this.app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;
     await plugins.disablePlugin(this.manifest.id);
     await plugins.enablePlugin(this.manifest.id);
@@ -319,7 +321,7 @@ export default class AgentNotePlugin extends Plugin {
   private async shareCurrentFile(): Promise<void> { const file = this.app.workspace.getActiveFile(); if (file) await this.sharePath(file.path); }
   private async sharePath(relPath: string, selection?: string): Promise<void> {
     try { const share = await this.store.createPathShare(relPath, undefined, selection); await this.copyShareLink(share.id, path.basename(relPath)); }
-    catch (error) { new Notice(`分享失败：${(error as Error).message}`); }
+    catch (error) { new Notice(t("分享失败：{0}", (error as Error).message)); }
   }
   private async sharePaths(files: TAbstractFile[]): Promise<void> {
     const links: { id: string; title: string }[] = [];
@@ -337,10 +339,10 @@ export default class AgentNotePlugin extends Plugin {
     if (links.length) {
       try {
         const rich = await this.writeShareLinks(links);
-        new Notice(rich ? `已复制 ${links.length} 个分享链接，直接发给 agent 即可。` : `已复制 ${links.length} 个纯文本分享链接。`, 4000);
-      } catch (error) { new Notice(`复制分享地址失败：${(error as Error).message}`); }
+        new Notice(rich ? t("已复制 {0} 个分享链接，直接发给 agent 即可。", links.length) : t("已复制 {0} 个纯文本分享链接。", links.length), 4000);
+      } catch (error) { new Notice(t("复制分享地址失败：{0}", (error as Error).message)); }
     }
-    if (failures.length) new Notice(`有 ${failures.length} 项分享失败：${failures.join("；")}`, 7000);
+    if (failures.length) new Notice(t("有 {0} 项分享失败：{1}", failures.length, failures.join("；")), 7000);
   }
   private shareUrl(id: string): string {
     const port = this.server?.port ?? this.settings.port;
@@ -369,7 +371,7 @@ export default class AgentNotePlugin extends Plugin {
   }
   async copyShareLink(id: string, title: string): Promise<void> {
     const rich = await this.writeShareLinks([{ id, title }]);
-    new Notice(rich ? "分享链接已复制，直接发给 agent 即可。" : "已复制纯文本分享链接。", 4000);
+    new Notice(rich ? t("分享链接已复制，直接发给 agent 即可。") : t("已复制纯文本分享链接。"), 4000);
   }
   async loadSettings(): Promise<void> {
     const saved: unknown = await this.loadData() as unknown;
@@ -390,13 +392,13 @@ export default class AgentNotePlugin extends Plugin {
 class CreateNoteModal extends Modal {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app); }
   onOpen(): void {
-    this.contentEl.empty(); this.contentEl.createEl("h2", { text: "新建笔记" });
+    this.contentEl.empty(); this.contentEl.createEl("h2", { text: t("新建笔记") });
     let title = "", content = "", background = "";
-    new Setting(this.contentEl).setName("标题").addText((input) => input.onChange((value) => title = value));
-    new Setting(this.contentEl).setName("正文").addTextArea((input) => input.onChange((value) => content = value));
-    new Setting(this.contentEl).setName("背景").setDesc("这是什么、从哪来、为什么保存").addTextArea((input) => input.onChange((value) => background = value));
-    new Setting(this.contentEl).addButton((button) => button.setButtonText("创建").setCta().onClick(async () => {
-      try { const node = await this.plugin.store.createNode({ title, content, background, source: "user" }); this.close(); new Notice(`已创建笔记：${node.title}`); this.plugin.refreshPanels(); }
+    new Setting(this.contentEl).setName(t("标题")).addText((input) => input.onChange((value) => title = value));
+    new Setting(this.contentEl).setName(t("正文")).addTextArea((input) => input.onChange((value) => content = value));
+    new Setting(this.contentEl).setName(t("背景")).setDesc(t("这是什么、从哪来、为什么保存")).addTextArea((input) => input.onChange((value) => background = value));
+    new Setting(this.contentEl).addButton((button) => button.setButtonText(t("创建")).setCta().onClick(async () => {
+      try { const node = await this.plugin.store.createNode({ title, content, background, source: "user" }); this.close(); new Notice(t("已创建笔记：{0}", node.title)); this.plugin.refreshPanels(); }
       catch (error) { new Notice((error as Error).message); }
     }));
   }
@@ -407,26 +409,26 @@ class AgentNoteSettingTab extends PluginSettingTab {
   display(): void {
     this.containerEl.empty();
     new Setting(this.containerEl)
-      .setName("连接 Agent")
-      .setDesc("Agent 的安装和提示词在接入台管理；这里设置插件与 Agent 的连接方式。")
+      .setName(t("连接 Agent"))
+      .setDesc(t("Agent 的安装和提示词在接入台管理；这里设置插件与 Agent 的连接方式。"))
       .setHeading();
     new Setting(this.containerEl)
-      .setName("管理 Agent 接入")
-      .setDesc("查看接入状态、安装 Agent，或修改已接入的提示词。")
-      .addButton((button) => button.setButtonText("前往接入台").setCta().onClick(async () => {
+      .setName(t("管理 Agent 接入"))
+      .setDesc(t("查看接入状态、安装 Agent，或修改已接入的提示词。"))
+      .addButton((button) => button.setButtonText(t("前往接入台")).setCta().onClick(async () => {
         (this.app as App & { setting: { close(): void } }).setting.close();
         await this.plugin.activatePanel();
       }));
     new Setting(this.containerEl)
-      .setName("打开 Obsidian 时启动本地服务")
-      .setDesc("服务运行时，Agent 才能通过分享链接读取内容或写入笔记。")
+      .setName(t("打开 Obsidian 时启动本地服务"))
+      .setDesc(t("服务运行时，Agent 才能通过分享链接读取内容或写入笔记。"))
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.autostartServer).onChange(async (value) => {
         this.plugin.settings.autostartServer = value;
         await this.plugin.saveSettings();
       }));
     new Setting(this.containerEl)
-      .setName("本地服务端口")
-      .setDesc("通常无需修改。默认 27182；修改后重启 Obsidian，并让已接入的 Agent 使用新端口。")
+      .setName(t("本地服务端口"))
+      .setDesc(t("通常无需修改。默认 27182；修改后重启 Obsidian，并让已接入的 Agent 使用新端口。"))
       .addText((input) => input.setValue(String(this.plugin.settings.port)).onChange(async (value) => {
         const port = Number(value);
         if (Number.isInteger(port) && port > 0 && port < 65536) {
@@ -436,17 +438,17 @@ class AgentNoteSettingTab extends PluginSettingTab {
       }));
 
     new Setting(this.containerEl)
-      .setName("活动记录")
-      .setDesc("决定大量本地文件变动是否显示为活动，并保存历史活动副本。")
+      .setName(t("活动记录"))
+      .setDesc(t("决定大量本地文件变动是否显示为活动，并保存历史活动副本。"))
       .setHeading();
-    new Setting(this.containerEl).setName("一次改动很多文件时").setDesc("Git 同步或批量导入时，选择是否把这批变化记入活动；不影响文件内容和分享链接。")
-      .addDropdown((dropdown) => dropdown.addOptions({ ask: "先询问我", ignore: "不计入活动", record: "计入活动" }).setValue(this.plugin.settings.bulkActivityAction).onChange(async (value) => {
+    new Setting(this.containerEl).setName(t("一次改动很多文件时")).setDesc(t("Git 同步或批量导入时，选择是否把这批变化记入活动；不影响文件内容和分享链接。"))
+      .addDropdown((dropdown) => dropdown.addOptions({ ask: t("先询问我"), ignore: t("不计入活动"), record: t("计入活动") }).setValue(this.plugin.settings.bulkActivityAction).onChange(async (value) => {
         this.plugin.settings.bulkActivityAction = value as BulkActivityAction;
         await this.plugin.saveSettings();
       }));
     new Setting(this.containerEl)
-      .setName("自动备份历史活动")
-      .setDesc("按天保留过去的活动记录副本；不备份笔记正文，也不影响活动统计。")
+      .setName(t("自动备份历史活动"))
+      .setDesc(t("按天保留过去的活动记录副本；不备份笔记正文，也不影响活动统计。"))
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.coldBackupEnabled).onChange(async (value) => {
         this.plugin.settings.coldBackupEnabled = value;
         await this.plugin.saveSettings();
@@ -455,8 +457,8 @@ class AgentNoteSettingTab extends PluginSettingTab {
       }));
     if (this.plugin.settings.coldBackupEnabled) {
       new Setting(this.containerEl)
-        .setName("启动后多久备份")
-        .setDesc("打开 Obsidian 后等待 1–60 分钟再开始，避免影响启动。")
+        .setName(t("启动后多久备份"))
+        .setDesc(t("打开 Obsidian 后等待 1–60 分钟再开始，避免影响启动。"))
         .addText((input) => input.setValue(String(this.plugin.settings.coldBackupDelayMinutes)).onChange(async (value) => {
           const minutes = Number(value);
           if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) return;
@@ -466,49 +468,49 @@ class AgentNoteSettingTab extends PluginSettingTab {
         }));
     }
     new Setting(this.containerEl)
-      .setName("手动备份历史活动")
-      .setDesc("立即保存过去日期的活动记录；已有副本不会覆盖。")
-      .addButton((button) => button.setButtonText("立即备份").onClick(async () => {
+      .setName(t("手动备份历史活动"))
+      .setDesc(t("立即保存过去日期的活动记录；已有副本不会覆盖。"))
+      .addButton((button) => button.setButtonText(t("立即备份")).onClick(async () => {
         button.setDisabled(true);
         try {
           const result = await this.plugin.runColdBackup();
-          new Notice(`活动记录备份完成：新增 ${result.created} 份，已有 ${result.existing} 份未改动。`);
-        } catch (error) { new Notice(`活动记录备份失败：${(error as Error).message}`); }
+          new Notice(t("活动记录备份完成：新增 {0} 份，已有 {1} 份未改动。", result.created, result.existing));
+        } catch (error) { new Notice(t("活动记录备份失败：{0}", (error as Error).message)); }
         finally { button.setDisabled(false); }
       }));
 
-    new Setting(this.containerEl).setName("帮助与更新").setHeading();
+    new Setting(this.containerEl).setName(t("帮助与更新")).setHeading();
     new Setting(this.containerEl)
-      .setName("接入教程")
-      .setDesc("在接入台顶部显示快速教程，也可以随时打开查看。")
+      .setName(t("接入教程"))
+      .setDesc(t("在接入台顶部显示快速教程，也可以随时打开查看。"))
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.showQuickStart).onChange(async (value) => {
         this.plugin.settings.showQuickStart = value;
         await this.plugin.saveSettings();
         this.plugin.refreshPanels();
-        if (value) new Notice("快速教程已重新显示在接入台顶部。");
+        if (value) new Notice(t("快速教程已重新显示在接入台顶部。"));
       }))
-      .addButton((button) => button.setButtonText("打开教程").onClick(() => new QuickStartModal(this.app).open()));
+      .addButton((button) => button.setButtonText(t("打开教程")).onClick(() => new QuickStartModal(this.app).open()));
     const update = new Setting(this.containerEl)
-      .setName(`当前版本 v${this.plugin.manifest.version}`)
-      .setDesc("作者 Evan。检查 GitHub 上的新版本；更新完成后插件会自动重载。")
-      .addButton((check) => check.setButtonText("检查更新").onClick(async () => {
-        check.setButtonText("检查中…").setDisabled(true);
+      .setName(t("当前版本 v{0}", this.plugin.manifest.version))
+      .setDesc(t("作者 Evan。检查 GitHub 上的新版本；更新完成后插件会自动重载。"))
+      .addButton((check) => check.setButtonText(t("检查更新")).onClick(async () => {
+        check.setButtonText(t("检查中…")).setDisabled(true);
         try {
           const release = await fetchLatestRelease();
           if (!isNewerVersion(release.version, this.plugin.manifest.version)) {
-            update.setDesc(`已是最新版本（GitHub 最新为 v${release.version}）。`);
+            update.setDesc(t("已是最新版本（GitHub 最新为 v{0}）。", release.version));
             return;
           }
-          update.setDesc(`发现新版本 v${release.version}。`);
-          update.addButton((upgrade) => upgrade.setButtonText(`更新到 v${release.version}`).setCta().onClick(async () => {
-            upgrade.setButtonText("更新中…").setDisabled(true);
+          update.setDesc(t("发现新版本 v{0}。", release.version));
+          update.addButton((upgrade) => upgrade.setButtonText(t("更新到 v{0}", release.version)).setCta().onClick(async () => {
+            upgrade.setButtonText(t("更新中…")).setDisabled(true);
             try { await this.plugin.applyUpdate(release); }
-            catch (error) { new Notice(`更新失败：${(error as Error).message}`); upgrade.setButtonText("重试更新").setDisabled(false); }
+            catch (error) { new Notice(t("更新失败：{0}", (error as Error).message)); upgrade.setButtonText(t("重试更新")).setDisabled(false); }
           }));
         } catch (error) {
-          update.setDesc(`检查失败：${(error as Error).message}`);
+          update.setDesc(t("检查失败：{0}", (error as Error).message));
         } finally {
-          check.setButtonText("检查更新").setDisabled(false);
+          check.setButtonText(t("检查更新")).setDisabled(false);
         }
       }));
   }

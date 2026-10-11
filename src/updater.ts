@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 /**
  * Self-update from GitHub Releases.
  *
@@ -25,17 +26,17 @@ export async function fetchLatestRelease(): Promise<ReleaseInfo> {
   const data = response.json as { html_url?: string; tag_name?: string; assets?: { name: string; browser_download_url: string }[] };
   const assets: Record<string, string> = {};
   for (const asset of data.assets ?? []) assets[asset.name] = asset.browser_download_url;
-  if (!assets["manifest.json"]) throw new Error("最新 Release 中没有 manifest.json 构建产物，无法更新。");
+  if (!assets["manifest.json"]) throw new Error(t("最新 Release 中没有 manifest.json 构建产物，无法更新。"));
   const manifest = (await requestUrl({ url: assets["manifest.json"], headers: HEADERS })).json as { version?: string };
   const version = manifest.version ?? (data.tag_name ?? "").replace(/^v/i, "");
-  if (!version) throw new Error("无法确定最新版本号。");
+  if (!version) throw new Error(t("无法确定最新版本号。"));
   return { version, url: data.html_url ?? `https://github.com/${UPDATE_REPO}/releases/latest`, assets };
 }
 
 export async function installRelease(dir: string, release: ReleaseInfo): Promise<void> {
   for (const file of RELEASE_FILES) {
     const url = release.assets[file];
-    if (!url) throw new Error(`最新 Release 缺少 ${file}，请先发布带构建产物的 Release。`);
+    if (!url) throw new Error(t("最新 Release 缺少 {0}，请先发布带构建产物的 Release。", file));
     const buffer = (await requestUrl({ url, headers: HEADERS })).arrayBuffer;
     await fsp.writeFile(path.join(dir, file), Buffer.from(buffer));
   }

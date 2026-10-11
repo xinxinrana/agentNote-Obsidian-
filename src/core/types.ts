@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 /**
  * Core types for agentNote. Shared by the Obsidian plugin layer and the
  * standalone HTTP server used by agents. No dependency on `obsidian` here.
@@ -57,7 +58,7 @@ export function shareTarget(share: Share): ShareTarget {
   if (share.target) return share.target;
   const legacy = share as Share & { nodeId?: string };
   if (legacy.nodeId) return { kind: "node", nodeId: legacy.nodeId };
-  throw new Error("分享记录缺少目标");
+  throw new Error(t("分享记录缺少目标"));
 }
 
 export interface QualityWarning {
@@ -73,7 +74,7 @@ export function qualityWarnings(node: AgentNode): QualityWarning[] {
   return [
     {
       code: "missing-background",
-      message: `这条记忆由「${node.source}」写入，缺少「背景」字段。信任它之前请先补全。`,
+      message: t("这条记忆由「{0}」写入，缺少「背景」字段。信任它之前请先补全。", node.source),
     },
   ];
 }

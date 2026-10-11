@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { createHash, randomUUID } from "crypto";
@@ -6,15 +7,16 @@ import { parse } from "yaml";
 
 export interface AgentConnection { name: string; skillPath: string; connectedAt: string }
 
-const ADDITION_HEADER = "\n\n<!-- agentNote:additional -->\n## 附加要求\n\n";
+const ADDITION_HEADER = /\n\n<!-- agentNote:additional -->\n## (?:附加要求|Additional instructions)\n\n/g;
 
 export function splitSkillInstructions(content: string): { base: string; additional: string } {
-  const at = content.lastIndexOf(ADDITION_HEADER);
-  return at === -1 ? { base: content, additional: "" } : { base: content.slice(0, at), additional: content.slice(at + ADDITION_HEADER.length).trim() };
+  const matches = [...content.matchAll(ADDITION_HEADER)];
+  const last = matches.at(-1);
+  return last ? { base: content.slice(0, last.index), additional: content.slice(last.index + last[0].length).trim() } : { base: content, additional: "" };
 }
 
 export function withSkillInstructions(base: string, additional: string): string {
-  return `${base.trimEnd()}${additional.trim() ? `${ADDITION_HEADER}${additional.trim()}` : ""}\n`;
+  return `${base.trimEnd()}${additional.trim() ? `\n\n<!-- agentNote:additional -->\n## ${t("附加要求")}\n\n${additional.trim()}` : ""}\n`;
 }
 
 export function agentNameKey(name: string): string { return name.trim().toLowerCase(); }
@@ -49,7 +51,7 @@ export class AgentConnections {
     try { raw = await fs.readFile(this.file, "utf8"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
     const value: unknown = JSON.parse(raw);
-    if (!Array.isArray(value) || !value.every((item) => item && typeof item === "object" && typeof item.name === "string" && typeof item.skillPath === "string" && typeof item.connectedAt === "string")) throw new Error("本机 Agent 接入记录格式无效");
+    if (!Array.isArray(value) || !value.every((item) => item && typeof item === "object" && typeof item.name === "string" && typeof item.skillPath === "string" && typeof item.connectedAt === "string")) throw new Error(t("本机 Agent 接入记录格式无效"));
     return value as AgentConnection[];
   }
 
@@ -62,15 +64,15 @@ export class AgentConnections {
 
   async register(name: string, reportedPath: string): Promise<AgentConnection> {
     const cleanName = name.trim();
-    if (!cleanName || cleanName.length > 80 || !path.isAbsolute(reportedPath) || path.basename(reportedPath) !== "SKILL.md") throw new Error("请上报 Agent 名称和 SKILL.md 的绝对路径");
+    if (!cleanName || cleanName.length > 80 || !path.isAbsolute(reportedPath) || path.basename(reportedPath) !== "SKILL.md") throw new Error(t("请上报 Agent 名称和 SKILL.md 的绝对路径"));
     const skillPath = await fs.realpath(reportedPath);
-    if (path.basename(skillPath) !== "SKILL.md") throw new Error("路径必须指向 SKILL.md");
+    if (path.basename(skillPath) !== "SKILL.md") throw new Error(t("路径必须指向 SKILL.md"));
     const stat = await fs.stat(skillPath);
-    if (!stat.isFile() || stat.size > 1_000_000 || !validSkill(await fs.readFile(skillPath, "utf8"))) throw new Error("该文件不是有效的 agentnote SKILL.md");
+    if (!stat.isFile() || stat.size > 1_000_000 || !validSkill(await fs.readFile(skillPath, "utf8"))) throw new Error(t("该文件不是有效的 agentnote SKILL.md"));
     const identityPath = path.join(path.dirname(skillPath), "agentnote.identity.json");
     const identity: unknown = JSON.parse(await fs.readFile(identityPath, "utf8"));
     if (!identity || typeof identity !== "object" || !("id" in identity) || typeof identity.id !== "string" || !identity.id.trim()
-      || !("name" in identity) || typeof identity.name !== "string" || agentNameKey(identity.name) !== agentNameKey(cleanName)) throw new Error("身份文件中的名称必须与上报的 Agent 名称一致");
+      || !("name" in identity) || typeof identity.name !== "string" || agentNameKey(identity.name) !== agentNameKey(cleanName)) throw new Error(t("身份文件中的名称必须与上报的 Agent 名称一致"));
     return this.queued(async () => {
       const connections = await this.list();
       const previous = connections.findIndex((item) => agentNameKey(item.name) === agentNameKey(cleanName));
@@ -98,16 +100,16 @@ export class AgentConnections {
   }
 
   async readSkill(connection: AgentConnection): Promise<string> {
-    if (await fs.realpath(connection.skillPath) !== connection.skillPath) throw new Error("Skill 路径已改变，请重新接入");
+    if (await fs.realpath(connection.skillPath) !== connection.skillPath) throw new Error(t("Skill 路径已改变，请重新接入"));
     const content = await fs.readFile(connection.skillPath, "utf8");
-    if (!validSkill(content)) throw new Error("当前文件不是有效的 agentnote SKILL.md");
+    if (!validSkill(content)) throw new Error(t("当前文件不是有效的 agentnote SKILL.md"));
     return content;
   }
 
   async saveSkill(connection: AgentConnection, expected: string, updated: string): Promise<void> {
-    if (!validSkill(updated)) throw new Error("技能说明需要包含 agentnote 的 name 和 description 元信息");
+    if (!validSkill(updated)) throw new Error(t("技能说明需要包含 agentnote 的 name 和 description 元信息"));
     const current = await this.readSkill(connection);
-    if (current !== expected) throw new Error("技能文件已被其他程序修改，请重新打开后再编辑");
+    if (current !== expected) throw new Error(t("技能文件已被其他程序修改，请重新打开后再编辑"));
     const backup = `${connection.skillPath}.agentnote-backup-${randomUUID()}`;
     await fs.copyFile(connection.skillPath, backup, constants.COPYFILE_EXCL);
     const temporary = `${connection.skillPath}.${randomUUID()}.tmp`;

@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import * as fsp from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -55,7 +56,7 @@ export class ActivityLog {
       } finally { await fsp.rm(temporary, { force: true }); }
     }
     const id = (await fsp.readFile(this.deviceIdFile, "utf8")).trim();
-    if (!devicePattern.test(id)) throw new Error("agentNote 本机设备 ID 无效，请检查本机 device-id 文件。");
+    if (!devicePattern.test(id)) throw new Error(t("agentNote 本机设备 ID 无效，请检查本机 device-id 文件。"));
     return id;
   }
   private deviceId(): Promise<string> {
@@ -70,8 +71,8 @@ export class ActivityLog {
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
     let value: unknown;
     try { value = JSON.parse(raw) as unknown; }
-    catch { throw new Error(`活动日志不是合法 JSON：${path.basename(file)}`); }
-    if (!Array.isArray(value) || !value.every(isEvent)) throw new Error(`活动日志格式无效：${path.basename(file)}`);
+    catch { throw new Error(t("活动日志不是合法 JSON：{0}", path.basename(file))); }
+    if (!Array.isArray(value) || !value.every(isEvent)) throw new Error(t("活动日志格式无效：{0}", path.basename(file)));
     return value;
   }
   async read(): Promise<InsightEvent[]> {
@@ -106,7 +107,7 @@ export class ActivityLog {
       const days = new Map<string, InsightEvent[]>();
       for (const event of await this.readFile(path.join(this.directory, source.file))) {
         const date = new Date(event.at);
-        if (Number.isNaN(date.getTime())) throw new Error(`活动日志时间无效：${source.file}`);
+        if (Number.isNaN(date.getTime())) throw new Error(t("活动日志时间无效：{0}", source.file));
         const day = dayKey(date);
         if (day >= today) continue;
         const events = days.get(day) ?? [];

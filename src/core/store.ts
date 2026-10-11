@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
@@ -190,22 +191,22 @@ export class VaultStore {
 
   private normalizeVaultPath(filePath: string): string {
     const absolute = path.resolve(this.root, filePath);
-    if (absolute !== this.root && !absolute.startsWith(`${this.root}${path.sep}`)) throw new StoreError(400, "文件路径不在当前 vault 中");
+    if (absolute !== this.root && !absolute.startsWith(`${this.root}${path.sep}`)) throw new StoreError(400, t("文件路径不在当前 vault 中"));
     return path.relative(this.root, absolute).split(path.sep).join("/");
   }
-  private documentTitle(filePath: string): string { return path.basename(filePath, ".md") || "未命名文档"; }
+  private documentTitle(filePath: string): string { return path.basename(filePath, ".md") || t("未命名文档"); }
   private async readDataFile<T>(name: string, valid: (value: unknown) => value is T, missing?: T): Promise<T> {
     let raw: string;
     try { raw = await fsp.readFile(this.p("data", name), "utf8"); }
     catch (error) {
       if (missing !== undefined && (error as NodeJS.ErrnoException).code === "ENOENT") return missing;
-      throw new StoreError(409, `${name} 无法读取，请检查并解决 Git 冲突后重试`);
+      throw new StoreError(409, t("{0} 无法读取，请检查并解决 Git 冲突后重试", name));
     }
     try {
       const value: unknown = JSON.parse(raw);
       if (valid(value)) return value;
     } catch { /* Leave the file untouched for recovery. */ }
-    throw new StoreError(409, `${name} 内容损坏，请检查并解决 Git 冲突后重试`);
+    throw new StoreError(409, t("{0} 内容损坏，请检查并解决 Git 冲突后重试", name));
   }
   private async readDocuments(): Promise<VaultDocument[]> {
     return this.readDataFile("documents.json", (value): value is VaultDocument[] => Array.isArray(value) && value.every((document) => isRecord(document) && typeof document.id === "string" && typeof document.path === "string" && typeof document.title === "string" && typeof document.created === "string" && typeof document.updated === "string" && (document.deletedAt === undefined || typeof document.deletedAt === "string") && (document.protected === undefined || typeof document.protected === "boolean")));
@@ -264,7 +265,7 @@ export class VaultStore {
   async protectDocument(documentId: string, protectedValue: boolean): Promise<void> {
     await this.updateDocuments((documents) => {
       const document = documents.find((candidate) => candidate.id === documentId && !candidate.deletedAt);
-      if (!document) throw new StoreError(404, "文档不存在");
+      if (!document) throw new StoreError(404, t("文档不存在"));
       document.protected = protectedValue;
     });
   }
@@ -389,19 +390,19 @@ export class VaultStore {
   }
   async getNode(id: string): Promise<AgentNode> {
     const node = (await this.scanNodes()).find((candidate) => candidate.id === id);
-    if (!node) throw new StoreError(404, `笔记不存在: ${id}`);
+    if (!node) throw new StoreError(404, t("笔记不存在: {0}", id));
     return node;
   }
   async nodeFilePath(id: string): Promise<string> {
     await this.scanNodes();
     const file = this.idToPath.get(id);
-    if (!file) throw new StoreError(404, `笔记不存在: ${id}`);
+    if (!file) throw new StoreError(404, t("笔记不存在: {0}", id));
     return path.relative(this.root, file).split(path.sep).join("/");
   }
   private async nodeFileAbsPath(id: string): Promise<string> {
     await this.scanNodes();
     const file = this.idToPath.get(id);
-    if (!file) throw new StoreError(404, `笔记不存在: ${id}`);
+    if (!file) throw new StoreError(404, t("笔记不存在: {0}", id));
     return file;
   }
 
@@ -451,7 +452,7 @@ export class VaultStore {
     return (await this.createNodeResult(input, idempotencyKey, context)).node;
   }
   async createNodeResult(input: CreateNodeInput, idempotencyKey?: string, context: ActivityContext = {}): Promise<{ node: AgentNode; created: boolean }> {
-    if (!input.title?.trim()) throw new StoreError(400, "标题不能为空");
+    if (!input.title?.trim()) throw new StoreError(400, t("标题不能为空"));
     const key = idempotencyKey?.trim();
     if (key) {
       const active = this.idempotentCreates.get(key);
@@ -472,7 +473,7 @@ export class VaultStore {
       }
     }
     const type = input.type ?? "snippet";
-    if ((type === "file" || type === "folder") && !input.path?.trim()) throw new StoreError(400, `${type} 笔记需要文件地址`);
+    if ((type === "file" || type === "folder") && !input.path?.trim()) throw new StoreError(400, t("{0} 笔记需要文件地址", type));
     const now = new Date().toISOString();
     const node: AgentNode = { id: newId("n"), type, title: input.title.trim(), content: input.content ?? "", background: input.background?.trim() ?? "", tags: normalizeTags(input.tags), source: input.source ?? "agent", path: input.path?.trim() || undefined, created: now, updated: now, archived: false, pinned: false };
     await this.writeNode(node);
@@ -519,7 +520,7 @@ export class VaultStore {
     return isRecord(target) && ((target.kind === "node" && typeof target.nodeId === "string") || ((target.kind === "file" || target.kind === "folder") && typeof target.path === "string")) && (value.selection === undefined || typeof value.selection === "string") && (value.background === undefined || typeof value.background === "string");
   }
   private shareFile(id: string): string {
-    if (!/^s-x-[a-zA-Z0-9-]{1,120}$/.test(id)) throw new StoreError(400, "分享 ID 无效");
+    if (!/^s-x-[a-zA-Z0-9-]{1,120}$/.test(id)) throw new StoreError(400, t("分享 ID 无效"));
     return this.p("data", "shares", `${id}.json`);
   }
   private async readLegacyShares(): Promise<Share[]> {
@@ -535,7 +536,7 @@ export class VaultStore {
     const message = error instanceof Error ? error.message : String(error);
     if (this.reportedShareErrors.has(message)) return;
     this.reportedShareErrors.add(message);
-    console.warn(`agentNote: ${message}；原文件已保留，其他分享仍可使用。`);
+    console.warn(t("agentNote: {0}；原文件已保留，其他分享仍可使用。", message));
   }
   private async readShares(): Promise<Share[]> {
     let legacy: Share[];
@@ -555,11 +556,11 @@ export class VaultStore {
     return [...shares.values()].sort((first, second) => first.created.localeCompare(second.created) || first.id.localeCompare(second.id));
   }
   private async getShare(id: string): Promise<Share> {
-    if (!/^s-x-[a-zA-Z0-9-]{1,120}$/.test(id)) throw new StoreError(404, `分享不存在: ${id}`);
+    if (!/^s-x-[a-zA-Z0-9-]{1,120}$/.test(id)) throw new StoreError(404, t("分享不存在: {0}", id));
     const share = await this.readShareFile(id);
     if (share) return share;
     const legacy = (await this.readLegacyShares()).find((candidate) => candidate.id === id);
-    if (!legacy) throw new StoreError(404, `分享不存在: ${id}`);
+    if (!legacy) throw new StoreError(404, t("分享不存在: {0}", id));
     return legacy;
   }
   private async writeShare(share: Share, create = false): Promise<void> {
@@ -575,21 +576,21 @@ export class VaultStore {
   async listShares(): Promise<Share[]> { return this.readShares(); }
   async shareSourcePath(id: string): Promise<string> {
     const share = await this.getShare(id);
-    if (share.selection) throw new StoreError(400, "选段分享暂不支持查询双链");
-    if (share.target.kind === "folder") throw new StoreError(400, "文件夹分享不能查询双链");
+    if (share.selection) throw new StoreError(400, t("选段分享暂不支持查询双链"));
+    if (share.target.kind === "folder") throw new StoreError(400, t("文件夹分享不能查询双链"));
     let sourcePath: string;
     if (share.target.kind === "file") sourcePath = this.vaultPath(share.target.path).rel;
     else {
       const node = await this.getNode(share.target.nodeId);
-      if (node.type === "folder") throw new StoreError(400, "文件夹分享不能查询双链");
+      if (node.type === "folder") throw new StoreError(400, t("文件夹分享不能查询双链"));
       if (node.type === "snippet") sourcePath = await this.nodeFilePath(node.id);
       else {
-        if (!node.path) throw new StoreError(410, "笔记缺少文件地址");
+        if (!node.path) throw new StoreError(410, t("笔记缺少文件地址"));
         sourcePath = path.relative(this.root, path.resolve(node.path)).split(path.sep).join("/");
-        if (sourcePath === ".." || sourcePath.startsWith("../") || path.isAbsolute(sourcePath)) throw new StoreError(400, "仅支持 vault 内的 Markdown 文件");
+        if (sourcePath === ".." || sourcePath.startsWith("../") || path.isAbsolute(sourcePath)) throw new StoreError(400, t("仅支持 vault 内的 Markdown 文件"));
       }
     }
-    if (!sourcePath.toLowerCase().endsWith(".md")) throw new StoreError(400, "仅支持 Markdown 文件的双链查询");
+    if (!sourcePath.toLowerCase().endsWith(".md")) throw new StoreError(400, t("仅支持 Markdown 文件的双链查询"));
     return sourcePath;
   }
   async activityFilePath(activity: Pick<InsightEvent, "nodeId" | "documentId" | "shareId" | "path">): Promise<string | null> {
@@ -612,7 +613,7 @@ export class VaultStore {
   async registerAgent(agent: RegisteredAgent): Promise<void> {
     const id = agent.id.trim().toLowerCase().slice(0, 80);
     const name = agent.name.trim().slice(0, 80);
-    if (!id || !name) throw new StoreError(400, "agent 身份不完整");
+    if (!id || !name) throw new StoreError(400, t("agent 身份不完整"));
     const agents = await this.readRegisteredAgents();
     const index = agents.findIndex((item) => item.id === id);
     if (index === -1) agents.push({ id, name }); else agents[index] = { id, name };
@@ -634,8 +635,8 @@ export class VaultStore {
   }
   async createShare(nodeId: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
     const node = await this.getNode(nodeId);
-    if (selection && node.type !== "snippet") throw new StoreError(400, "只有文本笔记能分享选段");
-    if (selection && !node.content.includes(selection)) throw new StoreError(400, "选段已不在当前正文中");
+    if (selection && node.type !== "snippet") throw new StoreError(400, t("只有文本笔记能分享选段"));
+    if (selection && !node.content.includes(selection)) throw new StoreError(400, t("选段已不在当前正文中"));
     return this.appendShare({ kind: "node", nodeId }, selection, undefined, context, node.title);
   }
   /** Every written node gets a whole-note share link; reuse the existing one
@@ -646,16 +647,16 @@ export class VaultStore {
   }
   private vaultPath(relPath: string): { rel: string; abs: string } {
     const rel = relPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-    if (!rel || rel.split("/").includes("..")) throw new StoreError(400, "必须提供 vault 内相对路径");
+    if (!rel || rel.split("/").includes("..")) throw new StoreError(400, t("必须提供 vault 内相对路径"));
     return { rel, abs: path.join(this.root, ...rel.split("/")) };
   }
   async createPathShare(relPath: string, background?: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
     const { rel, abs } = this.vaultPath(relPath);
     const stat = await fsp.stat(abs).catch(() => null);
-    if (!stat) throw new StoreError(404, `找不到内容: ${rel}`);
+    if (!stat) throw new StoreError(404, t("找不到内容: {0}", rel));
     const title = path.basename(rel).replace(/\.md$/i, "");
-    if (stat.isDirectory()) { if (selection) throw new StoreError(400, "文件夹不能分享选段"); return this.appendShare({ kind: "folder", path: rel }, undefined, background, context, title); }
-    if (selection && !(await fsp.readFile(abs, "utf8")).includes(selection)) throw new StoreError(400, "选段已不在当前文件中");
+    if (stat.isDirectory()) { if (selection) throw new StoreError(400, t("文件夹不能分享选段")); return this.appendShare({ kind: "folder", path: rel }, undefined, background, context, title); }
+    if (selection && !(await fsp.readFile(abs, "utf8")).includes(selection)) throw new StoreError(400, t("选段已不在当前文件中"));
     return this.appendShare({ kind: "file", path: rel }, selection, background, context, title);
   }
 
@@ -676,7 +677,7 @@ export class VaultStore {
 
   async updateShareContent(id: string, content: string, context: ActivityContext = {}): Promise<ShareResult> {
     const share = await this.getShare(id);
-    if (share.target.kind === "folder") throw new StoreError(400, "文件夹分享不支持通过接口直接修改");
+    if (share.target.kind === "folder") throw new StoreError(400, t("文件夹分享不支持通过接口直接修改"));
 
     if (share.target.kind === "node") {
       const node = await this.getNode(share.target.nodeId);
@@ -685,7 +686,7 @@ export class VaultStore {
         if (share.selection) { share.selection = content; await this.replaceShare(share); }
         return this.resolveNodeShare(share, await this.updateNode(node.id, { content: nextContent }, context));
       }
-      if (!node.path) throw new StoreError(410, "笔记缺少文件地址");
+      if (!node.path) throw new StoreError(410, t("笔记缺少文件地址"));
       return this.updateSharedFile(share, node.path, node.path, content, context, node.id, node.background, node.title);
     }
 
@@ -694,7 +695,7 @@ export class VaultStore {
   }
 
   private replaceSelection(current: string, selection: string, replacement: string): string {
-    if (!current.includes(selection)) throw new StoreError(410, "分享选段已不在当前文件中");
+    if (!current.includes(selection)) throw new StoreError(410, t("分享选段已不在当前文件中"));
     return current.replace(selection, replacement);
   }
 
@@ -704,7 +705,7 @@ export class VaultStore {
 
   private async updateSharedFile(share: Share, address: string, abs: string, content: string, context: ActivityContext, nodeId?: string, background?: string, title?: string): Promise<ShareResult> {
     const stat = await fsp.stat(abs).catch(() => null);
-    if (!stat?.isFile()) throw new StoreError(400, "只有文本文件分享支持通过接口直接修改");
+    if (!stat?.isFile()) throw new StoreError(400, t("只有文本文件分享支持通过接口直接修改"));
     const current = await fsp.readFile(abs, "utf8");
     const nextContent = share.selection ? this.replaceSelection(current, share.selection, content) : content;
     if (share.selection) { share.selection = content; await this.replaceShare(share); }
@@ -782,7 +783,7 @@ export class VaultStore {
         const updated = inRange(node.updated, start);
         const score = period === "week" ? reads.length * 10 + (updated ? 1 : 0) : distinctWeeks * 1000 + reads.length * 10 + (updated ? 1 : 0);
         const lastRead = reads.map((event) => event.at).sort().at(-1);
-        const reason = period === "week" ? `本周被读取 ${reads.length} 次${updated ? "，并在本周更新" : ""}` : period === "month" ? `本月被读取 ${reads.length} 次，跨 ${distinctWeeks} 周复用` : `累计被读取 ${reads.length} 次，跨 ${distinctWeeks} 周复用`;
+        const reason = period === "week" ? t("本周被读取 {0} 次{1}", reads.length, updated ? t("，并在本周更新") : "") : period === "month" ? t("本月被读取 {0} 次，跨 {1} 周复用", reads.length, distinctWeeks) : t("累计被读取 {0} 次，跨 {1} 周复用", reads.length, distinctWeeks);
         return { node, reads: reads.length, lastRead, score, reason };
       }).sort((a, b) => b.score - a.score || (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).slice(0, 3);
     };
@@ -801,7 +802,7 @@ export class VaultStore {
       })).size;
       const quietDays = uses.length === 0 ? 7 : useWeeks >= 2 ? 90 : 30;
       if (!Number.isFinite(lastAttention) || now.getTime() - lastAttention < quietDays * 86_400_000) return null;
-      const reason = uses.length === 0 ? "至少 7 天未被阅读、引用或通过分享链接访问" : useWeeks >= 2 ? "曾跨周复用，近 90 天没有新的使用或维护" : "曾被使用，近 30 天没有新的使用或维护";
+      const reason = uses.length === 0 ? t("至少 7 天未被阅读、引用或通过分享链接访问") : useWeeks >= 2 ? t("曾跨周复用，近 90 天没有新的使用或维护") : t("曾被使用，近 30 天没有新的使用或维护");
       return { document, node, reason, uses: uses.length, lastUsed };
     };
     const nodeCandidates = nodes.flatMap((node): ArchiveCandidate[] => {
@@ -855,7 +856,7 @@ export class VaultStore {
       allTime: buildRanking(startedAt, "all"),
       activities: activityEvents.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
       timeline: activityEvents.filter((event) => event.type !== "local-deleted" || new Date(event.at) >= deletionVisibleAfter).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
-      weeklyTrend: trend(weekStart, 7, (date) => ["日", "一", "二", "三", "四", "五", "六"][date.getDay()]),
+      weeklyTrend: trend(weekStart, 7, (date) => [t("日"), t("一"), t("二"), t("三"), t("四"), t("五"), t("六")][date.getDay()]),
       monthlyTrend: trend(monthStart, monthDays, (date) => String(date.getDate())),
       allTimeTrend: trend(contributionStart, contributionDays, dateKey),
       documents: documentContributions,
@@ -872,7 +873,7 @@ export class VaultStore {
     const grouped = new Map<string, AgentInsight>();
     for (const event of await this.readStoredEvents()) {
       if (!event.actor) continue;
-      const name = event.actor.name ?? event.actor.id ?? "未申报 agent";
+      const name = event.actor.name ?? event.actor.id ?? t("未申报 agent");
       const row = grouped.get(name) ?? { name, uses: 0, created: 0, updated: 0, lastActive: event.at };
       if (event.type === "share-resolved") row.uses++;
       if (event.type === "node-created") row.created++;
@@ -886,7 +887,7 @@ export class VaultStore {
     const grouped = new Map<string, DocumentInsight>();
     for (const event of (await this.readStoredEvents()).filter((event) => event.type === "share-resolved")) {
       const key = event.nodeId ?? `${event.targetKind}:${event.title ?? event.shareId}`;
-      const row = grouped.get(key) ?? { nodeId: event.nodeId, title: event.title ?? "未命名资料", uses: 0, agents: [], lastUsed: event.at };
+      const row = grouped.get(key) ?? { nodeId: event.nodeId, title: event.title ?? t("未命名资料"), uses: 0, agents: [], lastUsed: event.at };
       row.uses++;
       const actorName = event.actor?.name ?? event.actor?.id;
       if (actorName && !row.agents.includes(actorName)) row.agents.push(actorName);
@@ -898,27 +899,27 @@ export class VaultStore {
   private async resolveNodeShare(share: Share, node: AgentNode): Promise<ShareResult> {
     if (node.type === "snippet") {
       const content = share.selection ?? node.content;
-      if (share.selection && !node.content.includes(share.selection)) throw new StoreError(410, "分享选段已不在当前正文中");
-      return { shareId: share.id, kind: "text", title: node.title, background: node.background, content, updated: node.updated, filePath: await this.nodeFileAbsPath(node.id), hint: SHARE_HINT };
+      if (share.selection && !node.content.includes(share.selection)) throw new StoreError(410, t("分享选段已不在当前正文中"));
+      return { shareId: share.id, kind: "text", title: node.title, background: node.background, content, updated: node.updated, filePath: await this.nodeFileAbsPath(node.id), hint: t(SHARE_HINT) };
     }
-    if (!node.path) throw new StoreError(410, "笔记缺少文件地址");
+    if (!node.path) throw new StoreError(410, t("笔记缺少文件地址"));
     const stat = await fsp.stat(node.path).catch(() => null);
-    if (!stat) throw new StoreError(410, "分享目标已不存在");
+    if (!stat) throw new StoreError(410, t("分享目标已不存在"));
     return stat.isDirectory() ? this.resolveFolderShare(share, node.path, node.path, node.background, node.title) : this.resolveFileShare(share, node.path, node.path, node.background, node.title);
   }
   private async resolveFileShare(share: Share, address: string, abs: string, background = share.background ?? "", title = path.basename(address)): Promise<ShareResult> {
     const stat = await fsp.stat(abs).catch(() => null);
-    if (!stat?.isFile()) throw new StoreError(410, `分享文件已不存在: ${address}`);
+    if (!stat?.isFile()) throw new StoreError(410, t("分享文件已不存在: {0}", address));
     const body = await fsp.readFile(abs, "utf8");
     const content = share.selection ?? body;
-    if (share.selection && !body.includes(share.selection)) throw new StoreError(410, "分享选段已不在当前文件中");
-    return { shareId: share.id, kind: "file", title, background, address, content, updated: stat.mtime.toISOString(), filePath: abs, hint: SHARE_HINT };
+    if (share.selection && !body.includes(share.selection)) throw new StoreError(410, t("分享选段已不在当前文件中"));
+    return { shareId: share.id, kind: "file", title, background, address, content, updated: stat.mtime.toISOString(), filePath: abs, hint: t(SHARE_HINT) };
   }
   private async resolveFolderShare(share: Share, address: string, abs: string, background = share.background ?? "", title = path.basename(address)): Promise<ShareResult> {
     const stat = await fsp.stat(abs).catch(() => null);
-    if (!stat?.isDirectory()) throw new StoreError(410, `分享文件夹已不存在: ${address}`);
+    if (!stat?.isDirectory()) throw new StoreError(410, t("分享文件夹已不存在: {0}", address));
     const entries = (await fsp.readdir(abs, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)).map((item) => item.isDirectory() ? `${item.name}/` : item.name);
-    return { shareId: share.id, kind: "folder", title, background, address, entries, updated: stat.mtime.toISOString(), filePath: abs, hint: SHARE_HINT };
+    return { shareId: share.id, kind: "folder", title, background, address, entries, updated: stat.mtime.toISOString(), filePath: abs, hint: t(SHARE_HINT) };
   }
 
   warningsFor(node: AgentNode) { return qualityWarnings(node); }

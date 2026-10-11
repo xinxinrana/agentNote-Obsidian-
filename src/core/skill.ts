@@ -1,3 +1,5 @@
+import { language, t } from "../i18n";
+import { ENGLISH_INSTALL_PROMPT, ENGLISH_SKILL_TEMPLATE } from "./skillEnglish";
 import * as fs from "fs";
 import * as path from "path";
 import { createHash, randomUUID } from "crypto";
@@ -122,11 +124,15 @@ GET  {{baseUrl}}/api/shares/<id>/links
 \`\`\`
 `;
 
-export function renderSkillSource({ instructions = "", template = DEFAULT_SKILL_TEMPLATE }: Pick<AgentPromptOptions, "instructions" | "template">): string {
-  return `${template.trimEnd()}${instructions.trim() ? `\n\n## 此 agent 的人工附加要求（更高优先级）\n\n${instructions.trim()}\n` : "\n"}`;
+export function defaultSkillTemplate(): string { return language() === "en" ? ENGLISH_SKILL_TEMPLATE : DEFAULT_SKILL_TEMPLATE; }
+
+function isDefaultTemplate(template: string): boolean { return template === DEFAULT_SKILL_TEMPLATE || template === ENGLISH_SKILL_TEMPLATE; }
+
+export function renderSkillSource({ instructions = "", template = defaultSkillTemplate() }: Pick<AgentPromptOptions, "instructions" | "template">): string {
+  return `${template.trimEnd()}${instructions.trim() ? t("\n\n## 此 agent 的人工附加要求（更高优先级）\n\n{0}\n", instructions.trim()) : "\n"}`;
 }
 
-export function renderSkillMd({ port, instructions = "", agentId = "agentnote", agentName = "未命名 agent", template = DEFAULT_SKILL_TEMPLATE }: AgentPromptOptions): string {
+export function renderSkillMd({ port, instructions = "", agentId = "agentnote", agentName = t("未命名 agent"), template = defaultSkillTemplate() }: AgentPromptOptions): string {
   const base = `http://127.0.0.1:${port}`;
   const resolved = renderSkillSource({ template, instructions })
     .replaceAll(TEMPLATE_TOKENS.baseUrl, base)
@@ -139,12 +145,12 @@ export function renderSkillMd({ port, instructions = "", agentId = "agentnote", 
 
 /** The same downloadable skill is used by every installation entry. */
 export function renderSharedSkillMd(port: number): string {
-  return DEFAULT_SKILL_TEMPLATE
+  return defaultSkillTemplate()
     .replaceAll(TEMPLATE_TOKENS.baseUrl, `http://127.0.0.1:${port}`)
-    .replaceAll(TEMPLATE_TOKENS.encodedAgentId, "<读取 agentnote.identity.json 的 id 并进行 URL 编码>")
-    .replaceAll(TEMPLATE_TOKENS.encodedAgentName, "<读取 agentnote.identity.json 的 name 并进行 URL 编码>")
-    .replaceAll(TEMPLATE_TOKENS.agentId, "<agentnote.identity.json 的 id>")
-    .replaceAll(TEMPLATE_TOKENS.agentName, "<agentnote.identity.json 的 name>");
+    .replaceAll(TEMPLATE_TOKENS.encodedAgentId, t("<读取 agentnote.identity.json 的 id 并进行 URL 编码>"))
+    .replaceAll(TEMPLATE_TOKENS.encodedAgentName, t("<读取 agentnote.identity.json 的 name 并进行 URL 编码>"))
+    .replaceAll(TEMPLATE_TOKENS.agentId, t("<agentnote.identity.json 的 id>"))
+    .replaceAll(TEMPLATE_TOKENS.agentName, t("<agentnote.identity.json 的 name>"));
 }
 
 function digest(value: string): string { return createHash("sha256").update(value).digest("hex"); }
@@ -156,10 +162,10 @@ export function skillStatus(dir: string, options: AgentPromptOptions): SkillStat
     const installed = digest(fs.readFileSync(file, "utf8"));
     const identity = JSON.parse(fs.readFileSync(path.join(dir, "agentnote.identity.json"), "utf8")) as Record<string, unknown>;
     if (identity.id !== (options.agentId ?? "agentnote")) return "unknown";
-    if (options.template !== undefined && options.template !== DEFAULT_SKILL_TEMPLATE) return "custom";
+    if (options.template !== undefined && !isDefaultTemplate(options.template)) return "custom";
     if (typeof identity.skillHash !== "string" || typeof identity.defaultTemplateHash !== "string") return installed === digest(renderSkillMd(options)) ? "current" : "unknown";
     if (installed !== identity.skillHash) return "custom";
-    return identity.defaultTemplateHash === digest(DEFAULT_SKILL_TEMPLATE) ? "current" : "update";
+    return [DEFAULT_SKILL_TEMPLATE, ENGLISH_SKILL_TEMPLATE].some((template) => identity.defaultTemplateHash === digest(template)) ? "current" : "update";
   } catch { return "unknown"; }
 }
 
@@ -175,7 +181,7 @@ export function skillInstallConflict(dir: string, agentId: string): boolean {
 
 export function installSkill(dir: string, options: AgentPromptOptions, overwriteExisting = false): void {
   const conflict = skillInstallConflict(dir, options.agentId ?? "agentnote");
-  if (conflict && !overwriteExisting) throw new Error("现有技能或身份文件不是该 agentNote 接入的未修改版本，已停止覆盖");
+  if (conflict && !overwriteExisting) throw new Error(t("现有技能或身份文件不是该 agentNote 接入的未修改版本，已停止覆盖"));
   fs.mkdirSync(dir, { recursive: true });
   if (conflict) {
     const suffix = `.agentnote-backup-${randomUUID()}`;
@@ -186,12 +192,13 @@ export function installSkill(dir: string, options: AgentPromptOptions, overwrite
   }
   const skill = renderSkillMd(options);
   fs.writeFileSync(path.join(dir, "SKILL.md"), skill, "utf8");
-  fs.writeFileSync(path.join(dir, "agentnote.identity.json"), JSON.stringify({ version: 1, id: options.agentId ?? "agentnote", name: options.agentName ?? "未命名 agent", skillHash: digest(skill), defaultTemplateHash: digest(DEFAULT_SKILL_TEMPLATE) }, null, 2), "utf8");
+  fs.writeFileSync(path.join(dir, "agentnote.identity.json"), JSON.stringify({ version: 1, id: options.agentId ?? "agentnote", name: options.agentName ?? t("未命名 agent"), skillHash: digest(skill), defaultTemplateHash: digest(defaultSkillTemplate()) }, null, 2), "utf8");
 }
 
 /** A portable task for agents outside the built-in registry. */
 export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "port">): string {
   const base = `http://127.0.0.1:${port}`;
+  if (language() === "en") return ENGLISH_INSTALL_PROMPT.replaceAll(TEMPLATE_TOKENS.baseUrl, base);
   return `请安装 agentNote Skill。它是用户的 Obsidian 本地笔记和文件中转工具，用于读取分享、查找和写入笔记。
 
 1. 从 ${base}/api/skill.md 下载 Skill 文件，保存为你实际使用的技能目录中的 agentnote/SKILL.md，并完成当前 Agent 所需的技能配置。

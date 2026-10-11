@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import * as http from "http";
 import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateNodeInput, VaultStore } from "./store";
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
@@ -16,7 +17,7 @@ async function readBody(req: http.IncomingMessage): Promise<unknown> {
   for await (const chunk of req) chunks.push(chunk as Buffer);
   const raw = Buffer.concat(chunks).toString("utf8").trim();
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { throw new StoreError(400, "请求体必须是合法 JSON"); }
+  try { return JSON.parse(raw); } catch { throw new StoreError(400, t("请求体必须是合法 JSON")); }
 }
 function activityContext(req: http.IncomingMessage): ActivityContext {
   const decodeHeader = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
@@ -60,13 +61,13 @@ export class AgentServer {
       return void res.end(body);
     }
     if (url.pathname === "/api/agents/register" && method === "POST") {
-      if (!this.opts.registerAgent) throw new StoreError(503, "Agent 接入登记不可用");
+      if (!this.opts.registerAgent) throw new StoreError(503, t("Agent 接入登记不可用"));
       const body = await readBody(req) as { name?: unknown; skillPath?: unknown };
-      if (typeof body.name !== "string" || typeof body.skillPath !== "string") throw new StoreError(400, "请提供 name 和 skillPath");
+      if (typeof body.name !== "string" || typeof body.skillPath !== "string") throw new StoreError(400, t("请提供 name 和 skillPath"));
       try { return send(res, 200, { ok: true, data: await this.opts.registerAgent(body.name, body.skillPath) }); }
       catch (error) { throw new StoreError(400, error instanceof Error ? error.message : String(error)); }
     }
-    if (parts[0] !== "api") return send(res, 404, { ok: false, error: "接口不存在" });
+    if (parts[0] !== "api") return send(res, 404, { ok: false, error: t("接口不存在") });
     const context = await this.store.resolveActivityContext(activityContext(req));
 
     if (parts[1] === "nodes" && parts.length === 2) {
@@ -100,18 +101,18 @@ export class AgentServer {
       const body = await readBody(req) as { nodeId?: string; path?: string; background?: string; selection?: string };
       if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context) });
       if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context) });
-      throw new StoreError(400, "nodeId 或 path 至少提供一个");
+      throw new StoreError(400, t("nodeId 或 path 至少提供一个"));
     }
     if (parts[1] === "shares" && parts.length === 3 && (method === "PUT" || method === "PATCH")) {
       const body = await readBody(req) as { content?: unknown };
-      if (typeof body.content !== "string") throw new StoreError(400, "content 必须是字符串");
+      if (typeof body.content !== "string") throw new StoreError(400, t("content 必须是字符串"));
       const data = await this.store.updateShareContent(parts[2], body.content, context);
       this.notifyActivity({ operation: "updated", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "text" ? "node" : "file", actor: context.actor });
       return send(res, 200, { ok: true, data });
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "links" && method === "GET") {
       const sourcePath = await this.store.shareSourcePath(parts[2]);
-      if (!this.opts.listLinks) throw new StoreError(503, "Obsidian 双链索引不可用");
+      if (!this.opts.listLinks) throw new StoreError(503, t("Obsidian 双链索引不可用"));
       return send(res, 200, { ok: true, data: { sourcePath, links: await this.opts.listLinks(sourcePath) } });
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
@@ -130,7 +131,7 @@ export class AgentServer {
       if (parts[2] === "agents") return send(res, 200, { ok: true, data: await this.store.getAgentInsights() });
       if (parts[2] === "documents") return send(res, 200, { ok: true, data: await this.store.getDocumentInsights() });
     }
-    return send(res, 404, { ok: false, error: `没有这条路由: ${method} ${url.pathname}` });
+    return send(res, 404, { ok: false, error: t("没有这条路由: {0} {1}", method, url.pathname) });
   }
 }
 function send(res: http.ServerResponse, status: number, payload: unknown): void { const body = JSON.stringify(payload, null, 2); res.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(body) }); res.end(body); }

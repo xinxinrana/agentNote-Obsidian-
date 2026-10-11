@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, localConnectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, localConnectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion, languageFor, setLanguage, locale, t } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -847,6 +847,85 @@ try {
     assert.equal(next.match(/## 附加要求/g)?.length, 1);
     assert.doesNotMatch(next, /使用中文回复/);
     assert.equal(withSkillInstructions(splitSkillInstructions(next).base, ""), baseSkill);
+  });
+
+  await test("language selection follows the host and preserves interpolation values", async () => {
+    for (const code of [undefined, null, "", "zh", "zh-CN", "zh-TW", "ZH-hk"]) assert.equal(languageFor(code), "zh");
+    for (const code of ["en", "en-GB", "fr", "ja"]) assert.equal(languageFor(code), "en");
+    try {
+      setLanguage("en");
+      assert.equal(locale(), "en-US");
+      assert.equal(t("创建「{0}」", "中文标题 {1}"), "Created “中文标题 {1}”");
+      assert.equal(t("unregistered fallback"), "unregistered fallback");
+      setLanguage("zh-TW");
+      assert.equal(locale(), "zh-CN");
+      assert.equal(t("创建「{0}」", "中文标题 {1}"), "创建「中文标题 {1}」");
+    } finally { setLanguage(null); }
+  });
+
+  await test("English APIs preserve Chinese notes while localizing hints and insights", async () => {
+    try {
+      setLanguage("en");
+      const result = await api("POST", "/api/nodes", { title: "中文原始标题", content: "保留正文。", background: "原始背景" });
+      assert.equal(result.status, 201);
+      const resolved = await api("GET", new URL(result.data.link).pathname);
+      assert.equal(resolved.data.title, "中文原始标题");
+      assert.equal(resolved.data.content, "保留正文。");
+      assert.equal(resolved.data.background, "原始背景");
+      assert.match(resolved.data.hint, /^Read through this link/);
+      const insights = await store.getDashboardInsights();
+      assert.ok(insights.weeklyTrend.every((point) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].includes(point.label)));
+      assert.ok(insights.weekly.every((entry) => !/\p{Script=Han}/u.test(entry.reason)));
+      const invalid = await api("POST", "/api/nodes", { title: "" });
+      assert.equal(invalid.error, "Title cannot be empty");
+      setLanguage("zh");
+      const original = await api("GET", new URL(result.data.link).pathname);
+      assert.equal(original.data.title, resolved.data.title);
+      assert.match(original.data.hint, /^优先通过本链接读取/);
+    } finally { setLanguage(null); }
+  });
+
+  await test("English Skill and installation task retain every endpoint and identity requirement", async () => {
+    const chinese = renderSharedSkillMd(port);
+    try {
+      setLanguage("en");
+      const english = await (await fetch(`${base}/api/skill.md`)).text();
+      assert.equal(english, renderSharedSkillMd(port));
+      assert.doesNotMatch(english, /\p{Script=Han}/u);
+      assert.match(english, /do not modify/i);
+      assert.match(english, /X-AgentNote-Agent-Id/);
+      assert.match(english, /X-AgentNote-Session-Title/);
+      const endpoints = (value) => [...value.matchAll(/^(?:GET|POST|PATCH)\s+http:\/\/127\.0\.0\.1:\d+\/api\/[^\s]+/gm)].map((match) => match[0]);
+      assert.deepEqual(endpoints(english), endpoints(chinese));
+      const install = renderManualInstallPrompt({ port });
+      assert.doesNotMatch(install, /\p{Script=Han}/u);
+      for (const route of ["/api/skill.md", "/api/agents/register", "/api/skill-icon.svg"]) assert.ok(install.includes(`${base}${route}`));
+      assert.match(install, /agentnote.identity.json/);
+      assert.match(install, /skillPath/);
+    } finally { setLanguage(null); }
+  });
+
+  await test("switching languages preserves installed Skills and editable additional instructions", async () => {
+    const dir = path.join(identityRoot, "bilingual-skill");
+    const options = { port, agentId: "bilingual-agent", agentName: "My Agent" };
+    installSkill(dir, options);
+    const original = await fsp.readFile(path.join(dir, "SKILL.md"), "utf8");
+    const first = withSkillInstructions(original, "保留我的中文要求。");
+    try {
+      setLanguage("en");
+      assert.equal(skillStatus(dir, options), "current");
+      assert.equal(await fsp.readFile(path.join(dir, "SKILL.md"), "utf8"), original);
+      assert.equal(splitSkillInstructions(first).additional, "保留我的中文要求。");
+      const updated = withSkillInstructions(splitSkillInstructions(first).base, "My custom instructions.");
+      assert.match(updated, /## Additional instructions/);
+      assert.equal(updated.match(/<!-- agentNote:additional -->/g).length, 1);
+      installSkill(path.join(identityRoot, "english-skill"), options);
+      assert.equal(skillStatus(path.join(identityRoot, "english-skill"), options), "current");
+      setLanguage("zh");
+      assert.equal(splitSkillInstructions(updated).additional, "My custom instructions.");
+      assert.equal(skillStatus(path.join(identityRoot, "english-skill"), options), "current");
+      assert.equal(withSkillInstructions(splitSkillInstructions(updated).base, ""), original);
+    } finally { setLanguage(null); }
   });
 
   await test("version comparison drives self-update decisions", async () => {

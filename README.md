@@ -32,7 +32,7 @@ agentNote is an Obsidian desktop plugin that connects your vault with agents suc
 Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete first workflow. The short version is:
 
 1. Open the **agentNote connection panel** and confirm that the local service is running.
-2. Select **接入**, send the copied installation task to an agent, and wait for it to report its installed Skill path.
+2. Select **Connect**, send the copied installation task to an agent, and wait for it to report its installed Skill path.
 3. Right-click a vault file or folder, choose **agentNote: Share with agent**, and paste the copied Markdown link with its file name into the conversation.
 4. Ask the connected agent to read the link, or simply say “Write this to Obsidian.”
 
@@ -81,7 +81,7 @@ The agentNote skill asks the agent to create a title, body, background, and tags
 
 ### Connect an agent
 
-Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always appear; use **接入其他 Agent** for another agent. Every entry copies the same task: the agent downloads the local `SKILL.md`, sets up its fixed identity, and reports its actual installation path. Once registered, you can preview and edit that local Skill or add instructions specific to the agent.
+Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always appear; use **Connect another agent** for another agent. Every entry copies the same task: the agent downloads the local `SKILL.md`, sets up its fixed identity, and reports its actual installation path. Once registered, you can preview and edit that local Skill or add instructions specific to the agent.
 
 ## Local service and privacy
 
@@ -91,6 +91,23 @@ Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always ap
 - There is no account, cloud sync, telemetry service, or public sharing layer.
 - The plugin uses local filesystem access and the system clipboard for its sharing and agent integration features.
 - This is a desktop-only plugin because it uses Node.js, Electron, and a local HTTP server.
+- The interface and new installation tasks follow Obsidian's language setting: Chinese for Chinese locales, English for other languages. Change Obsidian's language in its settings and restart it. Your notes and existing custom Skills keep their original content. Obsidian versions without the language API use Chinese.
+
+## FAQ
+
+### Sharing fails because `shares.json` cannot be read or is damaged. What should I do?
+
+Finish Git synchronization, resolve conflicts in the reported file, and save it. Then disable and re-enable agentNote in **Settings → Community plugins** and share again. Reloading the plugin refreshes its data; it does not repair unresolved conflicts inside a file.
+
+New links are stored in `agentNote/data/shares/`, so a damaged legacy `shares.json` does not block new links. Historical links stored only in that legacy file still require it to be repaired. Keep the entire `shares/` directory and any existing `shares.json` when syncing. Do not delete original records to dismiss an error. If you need help, back up the file and submit feedback with the error message.
+
+### Why can't my agent connect on macOS when Obsidian is still in the Dock?
+
+agentNote's local service depends on the open vault window. Clicking the red close button or pressing `⌘W` can stop the service. The dot below Obsidian in the Dock only means the application has not quit.
+
+Keep the vault window open while your agent works. Press `⌘H` to hide Obsidian, or use the yellow button or `⌘M` to minimize the window. Click Obsidian in the Dock to return. If you closed the window, reopen the vault and confirm **Service running** in the connection panel. The service is also unavailable while the computer sleeps or after Obsidian quits.
+
+Apple's [keyboard shortcut guide](https://support.apple.com/en-us/102650) distinguishes hiding, minimizing, and closing windows.
 
 ## Documentation
 

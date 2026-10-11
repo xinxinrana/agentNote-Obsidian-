@@ -60,11 +60,11 @@ Open the **agentNote connection panel** in the Obsidian sidebar.
 
 ### Connection flow
 
-Claude Code, Codex, and WorkBuddy always appear. Select **接入其他 Agent** for another tool. Every entry copies the same task: the agent downloads the local `SKILL.md`, configures its fixed identity, and reports the actual installation path. Once reported, the card shows a green **已接入** button. You can then share a link or ask the agent to write a note naturally.
+Claude Code, Codex, and WorkBuddy always appear. Select **Connect another agent** for another tool. Every entry copies the same task: the agent downloads the local `SKILL.md`, configures its fixed identity, and reports the actual installation path. Once reported, the card shows a green **Connected** button. You can then share a link or ask the agent to write a note naturally.
 
-Select **已接入** to preview the full installed Skill. The additional-instructions box below changes only that agent's local file, and saving immediately updates the preview. You can also select **直接编辑全文** and accept the existing warning before editing the full document. The agent may need a new conversation to load changes.
+Select **Connected** to preview the full installed Skill. The additional-instructions box below changes only that agent's local file, and saving immediately updates the preview. You can also select **Edit full text** and accept the existing warning before editing the full document. The agent may need a new conversation to load changes.
 
-**删除** backs up and moves agentNote's `SKILL.md` out of the active Skill location. The dashboard retains earlier collaboration activity.
+**Remove** backs up and moves agentNote's `SKILL.md` out of the active Skill location. The dashboard retains earlier collaboration activity.
 
 ### Feedback
 

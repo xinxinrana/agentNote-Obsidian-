@@ -256,21 +256,21 @@
 .agentnote-demo-controls button { flex: 1; min-width: 0; padding: 7px 5px; font-size: .8em; }
 .agentnote-demo-controls button.is-active { color: var(--text-on-accent); background: var(--interactive-accent); }
 
-[data-step="分享笔记"] .agentnote-demo-target { animation: agentnote-demo-highlight 5.6s both; }
-[data-step="接入 Agent"] .agentnote-demo-cursor { animation: agentnote-demo-connect-cursor 5.6s both; }
-[data-step="接入 Agent"] .agentnote-demo-toast { animation: agentnote-demo-appear 5.6s both; }
-[data-step="接入 Agent"] .agentnote-demo-before,
-[data-step="接入 Agent"] .agentnote-demo-agent-card b { animation: agentnote-demo-fade-out 5.6s both; }
-[data-step="接入 Agent"] .agentnote-demo-after,
-[data-step="接入 Agent"] .agentnote-demo-reply { animation: agentnote-demo-late 5.6s both; }
-[data-step="分享笔记"] .agentnote-demo-menu { animation: agentnote-demo-appear 5.6s both; }
-[data-step="分享笔记"] .agentnote-demo-toast { animation: agentnote-demo-late 5.6s both; }
-[data-step="分享笔记"] .agentnote-demo-cursor { animation: agentnote-demo-share-cursor 5.6s both; }
-[data-step="发送地址"] .agentnote-demo-reply,
-[data-step="写回笔记"] .agentnote-demo-reply,
-[data-step="写回笔记"] .agentnote-demo-created { animation: agentnote-demo-late 5.6s both; }
-[data-step="发送地址"] .agentnote-demo-cursor,
-[data-step="写回笔记"] .agentnote-demo-cursor { animation: agentnote-demo-send-cursor 5.6s both; }
+[data-step="share"] .agentnote-demo-target { animation: agentnote-demo-highlight 5.6s both; }
+[data-step="connect"] .agentnote-demo-cursor { animation: agentnote-demo-connect-cursor 5.6s both; }
+[data-step="connect"] .agentnote-demo-toast { animation: agentnote-demo-appear 5.6s both; }
+[data-step="connect"] .agentnote-demo-before,
+[data-step="connect"] .agentnote-demo-agent-card b { animation: agentnote-demo-fade-out 5.6s both; }
+[data-step="connect"] .agentnote-demo-after,
+[data-step="connect"] .agentnote-demo-reply { animation: agentnote-demo-late 5.6s both; }
+[data-step="share"] .agentnote-demo-menu { animation: agentnote-demo-appear 5.6s both; }
+[data-step="share"] .agentnote-demo-toast { animation: agentnote-demo-late 5.6s both; }
+[data-step="share"] .agentnote-demo-cursor { animation: agentnote-demo-share-cursor 5.6s both; }
+[data-step="send"] .agentnote-demo-reply,
+[data-step="write"] .agentnote-demo-reply,
+[data-step="write"] .agentnote-demo-created { animation: agentnote-demo-late 5.6s both; }
+[data-step="send"] .agentnote-demo-cursor,
+[data-step="write"] .agentnote-demo-cursor { animation: agentnote-demo-send-cursor 5.6s both; }
 
 @keyframes agentnote-demo-highlight { 0%, 12% { background: transparent; } 22%, 100% { background: color-mix(in srgb, var(--interactive-accent) 12%, transparent); } }
 @keyframes agentnote-demo-appear { 0%, 24% { opacity: 0; transform: translateY(-5px); } 32%, 100% { opacity: 1; transform: translateY(0); } }
@@ -970,7 +970,7 @@ button.agentnote-pet,
 
 .agentnote-share-contribution-chart {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   gap: 8px;
   margin-top: 16px;
 }
@@ -1306,7 +1306,7 @@ button.agentnote-pet,
 
 .agentnote-contribution-chart {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 8px;
   overflow-x: auto;
   padding: 2px 24px 8px 0;
@@ -1655,7 +1655,7 @@ span.agentnote-agent-icon svg {
 .agentnote-agent-actions button {
   min-width: 0;
   white-space: nowrap;
-  padding-inline: 10px;
+  padding-inline: 8px;
 }
 
 .agentnote-agent-actions button.agentnote-connected-button {

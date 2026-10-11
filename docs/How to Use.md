@@ -30,11 +30,11 @@ If it is not running, select **Start service**. The service stays on your comput
 
 ### 2. Connect one agent
 
-In the connection panel, find Claude Code, Codex, or WorkBuddy and select **接入**. Send the copied task to the agent. It downloads the local Skill, sets up its identity, and reports the installed path.
+In the connection panel, find Claude Code, Codex, or WorkBuddy and select **Connect**. Send the copied task to the agent. It downloads the local Skill, sets up its identity, and reports the installed path.
 
-All three presets remain visible. After the agent reports its installation, the card shows a green **已接入** button. Open it to preview the full Skill and add instructions for that agent.
+All three presets remain visible. After the agent reports its installation, the card shows a green **Connected** button. Open it to preview the full Skill and add instructions for that agent.
 
-For another agent, choose **接入其他 Agent**. It uses the same installation task. The agent only needs a simple check that the Skill loads in a new session.
+For another agent, choose **Connect another agent**. It uses the same installation task. The agent only needs a simple check that the Skill loads in a new session.
 
 
 ### 3. Share one file, folder, or text selection
@@ -97,7 +97,7 @@ Once the first workflow works, use agentNote for these repeatable jobs:
 | --- | --- |
 | The agent cannot open a link | Keep Obsidian open and confirm the local service is running. |
 | The agent does not know how to write notes | Connect or update the agent, then restart it once. |
-| The agent is not listed | Select **接入其他 Agent**. |
+| The agent is not listed | Select **Connect another agent**. |
 | You shared too much context | Share a text selection instead of the full file or folder. |
 | You want to keep a note out of cleanup suggestions | Select **Protect from archiving**. This never changes the note or its share link. |
 
