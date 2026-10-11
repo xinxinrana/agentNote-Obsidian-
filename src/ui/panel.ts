@@ -1,6 +1,7 @@
 import { language, locale, t } from "../i18n";
 import { App, ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { existsSync } from "fs";
+import * as path from "path";
 import type AgentNotePlugin from "../main";
 import type { LiveAgentActivity } from "../main";
 import { KNOWN_AGENTS, renderManualInstallPrompt } from "../core/skill";
@@ -13,6 +14,7 @@ import { CompanionPet } from "./pet";
 import { renderWorkflowDemo } from "./workflowDemo";
 import { toBlob } from "html-to-image";
 import { ACTIVITY_WEIGHTS, type DashboardInsights, type DocumentContribution, type InsightEvent, type InsightNote } from "../core/store";
+import type { DataIssue } from "../core/dataRepair";
 
 export const AGENTNOTE_VIEW = "agentnote-view";
 type ActivityLinkTarget = Pick<InsightEvent, "nodeId" | "documentId" | "shareId" | "path"> & Partial<Pick<InsightEvent, "type" | "targetKind">>;
@@ -49,15 +51,54 @@ export class AgentNoteView extends ItemView {
 
   async refresh(): Promise<void> {
     const version = ++this.refreshVersion;
-    const insights = await this.plugin.store.getDashboardInsights();
-    if (version !== this.refreshVersion) return;
+    this.pet?.dispose(); this.pet = null;
+    this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null;
     this.contentEl.empty(); this.contentEl.addClass("agentnote-panel");
-    this.renderDashboard(insights);
+    this.contentEl.createEl("h3", { text: "agentNote" });
+    const dashboard = this.contentEl.createDiv();
+    dashboard.createEl("p", { text: t("正在加载看板…"), attr: { role: "status" } });
     if (this.plugin.settings.showQuickStart) this.renderQuickStart();
     this.renderServer();
-    const connections = await this.plugin.connectedAgents();
-    if (version !== this.refreshVersion) return;
-    this.renderAgents(connections);
+    const agentSection = this.contentEl.createDiv();
+    this.renderAgents([], agentSection, t("正在读取接入状态…"));
+    // These sections are independent: a damaged statistics file must not hide
+    // service controls or prevent installing and managing local Agents.
+    await Promise.all([
+      (async () => {
+        try {
+          const insights = await this.plugin.store.getDashboardInsights();
+          if (version !== this.refreshVersion) return;
+          dashboard.empty();
+          this.renderDashboard(insights, dashboard);
+        } catch (error) {
+          if (version !== this.refreshVersion) return;
+          dashboard.empty();
+          this.renderLoadError(dashboard, t("看板暂时无法加载"), error, true);
+        }
+      })(),
+      (async () => {
+        try {
+          const connections = await this.plugin.connectedAgents();
+          if (version !== this.refreshVersion) return;
+          agentSection.empty();
+          this.renderAgents(connections, agentSection);
+        } catch (error) {
+          if (version !== this.refreshVersion) return;
+          agentSection.empty();
+          this.renderLoadError(agentSection.createDiv(), t("Agent 接入记录暂时无法加载"), error);
+          this.renderAgents([], agentSection, t("接入状态暂时不可用"));
+        }
+      })(),
+    ]);
+  }
+  private renderLoadError(parent: HTMLElement, title: string, error: unknown, canCheck = false): void {
+    parent.addClass("agentnote-section");
+    parent.setAttribute("role", "alert");
+    parent.createEl("h4", { text: title });
+    parent.createEl("p", { text: error instanceof Error ? error.message : String(error) });
+    parent.createEl("p", { text: t("原数据已保留。请修复提示中的文件后重试。") });
+    if (canCheck) parent.createEl("button", { text: t("检查并修复"), cls: "mod-cta" }).onclick = () => new DataRepairModal(this.app, this.plugin, () => this.refresh()).open();
+    parent.createEl("button", { text: t("重新加载") }).onclick = () => void this.refresh();
   }
   private renderQuickStart(): void {
     const guide = this.contentEl.createDiv({ cls: "agentnote-quick-start" });
@@ -156,12 +197,12 @@ export class AgentNoteView extends ItemView {
     window.setTimeout(() => { if (time.isConnected) time.setText(this.timeText(activity.at)); }, 3_500);
   }
   celebrateNewDocument(): void { this.pet?.celebrate(); }
-  private renderDashboard(insights: DashboardInsights): void {
+  private renderDashboard(insights: DashboardInsights, parent = this.contentEl): void {
     this.recentActivityContainer = null;
     this.recentActivityList = null;
     this.recentActivityEmpty = null;
     this.pendingAgentActivity = null;
-    const dashboard = this.contentEl.createDiv({ cls: "agentnote-dashboard" });
+    const dashboard = parent.createDiv({ cls: "agentnote-dashboard" });
     const overview = dashboard.createDiv({ cls: "agentnote-dashboard-hero" });
     const heroHeading = overview.createDiv({ cls: "agentnote-hero-heading" });
     const heroCopy = heroHeading.createDiv();
@@ -206,8 +247,8 @@ export class AgentNoteView extends ItemView {
     const button = section.createEl("button", { text: running ? t("停止服务") : t("启动服务"), cls: running ? "mod-warning" : "mod-cta" });
     button.onclick = () => void (this.plugin.server ? this.plugin.stopServer() : this.plugin.startServer());
   }
-  private renderAgents(connections: AgentConnection[]): void {
-    const section = this.contentEl.createDiv({ cls: "agentnote-section" });
+  private renderAgents(connections: AgentConnection[], parent = this.contentEl, unavailable?: string): void {
+    const section = parent.createDiv({ cls: "agentnote-section" });
     section.createEl("h4", { text: t("接入 agent") });
     section.createEl("p", { text: t("把安装任务发给 agent；它安装后会回报本机 Skill 位置，随后可在这里编辑。") });
     const manual = section.createEl("button", { text: t("接入其他 Agent") });
@@ -227,7 +268,7 @@ export class AgentNoteView extends ItemView {
       const identity = header.createDiv();
       identity.createEl("strong", { text: agent.name });
       const available = !!agent.connection && existsSync(agent.connection.skillPath);
-      if (!available) identity.createEl("div", { cls: "agentnote-agent-status", text: agent.connection ? t("本机文件不可用") : t("未接入") });
+      if (!available) identity.createEl("div", { cls: "agentnote-agent-status", text: unavailable ?? (agent.connection ? t("本机文件不可用") : t("未接入")) });
       if (agent.connection) {
         const location = card.createDiv({ cls: "agentnote-agent-path" });
         location.createEl("span", { text: t("Skill 位置") });
@@ -844,5 +885,68 @@ export class FeedbackModal extends Modal {
       if (target === "site") new Notice(t("反馈站已打开，请粘贴反馈内容；首次启动时可稍等片刻。"), 6000);
       this.close();
     } catch (error) { new Notice(t("无法打开系统浏览器：{0}", (error as Error).message)); }
+  }
+}
+
+export class DataRepairModal extends Modal {
+  private version = 0;
+  constructor(app: App, private plugin: AgentNotePlugin, private reload: () => Promise<void>) { super(app); }
+  onOpen(): void { void this.check(); }
+  onClose(): void { this.version++; }
+  private async check(): Promise<void> {
+    const version = ++this.version;
+    this.contentEl.empty();
+    this.contentEl.createEl("h2", { text: t("检查并修复") });
+    this.contentEl.createEl("p", { text: t("正在检查数据…") });
+    try {
+      const issues = await this.plugin.store.inspectData();
+      if (version !== this.version) return;
+      this.render(issues);
+    } catch (error) {
+      if (version !== this.version) return;
+      this.contentEl.createEl("p", { text: (error as Error).message });
+      this.contentEl.createEl("button", { text: t("重新加载") }).onclick = () => void this.check();
+    }
+  }
+  private render(issues: DataIssue[]): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("h2", { text: t("检查并修复") });
+    if (!issues.length) {
+      this.contentEl.createEl("p", { text: t("未发现数据文件异常，可以重新加载接入台。") });
+      this.contentEl.createEl("button", { text: t("重新加载") }).onclick = async () => { await this.reload(); this.close(); };
+      return;
+    }
+    this.contentEl.createEl("p", { text: t("可修复的问题会先保存原文件备份，再补齐缺失文件或合并明确的数据冲突。不会清空损坏的数据。") });
+    const labels = { missing: t("文件缺失"), conflict: t("Git 冲突"), invalid: t("数据格式损坏"), unreadable: t("文件无法读取") };
+    for (const issue of issues) {
+      const row = this.contentEl.createDiv({ cls: "agentnote-section" });
+      row.createEl("strong", { text: issue.file, cls: "agentnote-repair-file" });
+      row.createEl("p", { text: `${labels[issue.kind]} · ${issue.canRepair ? t("可自动修复") : t("需要手动处理")}` });
+      const open = row.createEl("button", { text: t("打开问题文件") });
+      open.disabled = issue.kind === "missing";
+      open.onclick = async () => {
+        try {
+          const { shell } = require("electron") as typeof import("electron");
+          const error = await shell.openPath(path.join(this.plugin.store.root, issue.file));
+          if (error) throw new Error(error);
+        } catch (error) { new Notice(t("打开问题文件失败：{0}", (error as Error).message)); }
+      };
+    }
+    if (issues.some(issue => issue.canRepair)) {
+      const button = this.contentEl.createEl("button", { text: t("修复可恢复的数据"), cls: "mod-cta" });
+      button.onclick = async () => {
+        const version = this.version;
+        button.disabled = true;
+        try {
+          const result = await this.plugin.store.repairData();
+          await this.reload();
+          if (version !== this.version) return;
+          this.render(result.remaining);
+          this.contentEl.createEl("p", { text: t("已修复 {0} 个文件，保存 {1} 份备份。", result.repaired.length, result.backups.length) });
+          for (const backup of result.backups) this.contentEl.createEl("p", { text: backup });
+        } catch (error) { new Notice(t("数据修复失败：{0}", (error as Error).message), 10000); button.disabled = false; }
+      };
+    }
+    this.contentEl.createEl("button", { text: t("重新检查") }).onclick = async () => { await this.reload(); await this.check(); };
   }
 }

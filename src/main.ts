@@ -44,11 +44,16 @@ export default class AgentNotePlugin extends Plugin {
 
   async onload(): Promise<void> {
     setLanguage(typeof getLanguage === "function" ? getLanguage() : null);
-    await this.loadSettings();
+    try { await this.loadSettings(); }
+    catch (error) {
+      this.settings = { ...DEFAULT_SETTINGS, agents: {} };
+      new Notice(t("插件设置无法读取，已使用默认设置。原文件已保留：{0}", (error as Error).message), 10000);
+    }
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) { new Notice(t("agentNote 需要桌面端文件系统 vault。")); return; }
     this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
-    await this.store.init();
+    try { await this.store.init(); }
+    catch (error) { new Notice(t("数据初始化失败，仍可打开接入台检查：{0}", (error as Error).message), 10000); }
     this.connections = new AgentConnections(localConnectionsFile(os.homedir(), adapter.getBasePath()));
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));

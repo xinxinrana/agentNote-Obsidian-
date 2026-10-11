@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import esbuild from 'esbuild';
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentnote-panel-recovery-'));
+const stub = `
+class Element {
+  constructor(text = '') { this.text = text; this.children = []; }
+  get textContent() { return this.text + this.children.map(child => child.textContent).join(' '); }
+  createEl(tag, options = {}) { const child = new Element(options.text || ''); child.tag = tag; this.children.push(child); return child; }
+  createDiv(options) { return this.createEl('div', options); }
+  createSpan(options) { return this.createEl('span', options); }
+  empty() { this.text = ''; this.children = []; }
+  addClass() {}
+  setAttribute() {}
+}
+export class ItemView { constructor(leaf) { this.app = leaf.app; this.contentEl = new Element(); } }
+export class Modal { constructor(app) { this.app = app; this.contentEl = new Element(); } close() { this.onClose?.(); } }
+export class Setting {}
+export class Notice {}
+export class App {}
+export class TFile {}
+export class WorkspaceLeaf {}
+export function setIcon() {}
+`;
+try {
+  await esbuild.build({
+    stdin: { contents: 'export { AgentNoteView, DataRepairModal } from "./src/ui/panel"; export { VaultStore } from "./src/core/store"; export { setLanguage } from "./src/i18n";', resolveDir: process.cwd(), loader: 'ts' },
+    bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(dir, 'ui.cjs'),
+    loader: { '.png': 'dataurl', '.svg': 'dataurl' },
+    plugins: [{ name: 'test-host', setup(build) {
+      build.onResolve({ filter: /^obsidian$/ }, () => ({ path: 'obsidian', namespace: 'test' }));
+      build.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: stub, loader: 'js' }));
+    } }],
+  });
+  const { AgentNoteView, DataRepairModal, VaultStore, setLanguage } = createRequire(import.meta.url)(path.join(dir, 'ui.cjs'));
+  setLanguage('zh');
+  const vault = path.join(dir, 'vault');
+  const store = new VaultStore(vault, '.obsidian', { deviceIdFile: path.join(dir, 'device-id') });
+  const realInsights = store.getDashboardInsights.bind(store);
+  await store.init();
+  const file = path.join(vault, 'agentNote/data/documents.json');
+  const damaged = process.env.AGENTNOTE_DAMAGED_DOCUMENTS
+    ? await fs.readFile(process.env.AGENTNOTE_DAMAGED_DOCUMENTS, 'utf8')
+    : '<<<<<<< HEAD\n[]\n=======\n[]\n>>>>>>> origin/main\n';
+  await fs.writeFile(file, damaged);
+  const plugin = { store, server: { port: 27182 }, settings: { port: 27182, showQuickStart: true }, connectedAgents: async () => [] };
+  const view = new AgentNoteView({ app: {} }, plugin);
+  // The actual dashboard renderer involves animation; this test checks its loading boundary.
+  view.renderDashboard = (_insights, parent) => parent.createEl('h4', { text: 'Loaded dashboard' });
+  await view.onOpen();
+  assert.match(view.contentEl.textContent, /看板暂时无法加载/);
+  assert.match(view.contentEl.textContent, /documents.json/);
+  assert.match(view.contentEl.textContent, /服务正在运行/);
+  assert.match(view.contentEl.textContent, /Claude Code/);
+  assert.match(view.contentEl.textContent, /Codex/);
+  assert.equal(await fs.readFile(file, 'utf8'), damaged);
+  console.log('PASS corrupt documents show an error, preserve bytes, and keep service/Agent controls');
+  await fs.writeFile(file, '[]');
+  await view.refresh();
+  assert.match(view.contentEl.textContent, /Loaded dashboard/);
+  assert.doesNotMatch(view.contentEl.textContent, /看板暂时无法加载/);
+  console.log('PASS repairing data and reloading restores dashboard');
+  plugin.connectedAgents = async () => { throw new Error('connections.json damaged'); };
+  await view.refresh();
+  assert.match(view.contentEl.textContent, /Agent 接入记录暂时无法加载/);
+  assert.match(view.contentEl.textContent, /Codex/);
+  assert.match(view.contentEl.textContent, /接入状态暂时不可用/);
+  assert.match(view.contentEl.textContent, /Loaded dashboard/);
+  assert.match(view.contentEl.textContent, /服务正在运行/);
+  console.log('PASS connection errors do not hide dashboard or service controls');
+  let release;
+  store.getDashboardInsights = () => new Promise(resolve => release = resolve);
+  const pending = view.refresh();
+  assert.match(view.contentEl.textContent, /正在加载看板/);
+  assert.match(view.contentEl.textContent, /服务正在运行/);
+  await view.onClose();
+  release({}); await pending;
+  assert.equal(view.contentEl.textContent, '');
+  console.log('PASS loading shows service immediately; closed views ignore late results');
+  store.getDashboardInsights = realInsights;
+  plugin.connectedAgents = async () => [];
+  await fs.writeFile(file, damaged);
+  const modal = new DataRepairModal({}, plugin, () => view.refresh());
+  await modal.check();
+  assert.match(modal.contentEl.textContent, /可自动修复/);
+  const find = (el, label) => el.tag === 'button' && el.text === label ? el : el.children.map(child => find(child, label)).find(Boolean);
+  await find(modal.contentEl, '修复可恢复的数据').onclick();
+  assert.match(view.contentEl.textContent, /Loaded dashboard/);
+  assert.match(modal.contentEl.textContent, /已修复 1 个文件，保存 1 份备份/);
+  assert.doesNotMatch(await fs.readFile(file, 'utf8'), /^<<<<<<< /m);
+  console.log('PASS repair modal click backs up data and restores the panel without a restart');
+} finally { await fs.rm(dir, { recursive: true, force: true }); }

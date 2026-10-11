@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import { isNodeFile, parseNode, serializeNode } from "./nodeFile";
 import { AgentNode, NodeSource, NodeType, Share, ShareTarget, normalizeTags, qualityWarnings, shareTarget } from "./types";
 import { ActivityLog, ActivityLogOptions } from "./activityLog";
+import { inspectData, repairData, validDocuments, type DataRepairResult } from "./dataRepair";
 
 export class StoreError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -188,6 +189,14 @@ export class VaultStore {
   async backupPastDays(now = new Date()): Promise<{ created: number; existing: number }> {
     return this.activityLog.backupPastDays(now);
   }
+  inspectData() { return inspectData(this.p("data")); }
+  repairData(): Promise<DataRepairResult> {
+    const pendingReferences = this.referenceWriteQueue;
+    const task = this.documentWriteQueue.then(() => pendingReferences).then(() => repairData(this.p("data")));
+    this.documentWriteQueue = task.then(() => undefined, () => undefined);
+    this.referenceWriteQueue = this.documentWriteQueue;
+    return task;
+  }
 
   private normalizeVaultPath(filePath: string): string {
     const absolute = path.resolve(this.root, filePath);
@@ -209,7 +218,7 @@ export class VaultStore {
     throw new StoreError(409, t("{0} 内容损坏，请检查并解决 Git 冲突后重试", name));
   }
   private async readDocuments(): Promise<VaultDocument[]> {
-    return this.readDataFile("documents.json", (value): value is VaultDocument[] => Array.isArray(value) && value.every((document) => isRecord(document) && typeof document.id === "string" && typeof document.path === "string" && typeof document.title === "string" && typeof document.created === "string" && typeof document.updated === "string" && (document.deletedAt === undefined || typeof document.deletedAt === "string") && (document.protected === undefined || typeof document.protected === "boolean")));
+    return this.readDataFile("documents.json", validDocuments);
   }
   private async writeDocuments(documents: VaultDocument[]): Promise<void> {
     await fsp.writeFile(this.p("data", "documents.json"), JSON.stringify(documents, null, 2), "utf8");

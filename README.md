@@ -101,6 +101,12 @@ Finish Git synchronization, resolve conflicts in the reported file, and save it.
 
 New links are stored in `agentNote/data/shares/`, so a damaged legacy `shares.json` does not block new links. Historical links stored only in that legacy file still require it to be repaired. Keep the entire `shares/` directory and any existing `shares.json` when syncing. Do not delete original records to dismiss an error. If you need help, back up the file and submit feedback with the error message.
 
+### What if the connection panel reports a data problem?
+
+Service controls and Agent setup remain available, with the affected file shown in the error section. Choose **Check and repair** to restore missing document or reference indexes, or repair document-index Git conflicts with an unambiguous result. Existing files are backed up in `agentNote/data/repair-backups/` before repair.
+
+Conflicting paths, deletion states, and other ambiguous changes are preserved for manual attention. Choose **Open affected file** to open it in your default application, then **Check again**. Successful repairs reload the dashboard without restarting the plugin.
+
 ### Why can't my agent connect on macOS when Obsidian is still in the Dock?
 
 agentNote's local service depends on the open vault window. Clicking the red close button or pressing `⌘W` can stop the service. The dot below Obsidian in the Dock only means the application has not quit.

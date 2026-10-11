@@ -1694,3 +1694,7 @@ span.agentnote-agent-icon svg {
 .agentnote-additional-input {
   min-height: 112px;
 }
+
+.agentnote-repair-file {
+  overflow-wrap: anywhere;
+}
