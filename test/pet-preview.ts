@@ -1,5 +1,9 @@
 import { CompanionPet } from "../src/ui/pet";
 
+// The standalone preview supplies the DOM helpers provided by Obsidian.
+globalThis.createEl = (tag) => document.createElement(tag);
+globalThis.createSpan = () => document.createElement("span");
+
 const pets = [...document.querySelectorAll<HTMLElement>("[data-pet-mount]")].map((mount) => {
   const pet = new CompanionPet();
   pet.mount(mount);

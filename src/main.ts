@@ -43,7 +43,7 @@ export default class AgentNotePlugin extends Plugin {
   private suppressedLocalRenames = new Set<string>();
 
   async onload(): Promise<void> {
-    setLanguage(typeof getLanguage === "function" ? getLanguage() : null);
+    setLanguage(getLanguage());
     try { await this.loadSettings(); }
     catch (error) {
       this.settings = { ...DEFAULT_SETTINGS, agents: {} };

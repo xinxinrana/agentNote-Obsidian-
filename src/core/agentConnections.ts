@@ -7,6 +7,13 @@ import { parse } from "yaml";
 
 export interface AgentConnection { name: string; skillPath: string; connectedAt: string }
 
+function isAgentConnection(value: unknown): value is AgentConnection {
+  return !!value && typeof value === "object"
+    && "name" in value && typeof value.name === "string"
+    && "skillPath" in value && typeof value.skillPath === "string"
+    && "connectedAt" in value && typeof value.connectedAt === "string";
+}
+
 const ADDITION_HEADER = /\n\n<!-- agentNote:additional -->\n## (?:附加要求|Additional instructions)\n\n/g;
 
 export function splitSkillInstructions(content: string): { base: string; additional: string } {
@@ -51,8 +58,8 @@ export class AgentConnections {
     try { raw = await fs.readFile(this.file, "utf8"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
     const value: unknown = JSON.parse(raw);
-    if (!Array.isArray(value) || !value.every((item) => item && typeof item === "object" && typeof item.name === "string" && typeof item.skillPath === "string" && typeof item.connectedAt === "string")) throw new Error(t("本机 Agent 接入记录格式无效"));
-    return value as AgentConnection[];
+    if (!Array.isArray(value) || !value.every(isAgentConnection)) throw new Error(t("本机 Agent 接入记录格式无效"));
+    return value;
   }
 
   private async save(connections: AgentConnection[]): Promise<void> {

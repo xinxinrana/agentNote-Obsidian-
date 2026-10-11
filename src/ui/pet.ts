@@ -29,13 +29,13 @@ export class CompanionPet {
   private lastCelebrate = 0;
 
   constructor() {
-    this.element = document.createElement("button");
+    this.element = createEl("button");
     this.element.type = "button";
     this.element.className = "agentnote-pet";
     this.element.setAttribute("aria-label", t("和小记互动"));
     this.element.title = t("点一下小记");
     this.element.dataset.state = "idle";
-    this.traveler = document.createElement("span");
+    this.traveler = createSpan();
     this.traveler.className = "agentnote-pet-traveler";
     this.traveler.style.transform = `translateX(${this.position}px)`;
     this.traveler.append(petArtwork());

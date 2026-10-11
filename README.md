@@ -46,7 +46,7 @@ Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete
 
 ### From the Obsidian Community Plugins directory
 
-1. Open **Settings → Community plugins** in Obsidian.
+1. Use Obsidian **1.8.7 or later** and open **Settings → Community plugins**.
 2. Search for `agentNote`.
 3. Install and enable the plugin.
 4. Open the **agentNote connection panel** and confirm that the local service is running.
@@ -91,7 +91,7 @@ Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always ap
 - There is no account, cloud sync, telemetry service, or public sharing layer.
 - The plugin uses local filesystem access and the system clipboard for its sharing and agent integration features.
 - This is a desktop-only plugin because it uses Node.js, Electron, and a local HTTP server.
-- The interface and new installation tasks follow Obsidian's language setting: Chinese for Chinese locales, English for other languages. Change Obsidian's language in its settings and restart it. Your notes and existing custom Skills keep their original content. Obsidian versions without the language API use Chinese.
+- The interface and new installation tasks follow Obsidian's language setting: Chinese for Chinese locales, English for other languages. Change Obsidian's language in its settings and restart it. Your notes and existing custom Skills keep their original content.
 
 ## FAQ
 

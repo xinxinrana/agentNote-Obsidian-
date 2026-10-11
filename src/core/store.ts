@@ -165,7 +165,7 @@ export class VaultStore {
   private suppressedLocalPaths = new Map<string, number>();
   private reportedShareErrors = new Set<string>();
 
-  constructor(vaultRoot: string, configDir = ".obsidian", activityOptions: ActivityLogOptions = {}) {
+  constructor(vaultRoot: string, configDir: string, activityOptions: ActivityLogOptions = {}) {
     this.root = path.resolve(vaultRoot);
     this.dataDir = path.join(this.root, "agentNote");
     this.configDir = this.normalizeVaultPath(configDir);

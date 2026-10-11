@@ -1,6 +1,6 @@
 # Localization
 
-agentNote follows Obsidian's language through the official `getLanguage()` API. Chinese locales use Chinese; other locales use English. When the API is unavailable, the plugin defaults to Chinese. Language is initialized when the plugin loads, so changing Obsidian's language and restarting the app switches the interface.
+agentNote follows Obsidian's language through the official `getLanguage()` API. Chinese locales use Chinese; other locales use English. The plugin requires Obsidian 1.8.7 or later, where this API is available. Language is initialized when the plugin loads, so changing Obsidian's language and restarting the app switches the interface.
 
 ## Interface text
 
