@@ -863,7 +863,7 @@ export class VaultStore {
       weeklyDocuments: buildDocumentContributions(weekStart),
       monthly: buildRanking(monthStart, "month"),
       allTime: buildRanking(startedAt, "all"),
-      activities: activityEvents.filter((event) => inRange(event.at, weekStart)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
+      activities: [...activityEvents].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
       timeline: activityEvents.filter((event) => event.type !== "local-deleted" || new Date(event.at) >= deletionVisibleAfter).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
       weeklyTrend: trend(weekStart, 7, (date) => [t("日"), t("一"), t("二"), t("三"), t("四"), t("五"), t("六")][date.getDay()]),
       monthlyTrend: trend(monthStart, monthDays, (date) => String(date.getDate())),

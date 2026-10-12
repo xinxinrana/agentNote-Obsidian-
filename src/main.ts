@@ -181,9 +181,6 @@ export default class AgentNotePlugin extends Plugin {
         try {
           const updated = await this.store.recordLocalActivity(item.type, item.path, item.oldPath, record);
           if (record && updated && !unloading && item.type === "local-created") {
-            for (const leaf of this.app.workspace.getLeavesOfType(AGENTNOTE_VIEW)) {
-              if (leaf.view instanceof AgentNoteView) leaf.view.celebrateNewDocument();
-            }
             this.schedulePanelRefresh(1_450);
           } else if (updated && !unloading) {
             this.schedulePanelRefresh();
@@ -327,8 +324,17 @@ export default class AgentNotePlugin extends Plugin {
   }
   private async shareCurrentFile(): Promise<void> { const file = this.app.workspace.getActiveFile(); if (file) await this.sharePath(file.path); }
   private async sharePath(relPath: string, selection?: string): Promise<void> {
-    try { const share = await this.store.createPathShare(relPath, undefined, selection); await this.copyShareLink(share.id, path.basename(relPath)); }
-    catch (error) { new Notice(t("分享失败：{0}", (error as Error).message)); }
+    await this.shareFileFromPanel(relPath, selection);
+  }
+  async shareFileFromPanel(relPath: string, selection?: string): Promise<boolean> {
+    try {
+      const share = await this.store.createPathShare(relPath, undefined, selection);
+      await this.copyShareLink(share.id, path.basename(relPath));
+      return true;
+    } catch (error) {
+      new Notice(t("分享失败：{0}", (error as Error).message));
+      return false;
+    }
   }
   private async sharePaths(files: TAbstractFile[]): Promise<void> {
     const links: { id: string; title: string }[] = [];

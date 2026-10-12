@@ -1,5 +1,5 @@
 import { language, locale, t } from "../i18n";
-import { App, ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { App, ItemView, Menu, Modal, Notice, Setting, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { existsSync } from "fs";
 import * as path from "path";
 import type AgentNotePlugin from "../main";
@@ -9,8 +9,8 @@ import { agentNameKey, splitSkillInstructions, withSkillInstructions, type Agent
 import claudeCodeIcon from "../assets/agents/claude-code.png";
 import codexIcon from "../assets/agents/codex.png";
 import workbuddyIcon from "../assets/agents/workbuddy.png";
+import xiaojiMark from "../../assets/brand/xiaoji-mark.svg";
 import xiaojiWave from "../../assets/brand/xiaoji-wave.svg";
-import { CompanionPet } from "./pet";
 import { renderWorkflowDemo } from "./workflowDemo";
 import { toBlob } from "html-to-image";
 import { ACTIVITY_WEIGHTS, type DashboardInsights, type DocumentContribution, type InsightEvent, type InsightNote } from "../core/store";
@@ -37,30 +37,40 @@ function contributionShade(count: number, min: number, max: number): Record<stri
 
 export class AgentNoteView extends ItemView {
   private refreshVersion = 0;
-  private pet: CompanionPet | null = null;
+  private currentFileCard: HTMLElement | null = null;
   private recentActivityContainer: HTMLElement | null = null;
   private recentActivityList: HTMLElement | null = null;
   private recentActivityEmpty: HTMLElement | null = null;
+  private recentActivityToggle: HTMLButtonElement | null = null;
+  private recentActivityExpanded = false;
   private pendingAgentActivity: { surface: HTMLElement; copy: HTMLElement; time: HTMLElement; agentName: string; title: string; targetKey: string; operations: LiveAgentActivity["operation"][]; receivedAt: number } | null = null;
   constructor(leaf: WorkspaceLeaf, private plugin: AgentNotePlugin) { super(leaf); }
   getViewType(): string { return AGENTNOTE_VIEW; }
   getDisplayText(): string { return t("agentNote 接入台"); }
   getIcon(): string { return "bot"; }
-  async onOpen(): Promise<void> { await this.refresh(); }
-  async onClose(): Promise<void> { this.refreshVersion++; this.pet?.dispose(); this.pet = null; this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null; this.pendingAgentActivity = null; this.contentEl.empty(); }
+  async onOpen(): Promise<void> {
+    this.registerEvent(this.app.workspace.on("file-open", () => this.renderCurrentFile()));
+    await this.refresh();
+  }
+  async onClose(): Promise<void> { this.refreshVersion++; this.currentFileCard = null; this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null; this.recentActivityToggle = null; this.pendingAgentActivity = null; this.contentEl.empty(); }
 
   async refresh(): Promise<void> {
     const version = ++this.refreshVersion;
-    this.pet?.dispose(); this.pet = null;
-    this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null;
+    this.recentActivityContainer = null; this.recentActivityList = null; this.recentActivityEmpty = null; this.recentActivityToggle = null;
     this.contentEl.empty(); this.contentEl.addClass("agentnote-panel");
-    this.contentEl.createEl("h3", { text: "agentNote" });
+    const heading = this.contentEl.createDiv({ cls: "agentnote-panel-heading" });
+    const brand = heading.createDiv({ cls: "agentnote-panel-brand" });
+    brand.createEl("img", { cls: "agentnote-panel-mark", attr: { src: xiaojiMark, alt: "" } });
+    brand.createEl("h3", { text: "agentNote" });
+    this.currentFileCard = this.contentEl.createDiv({ cls: "agentnote-current-file" });
+    this.renderCurrentFile();
     const dashboard = this.contentEl.createDiv();
     dashboard.createEl("p", { text: t("正在加载看板…"), attr: { role: "status" } });
     if (this.plugin.settings.showQuickStart) this.renderQuickStart();
-    this.renderServer();
+    const activitySection = this.contentEl.createDiv();
     const agentSection = this.contentEl.createDiv();
     this.renderAgents([], agentSection, t("正在读取接入状态…"));
+    this.renderServer();
     // These sections are independent: a damaged statistics file must not hide
     // service controls or prevent installing and managing local Agents.
     await Promise.all([
@@ -69,10 +79,10 @@ export class AgentNoteView extends ItemView {
           const insights = await this.plugin.store.getDashboardInsights();
           if (version !== this.refreshVersion) return;
           dashboard.empty();
-          this.renderDashboard(insights, dashboard);
+          this.renderDashboard(insights, dashboard, activitySection);
         } catch (error) {
           if (version !== this.refreshVersion) return;
-          dashboard.empty();
+          dashboard.empty(); activitySection.empty();
           this.renderLoadError(dashboard, t("看板暂时无法加载"), error, true);
         }
       })(),
@@ -90,6 +100,33 @@ export class AgentNoteView extends ItemView {
         }
       })(),
     ]);
+  }
+  private renderCurrentFile(): void {
+    const card = this.currentFileCard;
+    if (!card) return;
+    card.empty();
+    const file = this.app.workspace.getActiveFile();
+    const label = card.createDiv({ cls: "agentnote-current-label" });
+    setIcon(label.createSpan(), "file-text");
+    label.createSpan({ text: t("当前笔记") });
+    card.createEl("h4", { text: file?.basename ?? t("尚未打开笔记") });
+    card.createEl("p", { text: file ? t("把这份资料分享给 agent，随后可以在最近动态中查看协作。") : t("打开一篇笔记后，就可以从这里直接分享。") });
+    if (!file) return;
+    const button = card.createEl("button", { cls: "mod-cta agentnote-current-share", text: t("分享当前笔记") });
+    button.onclick = async () => {
+      button.disabled = true;
+      const shared = await this.plugin.shareFileFromPanel(file.path);
+      if (shared) {
+        button.setText(t("链接已复制 · 发给 Agent 即可"));
+        button.addClass("is-complete");
+      } else button.disabled = false;
+      window.setTimeout(() => {
+        if (!button.isConnected) return;
+        button.setText(t("分享当前笔记"));
+        button.removeClass("is-complete");
+        button.disabled = false;
+      }, 3500);
+    };
   }
   private renderLoadError(parent: HTMLElement, title: string, error: unknown, canCheck = false): void {
     parent.addClass("agentnote-section");
@@ -166,8 +203,16 @@ export class AgentNoteView extends ItemView {
       await this.app.workspace.getLeaf("tab").openFile(file);
     } catch (error) { new Notice(t("无法打开资料：{0}", (error as Error).message)); }
   }
+  private updateRecentActivityVisibility(): void {
+    const list = this.recentActivityList;
+    const toggle = this.recentActivityToggle;
+    if (!list || !toggle) return;
+    toggle.hidden = list.children.length <= 3;
+    toggle.setAttribute("aria-expanded", String(this.recentActivityExpanded));
+    toggle.setText(this.recentActivityExpanded ? t("收起") : t("展开最近 {0} 条", list.children.length));
+    for (const [index, item] of Array.from(list.children).entries()) (item as HTMLElement).hidden = !this.recentActivityExpanded && index >= 3;
+  }
   showAgentActivity(activity: LiveAgentActivity): void {
-    if (activity.operation === "created" && activity.targetKind !== "folder") this.pet?.celebrate();
     const container = this.recentActivityContainer;
     if (!container) return;
     if (this.recentActivityEmpty) { this.recentActivityEmpty.remove(); this.recentActivityEmpty = null; }
@@ -188,53 +233,66 @@ export class AgentNoteView extends ItemView {
     const item = list.createEl("li");
     const surface = this.activitySurface(item, activity, activity.title);
     surface.addClass("is-new");
+    setIcon(surface.createSpan({ cls: "agentnote-activity-icon" }), activity.operation === "read" ? "sparkles" : "file-text");
     const copy = surface.createSpan({ text: this.liveActivityText(activity.agentName, activity.title, [activity.operation]) });
     const time = surface.createEl("time", { text: t("刚刚") });
     list.prepend(item);
-    while (list.children.length > 3) list.lastElementChild?.remove();
+    while (list.children.length > 10) list.lastElementChild?.remove();
+    this.updateRecentActivityVisibility();
     this.pendingAgentActivity = { surface, copy, time, agentName: activity.agentName, title: activity.title, targetKey, operations: [activity.operation], receivedAt: now };
     window.setTimeout(() => surface.removeClass("is-new"), 3_000);
     window.setTimeout(() => { if (time.isConnected) time.setText(this.timeText(activity.at)); }, 3_500);
   }
-  celebrateNewDocument(): void { this.pet?.celebrate(); }
-  private renderDashboard(insights: DashboardInsights, parent = this.contentEl): void {
+  private renderDashboard(insights: DashboardInsights, parent = this.contentEl, activityParent = parent): void {
     this.recentActivityContainer = null;
     this.recentActivityList = null;
     this.recentActivityEmpty = null;
+    this.recentActivityToggle = null;
     this.pendingAgentActivity = null;
     const dashboard = parent.createDiv({ cls: "agentnote-dashboard" });
     const overview = dashboard.createDiv({ cls: "agentnote-dashboard-hero" });
     const heroHeading = overview.createDiv({ cls: "agentnote-hero-heading" });
     const heroCopy = heroHeading.createDiv();
     heroCopy.createSpan({ cls: "agentnote-eyebrow", text: t("本地知识洞察") });
-    heroCopy.createEl("h4", { text: t("知识正在持续进入工作流") });
-    if (!this.pet) this.pet = new CompanionPet();
-    this.pet.mount(heroHeading);
-    overview.createEl("p", { text: insights.summary.weekActivityCount ? t("本周完成 {0} 次知识活动：建设 {1}、维护与整理 {2}、分享 {3}、使用 {4}。", insights.summary.weekActivityCount, insights.summary.weekCreated, insights.summary.weekUpdated, insights.summary.weekSharesCreated, insights.summary.weekResolves) : t("创建、维护、使用或整理资料后，这里会留下完整的知识活动。") });
+    heroCopy.createEl("h4", { text: t("知识正在进入工作流") });
+    heroHeading.createEl("button", { cls: "agentnote-profile-link", text: t("完整档案") }).onclick = () => new InsightsModal(this.app, this.plugin).open();
+    overview.createEl("p", { text: insights.summary.weekActivityCount ? t("本周 {0} 次知识活动，{1} 次资料使用。", insights.summary.weekActivityCount, insights.summary.weekResolves) : t("创建、维护、使用或整理资料后，这里会留下完整的知识活动。") });
     const stats = overview.createDiv({ cls: "agentnote-metric-strip" });
     for (const [value, label] of [[insights.summary.weekActivityScore, t("知识活跃分")], [insights.summary.weekUpdated, t("本周更新")], [insights.summary.weekResolves, t("本周复用")]] as const) {
       const stat = stats.createDiv({ cls: "agentnote-metric" }); stat.createEl("strong", { text: String(value) }); stat.createSpan({ text: label });
     }
-    const activity = dashboard.createDiv({ cls: "agentnote-home-activity" });
+    const trend = overview.createDiv({ cls: "agentnote-panel-week" });
+    const max = Math.max(1, ...insights.weeklyTrend.map((point) => point.count));
+    for (const point of insights.weeklyTrend) {
+      const day = trend.createDiv({ cls: "agentnote-panel-week-day" });
+      const bar = day.createSpan({ cls: point.count ? "is-active" : "" });
+      if (point.count) bar.setCssProps({ "--agentnote-week-opacity": String(0.3 + point.count / max * 0.7) });
+      day.createSpan({ text: point.label });
+      day.createSpan({ cls: "agentnote-visually-hidden", text: t("{0}：{1} 知识活跃分", point.label, point.count) });
+    }
+    const activity = activityParent.createDiv({ cls: "agentnote-home-activity" });
     this.recentActivityContainer = activity;
     const heading = activity.createDiv({ cls: "agentnote-section-heading" });
     heading.createEl("h4", { text: t("最近动态") });
     const detail = heading.createEl("button", { text: t("查看完整洞察"), cls: "mod-cta" });
     detail.onclick = () => new InsightsModal(this.app, this.plugin).open();
-    if (!insights.activities.length) this.recentActivityEmpty = activity.createEl("p", { cls: "agentnote-empty-copy", text: t("创建并分享资料给 agent 后，这里会留下它进入工作流的记录。") });
-    else {
-      const list = activity.createEl("ul", { cls: "agentnote-activity-list" });
-      this.recentActivityList = list;
-      for (const event of insights.activities.slice(0, 3)) {
-        const item = list.createEl("li");
-        const row = this.activitySurface(item, event, event.title ?? t("资料"));
-        row.createSpan({ text: this.activityText(event) });
-        row.createEl("time", { text: this.timeText(event.at) });
-      }
+    const list = activity.createEl("ul", { cls: "agentnote-activity-list" });
+    this.recentActivityList = list;
+    for (const event of insights.activities.slice(0, 10)) {
+      const item = list.createEl("li");
+      const row = this.activitySurface(item, event, event.title ?? t("资料"));
+      setIcon(row.createSpan({ cls: "agentnote-activity-icon" }), event.type === "share-resolved" ? "sparkles" : "file-text");
+      row.createSpan({ text: this.activityText(event) });
+      row.createEl("time", { text: this.timeText(event.at) });
     }
+    if (!insights.activities.length) this.recentActivityEmpty = activity.createEl("p", { cls: "agentnote-empty-copy", text: t("创建并分享资料给 agent 后，这里会留下它进入工作流的记录。") });
+    const toggle = activity.createEl("button", { cls: "agentnote-activity-toggle", attr: { type: "button" } });
+    this.recentActivityToggle = toggle;
+    toggle.onclick = () => { this.recentActivityExpanded = !this.recentActivityExpanded; this.updateRecentActivityVisibility(); };
+    this.updateRecentActivityVisibility();
   }
   private renderServer(): void {
-    const section = this.contentEl.createDiv({ cls: "agentnote-section" });
+    const section = this.contentEl.createDiv({ cls: "agentnote-section agentnote-service-section" });
     section.createEl("h4", { text: t("本地服务") });
     const running = !!this.plugin.server?.port;
     const port = this.plugin.server?.port ?? this.plugin.settings.port;
@@ -248,50 +306,49 @@ export class AgentNoteView extends ItemView {
     button.onclick = () => void (this.plugin.server ? this.plugin.stopServer() : this.plugin.startServer());
   }
   private renderAgents(connections: AgentConnection[], parent = this.contentEl, unavailable?: string): void {
-    const section = parent.createDiv({ cls: "agentnote-section" });
-    section.createEl("h4", { text: t("接入 agent") });
-    section.createEl("p", { text: t("把安装任务发给 agent；它安装后会回报本机 Skill 位置，随后可在这里编辑。") });
-    const manual = section.createEl("button", { text: t("接入其他 Agent") });
-    manual.onclick = () => void this.copyInstallTask();
+    const section = parent.createDiv({ cls: "agentnote-section agentnote-agents-section" });
+    const heading = section.createDiv({ cls: "agentnote-section-heading" });
+    heading.createEl("h4", { text: t("已接入 Agent") });
+    heading.createSpan({ text: t("{0} 位", connections.filter((connection) => existsSync(connection.skillPath)).length) });
     const presetNames = new Set(KNOWN_AGENTS.map((agent) => agentNameKey(agent.name)));
     const entries = [
       ...KNOWN_AGENTS.map((agent) => ({ name: agent.name, id: agent.id, connection: connections.find((item) => agentNameKey(item.name) === agentNameKey(agent.name)) })),
       ...connections.filter((item) => !presetNames.has(agentNameKey(item.name))).map((item) => ({ name: item.name, id: "", connection: item })),
     ];
+    const list = section.createDiv({ cls: "agentnote-agent-list" });
     for (const agent of entries) {
-      const card = section.createDiv({ cls: "agentnote-agent-card" });
-      const header = card.createDiv({ cls: "agentnote-agent-header" });
+      const card = list.createDiv({ cls: "agentnote-agent-row" });
       if (agent.id) {
-        const icon = header.createEl("img", { cls: "agentnote-agent-icon", attr: { src: AGENT_ICONS[agent.id], alt: t("{0} 图标", agent.name) } });
+        const icon = card.createEl("img", { cls: "agentnote-agent-icon", attr: { src: AGENT_ICONS[agent.id], alt: t("{0} 图标", agent.name) } });
         icon.decoding = "async";
-      } else setIcon(header.createSpan({ cls: "agentnote-agent-icon" }), "bot");
-      const identity = header.createDiv();
+      } else setIcon(card.createSpan({ cls: "agentnote-agent-icon" }), "bot");
+      const identity = card.createDiv({ cls: "agentnote-agent-identity" });
       identity.createEl("strong", { text: agent.name });
       const available = !!agent.connection && existsSync(agent.connection.skillPath);
-      if (!available) identity.createDiv({ cls: "agentnote-agent-status", text: unavailable ?? (agent.connection ? t("本机文件不可用") : t("未接入")) });
-      if (agent.connection) {
-        const location = card.createDiv({ cls: "agentnote-agent-path" });
-        location.createSpan({ text: t("Skill 位置") });
-        location.createEl("code", { text: agent.connection.skillPath });
-      }
-      const actions = card.createDiv({ cls: "agentnote-node-actions agentnote-agent-actions" });
+      identity.createDiv({ cls: `agentnote-agent-status${available ? " is-connected" : ""}`, text: available ? t("已接入 · {0}", this.timeText(agent.connection!.connectedAt)) : unavailable ?? (agent.connection ? t("本机文件不可用") : t("未接入")) });
       if (!agent.connection) {
-        actions.createEl("button", { text: t("接入"), cls: "mod-cta" }).onclick = () => void this.copyInstallTask();
-      } else if (available) {
-        actions.createEl("button", { text: t("已接入"), cls: "agentnote-connected-button", attr: { "aria-label": t("已接入 {0}，打开 Skill 编辑", agent.name) } }).onclick = () => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open();
-        actions.createEl("button", { text: t("修改") }).onclick = () => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh(), true).open();
-        actions.createEl("button", { text: t("删除"), cls: "mod-warning" }).onclick = () => new RemoveAgentModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open();
+        card.createEl("button", { cls: "agentnote-agent-row-action", text: t("接入") }).onclick = () => this.copyInstallTask();
       } else {
-        actions.createEl("button", { text: t("重新接入"), cls: "mod-cta" }).onclick = () => void this.copyInstallTask();
-        actions.createEl("button", { text: t("删除"), cls: "mod-warning" }).onclick = () => new RemoveAgentModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open();
+        const more = card.createEl("button", { cls: "clickable-icon agentnote-agent-more", attr: { "aria-label": t("管理 {0}", agent.name) } });
+        setIcon(more, "ellipsis");
+        more.onclick = (event) => {
+          const menu = new Menu();
+          if (available) {
+            menu.addItem((item) => item.setTitle(t("管理提示词")).setIcon("file-text").onClick(() => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open()));
+            menu.addItem((item) => item.setTitle(t("修改")).setIcon("pencil").onClick(() => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh(), true).open()));
+          } else menu.addItem((item) => item.setTitle(t("重新接入")).setIcon("plus").onClick(() => this.copyInstallTask()));
+          menu.addSeparator();
+          menu.addItem((item) => item.setTitle(t("删除")).setIcon("trash").setWarning(true).onClick(() => new RemoveAgentModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open()));
+          menu.showAtMouseEvent(event);
+        };
       }
     }
+    const manual = section.createEl("button", { cls: "agentnote-add-agent", text: t("＋ 接入其他 Agent") });
+    manual.onclick = () => this.copyInstallTask();
     this.renderFooter(section);
   }
-  private async copyInstallTask(): Promise<void> {
-    const prompt = renderManualInstallPrompt({ port: this.plugin.server?.port ?? this.plugin.settings.port });
-    try { await navigator.clipboard.writeText(prompt); new ManualInstallModal(this.app, this.plugin).open(); new Notice(t("已复制安装任务，可直接粘贴给 Agent。")); }
-    catch (error) { new Notice(t("复制失败：{0}", (error as Error).message)); new ManualInstallModal(this.app, this.plugin).open(); }
+  private copyInstallTask(): void {
+    new ManualInstallModal(this.app, this.plugin).open();
   }
   private renderFooter(parent: HTMLElement): void {
     const footer = parent.createDiv({ cls: "agentnote-panel-footer" });
@@ -312,7 +369,7 @@ export class QuickStartModal extends Modal {
     this.contentEl.createEl("p", { text: t("完成一次接入、一次分享和一次对话，你就已经掌握 agentNote 的核心流程。") });
     this.stopDemo = renderWorkflowDemo(this.contentEl);
     const steps = this.contentEl.createEl("ol", { cls: "agentnote-guide-steps" });
-    for (const [title, description] of [[t("确认本地服务"), t("在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。")], [t("接入一个 agent"), t("点击目标 Agent 的“接入”，把复制的任务发给它。安装并上报成功后，接入台会显示“已接入”。")], [t("分享并开始工作"), t("右键文件或文件夹选择“agentNote: 分享给 agent”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。")]] as const) {
+    for (const [title, description] of [[t("确认本地服务"), t("在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。")], [t("接入一个 agent"), t("点击目标 Agent 的“接入”，查看并复制安装任务。Agent 安装并上报后，可在接入台核对状态。")], [t("分享并开始工作"), t("右键文件或文件夹选择“agentNote: 分享给 agent”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。")]] as const) {
       const item = steps.createEl("li"); item.createEl("strong", { text: title }); item.createEl("p", { text: description });
     }
     const example = this.contentEl.createDiv({ cls: "agentnote-guide-example" }); example.createEl("strong", { text: t("可直接发送给 agent") }); example.createEl("code", { text: t("请读取这个资料，整理重点、待办和风险：<粘贴 agentNote 地址>") });
@@ -327,6 +384,7 @@ type TimelineFilter = "all" | "construction" | "reuse" | "connection" | "organiz
 class InsightsModal extends Modal {
   private tab: InsightTab = "overview";
   private timelineFilter: TimelineFilter = "all";
+  private timelineDay: string | null = null;
   private bulkUndoIds: string[] | null = null;
   private localArchiveUndo: { originalPath: string; archivedPath: string } | null = null;
   private privateView = false;
@@ -334,6 +392,7 @@ class InsightsModal extends Modal {
   onOpen(): void { this.modalEl.addClass("agentnote-insights-modal"); void this.render(); }
   private timeText(iso: string): string { return new Date(iso).toLocaleString(locale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
   private dateText(iso: string): string { return new Date(iso).toLocaleDateString(locale(), { year: "numeric", month: "long", day: "numeric" }); }
+  private dayKey(date: Date): string { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
   private displayTitle(title: string): string { return this.privateView ? t("已匿名资料") : title; }
   private fileTitle(parent: HTMLElement, title: string, path: () => Promise<string | null>): void {
     if (this.privateView) { parent.createEl("strong", { text: this.displayTitle(title) }); return; }
@@ -368,19 +427,19 @@ class InsightsModal extends Modal {
     const agents = await this.plugin.store.getAgentInsights();
     this.contentEl.empty();
     const header = this.contentEl.createDiv({ cls: "agentnote-modal-header" });
-    const title = header.createDiv(); title.createSpan({ cls: "agentnote-eyebrow", text: "AGENTNOTE · LOCAL PROFILE" }); title.createEl("h2", { text: t("我的知识工作档案") });
+    const title = header.createDiv(); title.createSpan({ cls: "agentnote-eyebrow", text: "AGENTNOTE · LOCAL PROFILE" }); title.createEl("h2", { text: t("我的知识工作档案"), attr: { id: "agentnote-profile-title" } });
     title.createEl("p", { text: t("把本地资料真正投入工作流，并留下可回看的成果。") });
     const actions = header.createDiv({ cls: "agentnote-profile-actions" });
     const privacy = actions.createEl("button", { text: this.privateView ? t("退出隐私展示") : t("隐私展示") });
     privacy.onclick = () => { this.privateView = !this.privateView; void this.render(); };
     const share = actions.createEl("button", { text: t("生成分享图"), cls: "mod-cta" });
     share.onclick = () => new InsightShareModal(this.app, insights, this.privateView).open();
-    const tabs = this.contentEl.createDiv({ cls: "agentnote-insight-tabs" });
+    const tabs = this.contentEl.createDiv({ cls: "agentnote-insight-tabs", attr: { role: "tablist", "aria-labelledby": "agentnote-profile-title" } });
     for (const [tab, label] of [["overview", t("档案")], ["week", t("本周")], ["month", t("开始以来")], ["agents", "Agent"], ["timeline", t("时间线")], ["archive", t("整理")]] as const) {
-      const button = tabs.createEl("button", { text: label, cls: this.tab === tab ? "is-active" : "" });
-      button.onclick = () => { this.tab = tab; void this.render(); };
+      const button = tabs.createEl("button", { text: label, cls: this.tab === tab ? "is-active" : "", attr: { role: "tab", "aria-selected": String(this.tab === tab), "aria-controls": "agentnote-insight-panel", id: `agentnote-insight-tab-${tab}` } });
+      button.onclick = () => { this.tab = tab; void this.render().then(() => this.contentEl.querySelector<HTMLElement>(`#agentnote-insight-tab-${tab}`)?.focus()); };
     }
-    const body = this.contentEl.createDiv({ cls: "agentnote-modal-body" });
+    const body = this.contentEl.createDiv({ cls: "agentnote-modal-body", attr: { role: "tabpanel", id: "agentnote-insight-panel", "aria-labelledby": `agentnote-insight-tab-${this.tab}` } });
     if (this.tab === "overview") this.renderOverview(body, insights, agents);
     if (this.tab === "week") {
       this.renderPeriod(body, { eyebrow: "WEEKLY REVIEW", title: t("本周知识活动报告"), description: t("建设、使用、连接与整理共同构成真实的知识工作节奏。"), trendTitle: t("每日知识活动"), rankingTitle: t("本周协作资料") }, [[insights.summary.weekActivityScore, t("知识活动值")], [insights.summary.weekCreated, t("内容建设")], [insights.summary.weekUpdated, t("维护整理")], [insights.summary.weekResolves, t("资料使用")]], insights.weekly, insights.weeklyTrend, "weekly");
@@ -391,7 +450,16 @@ class InsightsModal extends Modal {
       this.renderDocumentContributions(body, insights.documents, t("文档贡献档案"));
     }
     if (this.tab === "agents") this.renderAgents(body, agents);
-    if (this.tab === "timeline") this.renderTimeline(body, insights);
+    if (this.tab === "timeline") {
+      let events = insights.timeline;
+      if (this.timelineDay) {
+        const [year, month, day] = this.timelineDay.split("-").map(Number);
+        const start = new Date(year, month - 1, day);
+        const end = new Date(year, month - 1, day + 1);
+        events = await this.plugin.store.listActivity({ from: start.toISOString(), to: new Date(end.getTime() - 1).toISOString() });
+      }
+      this.renderTimeline(body, insights, events);
+    }
     if (this.tab === "archive") this.renderArchive(body, insights);
   }
   private renderOverview(parent: HTMLElement, insights: DashboardInsights, agents: Awaited<ReturnType<AgentNotePlugin["store"]["getAgentInsights"]>>): void {
@@ -479,10 +547,19 @@ class InsightsModal extends Modal {
     if (mode === "contributions") this.renderContributionGraph(trendSection, trend, max);
     else {
       const bars = trendSection.createDiv({ cls: "agentnote-trend" });
-      for (const point of trend) {
-        const item = bars.createDiv({ cls: "agentnote-trend-item" });
+      for (const [index, point] of trend.entries()) {
+        const item = bars.createEl("button", { cls: "agentnote-trend-item", attr: { "aria-label": t("查看{0}的活动", point.label) } });
         const bar = item.createDiv({ cls: "agentnote-trend-bar" }); bar.setCssProps({ "--agentnote-trend-height": `${Math.max(4, point.count / max * 100)}%` }); bar.setAttribute("aria-label", t("{0}：{1} 知识活跃分", point.label, point.count));
         item.createSpan({ text: point.label });
+        item.onclick = () => {
+          const day = new Date();
+          day.setHours(0, 0, 0, 0);
+          day.setDate(day.getDate() - ((day.getDay() + 6) % 7) + index);
+          this.timelineDay = this.dayKey(day);
+          this.timelineFilter = "all";
+          this.tab = "timeline";
+          void this.render();
+        };
       }
     }
     const ranking = parent.createDiv({ cls: "agentnote-detail-section agentnote-period-ranking" });
@@ -517,6 +594,10 @@ class InsightsModal extends Modal {
     const firstDate = new Date(`${trend[0]?.label ?? "1970-01-01"}T00:00:00`);
     const leadingDays = firstDate.getDay();
     const weeks = Math.ceil((leadingDays + trend.length) / 7);
+    const activeIndexes = trend.flatMap((point, index) => point.count ? [index] : []);
+    const firstActiveColumn = Math.floor((leadingDays + (activeIndexes[0] ?? 0)) / 7);
+    const lastActiveColumn = Math.floor((leadingDays + (activeIndexes.at(-1) ?? 0)) / 7);
+    const activeColumnSpan = Math.max(1, lastActiveColumn - firstActiveColumn);
     const chart = parent.createDiv({ cls: "agentnote-contribution-chart" });
     window.requestAnimationFrame(() => { chart.scrollLeft = chart.scrollWidth; });
     const weekdays = chart.createDiv({ cls: "agentnote-contribution-weekdays" });
@@ -536,18 +617,19 @@ class InsightsModal extends Modal {
         lastMonthColumn = column;
       }
       const cell = grid.createSpan({ cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": t("{0}：{1} 知识活跃分", point.label, point.count) } });
-      if (point.count) cell.setCssProps(contributionShade(point.count, min, max));
+      if (point.count) cell.setCssProps({ ...contributionShade(point.count, min, max), "--agentnote-reveal-delay": `${Math.round(Math.pow((column - firstActiveColumn) / activeColumnSpan, 0.72) * 425 + date.getDay() * 2)}ms` });
     }
   }
-  private renderTimeline(parent: HTMLElement, insights: DashboardInsights): void {
+  private renderTimeline(parent: HTMLElement, insights: DashboardInsights, events: InsightEvent[]): void {
     const agents = new Set(insights.timeline.map((event) => event.actor?.name ?? event.actor?.id).filter(Boolean));
     this.renderTabHero(parent, "ACTIVITY LOG", t("协作时间线"), t("分享链接每次成功访问都会留下记录；本地阅读指文件在 Obsidian 中保持打开超过 20 秒。"), [[insights.timeline.length, t("记录活动")], [agents.size, t("参与 agent")], [insights.summary.weekResolves, t("本周使用")]]);
     const filters = parent.createDiv({ cls: "agentnote-timeline-filters" });
+    if (this.timelineDay) filters.createEl("button", { cls: "agentnote-timeline-day", text: t("{0} · 清除日期", this.timelineDay) }).onclick = () => { this.timelineDay = null; void this.render(); };
     for (const [filter, label] of [["all", t("全部")], ["construction", t("建设")], ["reuse", t("使用")], ["connection", t("连接")], ["organization", t("整理")]] as const) {
       const button = filters.createEl("button", { text: label, cls: this.timelineFilter === filter ? "is-active" : "" });
       button.onclick = () => { this.timelineFilter = filter; void this.render(); };
     }
-    const visible = insights.timeline.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "construction" && ["node-created", "node-updated", "local-created", "local-edited"].includes(event.type)) || (this.timelineFilter === "reuse" && ["share-created", "share-resolved", "local-read"].includes(event.type)) || (this.timelineFilter === "connection" && event.type === "document-linked") || (this.timelineFilter === "organization" && ["node-archived", "node-restored", "local-moved", "local-deleted"].includes(event.type)));
+    const visible = events.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "construction" && ["node-created", "node-updated", "local-created", "local-edited"].includes(event.type)) || (this.timelineFilter === "reuse" && ["share-created", "share-resolved", "local-read"].includes(event.type)) || (this.timelineFilter === "connection" && event.type === "document-linked") || (this.timelineFilter === "organization" && ["node-archived", "node-restored", "local-moved", "local-deleted"].includes(event.type)));
     if (!visible.length) { parent.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: t("还没有符合条件的活动。换一个筛选条件，或开始一次新的资料协作。") }); return; }
     const list = parent.createEl("ul", { cls: "agentnote-timeline" });
     for (const event of visible) {
@@ -775,17 +857,53 @@ class RemoveAgentModal extends Modal {
 }
 
 class ManualInstallModal extends Modal {
+  private copied = false;
+  private checkedConnections: AgentConnection[] | null = null;
   constructor(app: App, private plugin: AgentNotePlugin) { super(app); }
   onOpen(): void {
+    this.modalEl.addClass("agentnote-connect-modal");
+    this.render();
+  }
+  private render(): void {
     this.contentEl.empty();
+    this.contentEl.createSpan({ cls: "agentnote-eyebrow", text: "AGENTNOTE · CONNECT" });
     this.contentEl.createEl("h2", { text: t("接入 Agent") });
-    this.contentEl.createEl("p", { text: t("安装任务已复制。将它发给目标 Agent；所有 Agent 使用同一个本地 Skill 地址与上报流程。") });
+    this.contentEl.createEl("p", { text: t("先查看完整安装任务，再复制给目标 Agent；完成后回到这里核对接入记录。") });
+    const steps = this.contentEl.createDiv({ cls: "agentnote-connect-steps" });
+    for (const [number, label, active] of [["01", t("查看任务"), true], ["02", t("发送给 Agent"), this.copied], ["03", t("核对接入"), this.checkedConnections !== null]] as const) {
+      const step = steps.createDiv({ cls: active ? "is-active" : "" });
+      step.createSpan({ text: number }); step.createSpan({ text: label });
+    }
+    const status = this.contentEl.createDiv({ cls: "agentnote-connect-status", attr: { role: "status", "aria-live": "polite" } });
+    status.createEl("strong", { text: this.copied ? t("安装任务已复制") : t("安装任务已准备好") });
+    status.createEl("p", { text: this.copied ? t("请粘贴给 Agent 并等待它完成安装；复制并不代表已接入。") : t("不同 Agent 可使用同一份安装任务，各自登记独立身份。") });
+    if (this.checkedConnections !== null) {
+      const result = this.contentEl.createDiv({ cls: "agentnote-connect-result" });
+      result.createEl("strong", { text: this.checkedConnections.length ? t("当前接入记录") : t("暂未发现接入记录") });
+      if (this.checkedConnections.length) for (const connection of this.checkedConnections) result.createEl("p", { text: `${connection.name} · ${connection.skillPath}` });
+      else result.createEl("p", { text: t("确认 Agent 已执行安装任务后，再检查一次。") });
+    }
     const prompt = renderManualInstallPrompt({ port: this.plugin.server?.port ?? this.plugin.settings.port });
-    const text = this.contentEl.createEl("textarea", { cls: "agentnote-manual-prompt" });
+    const details = this.contentEl.createEl("details", { cls: "agentnote-connect-task" });
+    details.createEl("summary", { text: t("查看完整安装任务") });
+    const text = details.createEl("textarea", { cls: "agentnote-manual-prompt", attr: { "aria-label": t("完整安装任务") } });
     text.value = prompt; text.readOnly = true;
-    new Setting(this.contentEl).addButton((button) => button.setButtonText(t("复制安装任务")).setCta().onClick(async () => {
-      await navigator.clipboard.writeText(prompt); new Notice(t("已复制手动安装任务。"));
-    })).addButton((button) => button.setButtonText(t("关闭")).onClick(() => this.close()));
+    const actions = this.contentEl.createDiv({ cls: "agentnote-connect-actions" });
+    actions.createEl("button", { text: t("复制安装任务"), cls: "mod-cta" }).onclick = () => void (async () => {
+      try {
+        await navigator.clipboard.writeText(prompt);
+        this.copied = true;
+        this.render();
+        new Notice(t("已复制手动安装任务。"));
+      } catch (error) {
+        details.open = true;
+        new Notice(t("复制失败：{0}", (error as Error).message));
+      }
+    })();
+    actions.createEl("button", { text: t("检查接入") }).onclick = () => void (async () => {
+      try { this.checkedConnections = await this.plugin.connectedAgents(); this.render(); }
+      catch (error) { new Notice(t("接入状态暂时不可用：{0}", (error as Error).message)); }
+    })();
   }
 }
 

@@ -10,15 +10,18 @@ const stub = `
 class Element {
   constructor(text = '') { this.text = text; this.children = []; }
   get textContent() { return this.text + this.children.map(child => child.textContent).join(' '); }
-  createEl(tag, options = {}) { const child = new Element(options.text || ''); child.tag = tag; this.children.push(child); return child; }
+  createEl(tag, options = {}) { const child = new Element(options.text || ''); child.tag = tag; child.cls = options.cls || ''; this.children.push(child); return child; }
   createDiv(options) { return this.createEl('div', options); }
   createSpan(options) { return this.createEl('span', options); }
   empty() { this.text = ''; this.children = []; }
   addClass() {}
+  removeClass() {}
+  setText(text) { this.text = text; }
   setAttribute() {}
 }
-export class ItemView { constructor(leaf) { this.app = leaf.app; this.contentEl = new Element(); } }
+export class ItemView { constructor(leaf) { this.app = leaf.app; this.contentEl = new Element(); } registerEvent() {} }
 export class Modal { constructor(app) { this.app = app; this.contentEl = new Element(); } close() { this.onClose?.(); } }
+export class Menu {}
 export class Setting {}
 export class Notice {}
 export class App {}
@@ -37,6 +40,7 @@ try {
     } }],
   });
   const { AgentNoteView, DataRepairModal, VaultStore, setLanguage } = createRequire(import.meta.url)(path.join(dir, 'ui.cjs'));
+  globalThis.window = { setTimeout: () => 0 };
   setLanguage('zh');
   const vault = path.join(dir, 'vault');
   const store = new VaultStore(vault, '.obsidian', { deviceIdFile: path.join(dir, 'device-id') });
@@ -47,8 +51,11 @@ try {
     ? await fs.readFile(process.env.AGENTNOTE_DAMAGED_DOCUMENTS, 'utf8')
     : '<<<<<<< HEAD\n[]\n=======\n[]\n>>>>>>> origin/main\n';
   await fs.writeFile(file, damaged);
-  const plugin = { store, server: { port: 27182 }, settings: { port: 27182, showQuickStart: true }, connectedAgents: async () => [] };
-  const view = new AgentNoteView({ app: {} }, plugin);
+  let sharedPath;
+  const plugin = { store, server: { port: 27182 }, settings: { port: 27182, showQuickStart: true }, connectedAgents: async () => [], shareFileFromPanel: async (filePath) => { sharedPath = filePath; return true; } };
+  let activeFile = { basename: 'Current note', path: 'Current note.md' };
+  let onFileOpen;
+  const view = new AgentNoteView({ app: { workspace: { on: (_event, handler) => { onFileOpen = handler; return {}; }, getActiveFile: () => activeFile } } }, plugin);
   // The actual dashboard renderer involves animation; this test checks its loading boundary.
   view.renderDashboard = (_insights, parent) => parent.createEl('h4', { text: 'Loaded dashboard' });
   await view.onOpen();
@@ -57,6 +64,16 @@ try {
   assert.match(view.contentEl.textContent, /服务正在运行/);
   assert.match(view.contentEl.textContent, /Claude Code/);
   assert.match(view.contentEl.textContent, /Codex/);
+  const shareButton = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find((element) => element.tag === 'button' && element.text === '分享当前笔记');
+  await shareButton.onclick();
+  assert.equal(sharedPath, 'Current note.md');
+  assert.match(view.contentEl.textContent, /链接已复制/);
+  activeFile = null;
+  onFileOpen();
+  assert.match(view.contentEl.textContent, /尚未打开笔记/);
+  activeFile = { basename: 'Current note', path: 'Current note.md' };
+  onFileOpen();
+  assert.match(view.contentEl.textContent, /分享当前笔记/);
   assert.equal(await fs.readFile(file, 'utf8'), damaged);
   console.log('PASS corrupt documents show an error, preserve bytes, and keep service/Agent controls');
   await fs.writeFile(file, '[]');
@@ -93,4 +110,19 @@ try {
   assert.match(modal.contentEl.textContent, /已修复 1 个文件，保存 1 份备份/);
   assert.doesNotMatch(await fs.readFile(file, 'utf8'), /^<<<<<<< /m);
   console.log('PASS repair modal click backs up data and restores the panel without a restart');
+  const activities = Array.from({ length: 10 }, (_, index) => ({ type: 'share-created', title: `Note ${index}`, at: new Date(Date.now() - index * 60_000).toISOString() }));
+  const insights = { summary: { weekActivityCount: 0, weekResolves: 0, weekActivityScore: 0, weekUpdated: 0 }, weeklyTrend: [], activities };
+  view.contentEl.empty();
+  delete view.renderDashboard;
+  view.renderDashboard(insights, view.contentEl);
+  const activityList = view.recentActivityList;
+  const toggle = view.recentActivityToggle;
+  assert.equal(activityList.children.length, 10);
+  assert.equal(activityList.children.filter((item) => !item.hidden).length, 3);
+  assert.match(toggle.text, /展开最近 10 条/);
+  toggle.onclick();
+  assert.equal(activityList.children.filter((item) => !item.hidden).length, 10);
+  toggle.onclick();
+  assert.equal(activityList.children.filter((item) => !item.hidden).length, 3);
+  console.log('PASS recent activity expands ten historical items and collapses to three');
 } finally { await fs.rm(dir, { recursive: true, force: true }); }

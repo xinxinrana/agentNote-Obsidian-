@@ -1372,6 +1372,29 @@ button.agentnote-pet,
   box-shadow: inset 0 0 0 20px rgb(0 0 0 / var(--agentnote-activity-darkness, 0%));
 }
 
+.agentnote-insights-modal .agentnote-contribution-cell.is-active {
+  position: relative;
+  border-color: var(--background-modifier-border);
+  background: var(--background-primary-alt);
+  box-shadow: none;
+}
+
+.agentnote-insights-modal .agentnote-contribution-cell.is-active::before {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) var(--agentnote-activity-strength, 35%), var(--background-modifier-border));
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--interactive-accent) var(--agentnote-activity-strength, 35%), var(--background-primary));
+  box-shadow: inset 0 0 0 20px rgb(0 0 0 / var(--agentnote-activity-darkness, 0%));
+  animation: agentnote-contribution-appear 260ms ease-out var(--agentnote-reveal-delay, 0ms) both;
+  content: "";
+}
+
+@keyframes agentnote-contribution-appear {
+  from { transform: scale(0.35); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
 .agentnote-period-ranking .agentnote-value-card {
   position: relative;
   display: grid;
@@ -1697,4 +1720,236 @@ span.agentnote-agent-icon svg {
 
 .agentnote-repair-file {
   overflow-wrap: anywhere;
+}
+
+.agentnote-panel {
+  --agentnote-line: var(--background-modifier-border);
+  --agentnote-soft: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-primary));
+  gap: 0;
+  padding: 0 16px 20px;
+  background: var(--background-primary);
+}
+
+.agentnote-panel-heading {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 62px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--agentnote-line);
+  background: var(--background-primary);
+}
+.agentnote-panel-heading::before {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 32px;
+  background: var(--background-primary);
+  pointer-events: none;
+  content: "";
+}
+
+.agentnote-panel-brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.agentnote-panel-brand h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.035em; }
+.agentnote-panel-mark { display: block; box-sizing: border-box; width: 29px; height: 29px; padding: 2px; border-radius: 9px; background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-primary)); object-fit: contain; }
+.agentnote-panel-heading > button { color: var(--text-muted); }
+.agentnote-panel-heading > button:hover { color: var(--text-accent); }
+
+.agentnote-current-file {
+  min-width: 0;
+  margin: 18px 0 22px;
+  padding: 17px;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 10%, var(--agentnote-line));
+  border-radius: 12px;
+  background: var(--agentnote-soft);
+}
+.agentnote-current-label { display: flex; align-items: center; gap: 6px; color: var(--text-accent); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
+.agentnote-current-label svg { width: 14px; height: 14px; }
+.agentnote-current-file h4 { margin: 8px 0 5px; overflow-wrap: anywhere; font-size: 15px; line-height: 1.45; }
+.agentnote-current-file p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+.agentnote-current-share { width: 100%; min-height: 38px; margin-top: 15px; font-weight: 600; transition: transform 160ms ease, background-color 160ms ease; }
+.agentnote-current-share:not(:disabled):hover { transform: translateY(-1px); }
+.agentnote-current-share.is-complete { background: var(--text-success); color: var(--text-on-accent); opacity: 1; }
+
+.agentnote-dashboard { gap: 0; }
+.agentnote-dashboard-hero {
+  padding: 20px 0 21px;
+  border: 0;
+  border-bottom: 1px solid var(--agentnote-line);
+  border-radius: 0;
+  background: transparent;
+}
+.agentnote-dashboard-hero .agentnote-eyebrow { display: none; }
+.agentnote-dashboard-hero .agentnote-hero-heading { align-items: start; gap: 8px; }
+.agentnote-dashboard-hero h4 { font-size: 15px; line-height: 1.4; }
+.agentnote-panel button.agentnote-profile-link { all: unset; flex: 0 0 auto; padding: 1px 0; color: var(--text-accent); cursor: pointer; font-size: 11px; line-height: 1.4; }
+.agentnote-panel button.agentnote-profile-link:hover { text-decoration: underline; }
+.agentnote-panel button.agentnote-profile-link:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; }
+.agentnote-dashboard-hero p { margin: 8px 0 17px; color: var(--text-muted); font-size: 12px; }
+.agentnote-metric-strip { gap: 0; }
+.agentnote-metric { min-width: 0; padding: 0 8px; border-radius: 0; background: transparent; }
+.agentnote-metric:first-child { padding-left: 0; }
+.agentnote-metric strong { color: var(--interactive-accent); font-size: 23px; line-height: 1.2; }
+.agentnote-metric span { margin-top: 4px; font-size: 11px; line-height: 1.35; }
+.agentnote-panel-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-top: 17px; }
+.agentnote-panel-week-day { min-width: 0; text-align: center; }
+.agentnote-panel-week-day > span:first-child { display: block; height: 5px; border-radius: 5px; background: var(--background-modifier-border); }
+.agentnote-panel-week-day > span:first-child.is-active { background: var(--interactive-accent); opacity: var(--agentnote-week-opacity, 0.5); }
+.agentnote-panel-week-day > span:nth-child(2) { display: block; margin-top: 6px; color: var(--text-muted); font-size: 10px; }
+.agentnote-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.agentnote-home-activity { margin-top: 21px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.agentnote-home-activity .agentnote-section-heading { margin-bottom: 6px; }
+.agentnote-home-activity .agentnote-section-heading h4,
+.agentnote-agents-section > h4 { font-size: 13px; font-weight: 700; }
+.agentnote-home-activity .agentnote-section-heading button { height: 27px; padding: 2px 8px; background: transparent; color: var(--text-accent); font-size: 11px; box-shadow: none; }
+.agentnote-home-activity .agentnote-section-heading button:hover { background: var(--agentnote-soft); }
+.agentnote-home-activity button.agentnote-activity-toggle:not([hidden]) { display: block; width: 100%; margin: 2px 0 0; padding: 9px; border: 0; background: transparent; color: var(--text-accent); font-size: 11px; text-align: center; box-shadow: none; }
+.agentnote-home-activity button.agentnote-activity-toggle:hover { background: var(--agentnote-soft); }
+.agentnote-activity-list { gap: 0; font-size: 12px; }
+.agentnote-activity-list li { padding: 0; }
+.agentnote-home-activity .agentnote-activity-list li[hidden] { display: none; }
+.agentnote-activity-row,
+.agentnote-panel button.agentnote-activity-row {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  min-height: 51px;
+  gap: 9px;
+  margin: 0;
+  padding: 8px 2px;
+  line-height: 1.45;
+}
+.agentnote-activity-row > span:not(.agentnote-activity-icon) { min-width: 0; overflow-wrap: anywhere; }
+.agentnote-activity-icon { display: grid; place-items: center; width: 29px; height: 29px; border-radius: 8px; background: var(--agentnote-soft); color: var(--text-accent); }
+.agentnote-activity-icon svg { width: 15px; height: 15px; }
+.agentnote-activity-row time { align-self: center; font-size: 10px; }
+.agentnote-panel button.agentnote-activity-row:hover span.agentnote-activity-icon { color: var(--text-accent); }
+
+.agentnote-panel .agentnote-quick-start { margin: 22px 0 0; border: 1px solid var(--agentnote-line); border-radius: 11px; background: var(--background-secondary); }
+.agentnote-panel .agentnote-agents-section { gap: 13px; margin-top: 20px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.agentnote-agents-section > .agentnote-section-heading h4 { font-size: 13px; }
+.agentnote-agent-list { display: flex; flex-direction: column; gap: 3px; }
+.agentnote-agent-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 28px; align-items: center; gap: 9px; min-height: 49px; border-radius: 8px; }
+.agentnote-agent-row:hover { background: var(--background-secondary); }
+.agentnote-agent-identity { min-width: 0; }
+.agentnote-agent-identity strong { display: block; overflow: hidden; font-size: 12px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.agentnote-agent-identity .agentnote-agent-status { overflow: hidden; font-size: 10px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.agentnote-panel button.agentnote-agent-more { width: 27px; height: 27px; padding: 4px; color: var(--text-muted); }
+.agentnote-panel button.agentnote-agent-more:hover { color: var(--text-normal); }
+.agentnote-panel button.agentnote-agent-row-action { all: unset; color: var(--text-accent); cursor: pointer; font-size: 11px; }
+.agentnote-panel button.agentnote-agent-row-action:focus-visible { outline: 2px solid var(--interactive-accent); }
+.agentnote-panel .agentnote-agents-section > button.agentnote-add-agent { align-self: stretch; width: 100%; min-height: 34px; background: var(--background-secondary); color: var(--text-normal); font-size: 12px; }
+.agentnote-panel .agentnote-agents-section > button.agentnote-add-agent:hover { background: var(--agentnote-soft); }
+.agentnote-agent-card { padding: 12px; border-radius: 10px; background: var(--background-secondary); transition: border-color 160ms ease, background-color 160ms ease; }
+.agentnote-agent-card:hover { border-color: color-mix(in srgb, var(--interactive-accent) 30%, var(--agentnote-line)); }
+.agentnote-agent-icon { width: 30px; height: 30px; flex-basis: 30px; }
+.agentnote-agent-actions button { min-height: 28px; font-size: 11px; }
+
+.agentnote-panel .agentnote-service-section {
+  position: sticky;
+  z-index: 2;
+  bottom: -20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 20px -16px -20px;
+  padding: 10px 16px;
+  border: 0;
+  border-top: 1px solid var(--agentnote-line);
+  border-radius: 0;
+  background: var(--background-primary);
+  box-shadow: 0 -5px 20px color-mix(in srgb, var(--background-primary) 75%, transparent);
+}
+.agentnote-panel .agentnote-service-section::after {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: 24px;
+  background: var(--background-primary);
+  pointer-events: none;
+  content: "";
+}
+.agentnote-service-section > h4 { grid-column: 1 / -1; color: var(--text-muted); font-size: 10px; font-weight: 600; }
+.agentnote-service-section .agentnote-service-status { min-width: 0; padding: 2px 0; border: 0; background: transparent; }
+.agentnote-service-section .agentnote-service-status { grid-template-columns: 10px minmax(0, 1fr); }
+.agentnote-service-section .agentnote-service-status > div { min-width: 0; }
+.agentnote-service-section .agentnote-service-status strong { font-size: 11px; }
+.agentnote-service-section .agentnote-service-status span:not(.agentnote-service-indicator) { display: none; }
+.agentnote-service-section .agentnote-service-status code { grid-column: 2; display: block; overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
+.agentnote-service-section > button { min-height: 28px; padding: 2px 8px; background: transparent; color: var(--text-accent); font-size: 11px; box-shadow: none; }
+.agentnote-service-section > button.mod-warning { color: var(--text-muted); }
+.agentnote-service-section > button:hover { background: var(--agentnote-soft); }
+
+.modal.agentnote-insights-modal { --agentnote-line: var(--background-modifier-border); --agentnote-soft: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-primary)); width: min(960px, calc(100vw - 48px)); max-height: min(720px, calc(100dvh - 48px)); }
+.agentnote-insights-modal .modal-content { display: flex; flex-direction: column; min-height: 0; max-height: min(700px, calc(100dvh - 70px)); overflow: hidden; padding: 0; }
+.agentnote-insights-modal .agentnote-modal-header { flex: none; min-height: 0; align-items: center; margin: 0; padding: 24px 24px 20px; overflow: visible; border: 0; border-radius: 0; background: var(--background-primary); }
+.agentnote-insights-modal .agentnote-modal-header h2 { font-size: 20px; letter-spacing: -0.025em; }
+.agentnote-insights-modal .agentnote-modal-header p { margin-top: 5px; font-size: 12px; line-height: 1.5; }
+.agentnote-insights-modal .agentnote-insight-tabs { flex: none; gap: 24px; min-height: 48px; margin: 0; padding: 0 24px; overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid var(--agentnote-line); scrollbar-width: none; }
+.agentnote-insights-modal .agentnote-insight-tabs::-webkit-scrollbar { display: none; }
+.agentnote-insights-modal .agentnote-insight-tabs button { all: unset; box-sizing: border-box; position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: auto; min-width: 0; height: 48px; min-height: 0; padding: 0 1px; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; color: var(--text-muted); cursor: pointer; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.agentnote-insights-modal .agentnote-insight-tabs button.is-active { background: transparent; color: var(--text-accent); font-weight: 700; }
+.agentnote-insights-modal .agentnote-insight-tabs button:hover { color: var(--text-normal); }
+.agentnote-insights-modal .agentnote-insight-tabs button:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -4px; }
+.agentnote-insights-modal .agentnote-insight-tabs button.is-active::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--interactive-accent); content: ""; }
+.agentnote-insights-modal .agentnote-modal-body { min-height: 0; overflow: auto; padding: 24px; animation: agentnote-panel-enter 180ms ease-out; }
+.agentnote-insights-modal .agentnote-modal-body > * { flex-shrink: 0; }
+.agentnote-insights-modal .agentnote-timeline-filters { min-height: 47px; overflow-x: auto; overflow-y: hidden; }
+.agentnote-insights-modal .agentnote-tab-hero,
+.agentnote-insights-modal .agentnote-profile-card { border-radius: 12px; background: var(--agentnote-soft); }
+.agentnote-insights-modal .agentnote-period-trend,
+.agentnote-insights-modal .agentnote-period-ranking,
+.agentnote-insights-modal .agentnote-profile-section { border: 1px solid var(--agentnote-line); border-radius: 12px; background: var(--background-primary); }
+.agentnote-insights-modal .agentnote-timeline li { background: var(--background-primary); }
+.agentnote-insights-modal .agentnote-timeline li:hover { border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--agentnote-line)); }
+.agentnote-insights-modal button.agentnote-trend-item { all: unset; box-sizing: border-box; display: flex; flex: 1 1 0; height: 100%; min-width: 0; flex-direction: column; align-items: center; justify-content: end; gap: 5px; border-radius: 7px; cursor: pointer; }
+.agentnote-insights-modal button.agentnote-trend-item:hover { background: color-mix(in srgb, var(--interactive-accent) 6%, transparent); }
+.agentnote-insights-modal button.agentnote-trend-item:hover .agentnote-trend-bar { opacity: 1; }
+.agentnote-insights-modal button.agentnote-trend-item:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.agentnote-insights-modal .agentnote-timeline-filters button.agentnote-timeline-day { background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)); color: var(--text-accent); font-weight: 600; }
+
+.modal.agentnote-connect-modal { width: min(560px, calc(100vw - 32px)); }
+.agentnote-connect-modal .modal-content { max-height: min(620px, calc(100dvh - 48px)); overflow: auto; padding: 28px; }
+.agentnote-connect-modal h2 { margin: 4px 0 6px; font-size: 22px; }
+.agentnote-connect-modal h2 + p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.55; }
+.agentnote-connect-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 23px 0; }
+.agentnote-connect-steps > div { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 9px; border: 1px solid var(--background-modifier-border); border-radius: 8px; color: var(--text-muted); font-size: 11px; }
+.agentnote-connect-steps > div.is-active { border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border)); background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-primary)); color: var(--text-normal); }
+.agentnote-connect-steps > div > span:first-child { color: var(--text-accent); font-weight: 700; }
+.agentnote-connect-status { padding: 15px; border-radius: 10px; background: var(--background-secondary); }
+.agentnote-connect-status strong { font-size: 13px; }
+.agentnote-connect-status p { margin: 5px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.agentnote-connect-result { margin-top: 14px; padding: 13px 15px; border: 1px solid var(--background-modifier-border); border-radius: 10px; }
+.agentnote-connect-result strong { font-size: 12px; }
+.agentnote-connect-result p { margin: 7px 0 0; overflow-wrap: anywhere; color: var(--text-muted); font-size: 11px; }
+.agentnote-connect-task { margin: 16px 0; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.agentnote-connect-task summary { padding: 10px 12px; color: var(--text-accent); cursor: pointer; font-size: 12px; }
+.agentnote-connect-task textarea { display: block; min-height: 180px; margin: 0 12px 12px; width: calc(100% - 24px); }
+.agentnote-connect-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.agentnote-connect-actions button { min-height: 36px; }
+
+@keyframes agentnote-panel-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 600px) {
+  .modal.agentnote-insights-modal { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
+  .agentnote-insights-modal .modal-content { max-height: calc(100dvh - 46px); }
+  .agentnote-insights-modal .agentnote-modal-header { align-items: flex-start; flex-direction: column; gap: 10px; padding: 18px; }
+  .agentnote-insights-modal .agentnote-insight-tabs { gap: 18px; padding: 0 18px; }
+  .agentnote-insights-modal .agentnote-modal-body { padding: 18px; }
+  .agentnote-connect-modal .modal-content { padding: 20px; }
+  .agentnote-connect-steps { gap: 4px; }
+  .agentnote-connect-steps > div { flex-direction: column; align-items: flex-start; padding: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agentnote-current-share,
+  .agentnote-agent-card,
+  .agentnote-insights-modal .agentnote-modal-body { animation: none; transition: none; }
+  .agentnote-insights-modal .agentnote-contribution-cell.is-active::before { animation: none; }
 }

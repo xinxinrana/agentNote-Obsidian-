@@ -440,6 +440,7 @@ try {
       assert.equal(before.summary.allTimeActivityScore, 6);
       assert.equal(before.documents.length, 1);
       assert.equal(before.timeline.length, 1);
+      assert.equal(before.activities[0]?.title, "旧资料", "recent activity includes records from before this week");
       await historicStore.recordLocalActivity("local-created", "新资料.md");
       const after = await historicStore.getDashboardInsights();
       assert.equal(after.summary.allTimeActivityScore, 12);
@@ -478,6 +479,7 @@ try {
         assert.equal((await current.listActivity()).length, 4);
         const insights = await current.getDashboardInsights();
         assert.equal(insights.summary.allTimeActivityScore, 12);
+        assert.equal(insights.activities.filter((event) => event.type === "share-resolved").length, 2, "recent activity merges both devices");
         assert.equal(insights.documents.find((row) => row.document.title === "跨设备资料")?.score, 12);
         assert.equal((await current.getDocumentInsights()).find((row) => row.nodeId === note.id)?.uses, 2);
         assert.deepEqual((await current.getAgentInsights()).map((row) => [row.name, row.uses]).sort(), [["Claude Code", 1], ["Codex", 1]]);
