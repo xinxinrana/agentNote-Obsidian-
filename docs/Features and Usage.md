@@ -92,16 +92,15 @@ When more than three local actions of the same kind, or more than ten local acti
 
 Each document has a reviewable contribution breakdown: construction, reuse, connection, and organization. Deletion records remain in the local ledger, while the timeline displays only the most recent 30 days so recent cleanup remains visible without making the history endless.
 
-Local creation, editing, reading, and organization reflect the user's own work first; share access and agent updates also contribute to each document. Select **View activity records** on a document card to see the dated events and their contribution values.
+Local creation, editing, reading, and organization reflect the user's own work first; share access and agent updates also contribute to each document. Select **View activity records** on a document card to open the timeline filtered by that document’s title.
 
 Material titles appear as text links in the knowledge profile. Click one to open its original file in a new Obsidian tab and close the insights window. In **Privacy view**, titles are anonymized and the open-file action is hidden.
 
 Each successful share-link request counts as one use. If the request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
 
-- **Profile**: a seven-day overview and reusable-note ranking.
-- **This week**: daily knowledge activity, reused material, and a document ranking that includes local work.
+- **Profile**: this calendar week’s results, daily rhythm, reused material, and document contributions including local work. Select a date for related activity on the same page, or **View activity records** to open the timeline filtered by a document’s title.
 - **All time**: totals and note rankings retain the full history. The contribution grid shows a rolling 40 weeks, opens at the latest dates, and keeps breathing room on the right; deeper color represents more knowledge work that day.
-- **Agent and timeline**: filter local and agent activity by construction, reuse, connection, and organization. Click an existing file's timeline entry to open it in a new Obsidian tab; deleted files and folders are not linked.
+- **Agent and timeline**: open an agent’s activity records, search document titles, and filter by collaborator or construction, reuse, connection, and organization. Records are grouped by date. Click an existing file's timeline entry to open it in a new Obsidian tab; deleted files and folders are not linked.
 - **Cleanup**: low-use notes that may be archived; protected notes never appear here.
 
 Use **Generate sharing image** in the profile to preview and copy a PNG summary. Enable **Privacy view** first to anonymize note titles.

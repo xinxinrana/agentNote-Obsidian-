@@ -1953,3 +1953,24 @@ span.agentnote-agent-icon svg {
   .agentnote-insights-modal .agentnote-modal-body { animation: none; transition: none; }
   .agentnote-insights-modal .agentnote-contribution-cell.is-active::before { animation: none; }
 }
+
+.agentnote-insights-modal .agentnote-timeline-search { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 10px; }
+.agentnote-timeline-search input { flex: 1 1 180px; min-width: 0; }
+.agentnote-timeline-search select { max-width: 100%; }
+.agentnote-timeline-search > span { color: var(--text-muted); font-size: 12px; }
+.agentnote-insights-modal .agentnote-timeline li.agentnote-timeline-date { display: block; margin-top: 12px; padding: 8px 0; border: 0; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.agentnote-insights-modal .agentnote-trend-bar.is-zero { min-height: 0; height: 0; }
+.agentnote-insights-modal .agentnote-profile-day { height: auto; box-shadow: none; cursor: pointer; }
+.agentnote-insights-modal [aria-pressed="true"].agentnote-profile-day,
+.agentnote-insights-modal [aria-pressed="true"].agentnote-trend-item { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.agentnote-insights-modal button.agentnote-contribution-cell { all: unset; position: relative; box-sizing: border-box; width: 13px; height: 13px; border-radius: 3px; background: var(--background-modifier-border); cursor: pointer; }
+.agentnote-insights-modal button.agentnote-contribution-cell:focus-visible,
+.agentnote-insights-modal button.agentnote-contribution-cell[aria-pressed="true"] { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.agentnote-day-records { padding: 18px; border: 1px solid var(--background-modifier-border); border-radius: 12px; }
+.agentnote-day-record { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--background-modifier-border); }
+.agentnote-day-record small { flex: none; color: var(--text-muted); }
+.agentnote-profile-summary { position: relative; padding-right: 72px; }
+.agentnote-profile-mascot { position: absolute; top: 8px; right: 0; width: 60px; height: 70px; object-fit: contain; }
+.agentnote-dashboard button.agentnote-metric { height: auto; box-shadow: none; background: transparent; border: 0; cursor: pointer; }
+.agentnote-dashboard button.agentnote-metric:hover { background: var(--background-modifier-hover); }
+.agentnote-dashboard button.agentnote-metric:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
