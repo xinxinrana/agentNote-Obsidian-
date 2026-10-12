@@ -1,10 +1,15 @@
 import { en } from "./en";
 
 export type Language = "zh" | "en";
+export type LanguagePreference = "auto" | Language;
 let currentLanguage: Language = "zh";
 
 export function languageFor(code: string | null | undefined): Language {
   return !code || code.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+
+export function languageForPreference(preference: LanguagePreference, hostLanguage: string | null | undefined): Language {
+  return preference === "auto" ? languageFor(hostLanguage) : preference;
 }
 
 export function setLanguage(code: string | null | undefined): void {

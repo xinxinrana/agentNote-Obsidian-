@@ -129,3 +129,7 @@ In agentNote settings, keep automatic backups on, choose a 1–60 minute startup
 Cold backups copy past-day activity from this device's log and the legacy `events.json` into one JSON file per source and local calendar day in `agentNote/data/cold-backups/`. The plugin never reads these copies for statistics and never overwrites an existing copy or the source log. Each device should run its own backups.
 
 This is not a full-vault backup. It does not cover note contents, shared configuration, or other devices' unsynced logs. A late event for an already backed-up day does not change the immutable snapshot. Resolve Git conflicts without deleting the original data. See [Git Activity Sync](Git%20Activity%20Sync.md).
+
+### Interface language
+
+In Obsidian **Settings → agentNote → Interface language**, choose Auto, Simplified Chinese, or English. A manual choice takes priority. Auto follows Obsidian's language: Chinese locales use Chinese, and all others use English. Settings and the connection panel update immediately; restart Obsidian to update command and menu names. Switching languages does not translate or rewrite notes, history, or existing custom Skills.

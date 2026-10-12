@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, localConnectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion, languageFor, setLanguage, locale, t } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, localConnectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion, languageFor, languageForPreference, setLanguage, locale, t } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -852,6 +852,10 @@ try {
   await test("language selection follows the host and preserves interpolation values", async () => {
     for (const code of [undefined, null, "", "zh", "zh-CN", "zh-TW", "ZH-hk"]) assert.equal(languageFor(code), "zh");
     for (const code of ["en", "en-GB", "fr", "ja"]) assert.equal(languageFor(code), "en");
+    assert.equal(languageForPreference("auto", "zh-CN"), "zh");
+    assert.equal(languageForPreference("auto", "en-US"), "en");
+    assert.equal(languageForPreference("zh", "en-US"), "zh");
+    assert.equal(languageForPreference("en", "zh-CN"), "en");
     try {
       setLanguage("en");
       assert.equal(locale(), "en-US");

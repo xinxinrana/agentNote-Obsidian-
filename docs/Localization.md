@@ -1,6 +1,6 @@
 # Localization
 
-agentNote follows Obsidian's language through the official `getLanguage()` API. Chinese locales use Chinese; other locales use English. The plugin requires Obsidian 1.8.7 or later, where this API is available. Language is initialized when the plugin loads, so changing Obsidian's language and restarting the app switches the interface.
+Choose **Auto (follow Obsidian)**, **简体中文**, or **English** in **Settings → agentNote → Interface language**. An explicit choice takes priority. Auto uses Obsidian's official `getLanguage()` API: Chinese locales use Chinese; other locales use English. The plugin requires Obsidian 1.8.7 or later, where this API is available. The connection panel and settings update immediately after a manual choice; restart Obsidian to update command, ribbon, and menu names registered at startup. Changing Obsidian's language while Auto is selected also requires a restart.
 
 ## Interface text
 

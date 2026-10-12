@@ -1,4 +1,5 @@
-import { setLanguage, t } from "./i18n";
+import { languageForPreference, setLanguage, t } from "./i18n";
+import type { LanguagePreference } from "./i18n";
 import * as os from "os";
 import * as path from "path";
 import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, addIcon, getLanguage, parseLinktext, removeIcon } from "obsidian";
@@ -17,8 +18,8 @@ import xiaojiMarkUrl from "../assets/brand/xiaoji-mark.svg";
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
 type BulkActivityAction = "ask" | "record" | "ignore";
-interface AgentNoteSettings { port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; bulkActivityAction: BulkActivityAction; agents: Record<string, AgentProfile> }
-const DEFAULT_SETTINGS: AgentNoteSettings = { port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, bulkActivityAction: "ask", agents: {} };
+interface AgentNoteSettings { language: LanguagePreference; port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; bulkActivityAction: BulkActivityAction; agents: Record<string, AgentProfile> }
+const DEFAULT_SETTINGS: AgentNoteSettings = { language: "auto", port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, bulkActivityAction: "ask", agents: {} };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -49,6 +50,7 @@ export default class AgentNotePlugin extends Plugin {
       this.settings = { ...DEFAULT_SETTINGS, agents: {} };
       new Notice(t("插件设置无法读取，已使用默认设置。原文件已保留：{0}", (error as Error).message), 10000);
     }
+    setLanguage(languageForPreference(this.settings.language, getLanguage()));
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) { new Notice(t("agentNote 需要桌面端文件系统 vault。")); return; }
     this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
@@ -382,6 +384,7 @@ export default class AgentNotePlugin extends Plugin {
     const saved: unknown = await this.loadData() as unknown;
     const settings = isRecord(saved) ? saved : {};
     this.settings = {
+      language: settings.language === "zh" || settings.language === "en" ? settings.language : "auto",
       port: typeof settings.port === "number" ? settings.port : DEFAULT_SETTINGS.port,
       autostartServer: typeof settings.autostartServer === "boolean" ? settings.autostartServer : DEFAULT_SETTINGS.autostartServer,
       showQuickStart: typeof settings.showQuickStart === "boolean" ? settings.showQuickStart : DEFAULT_SETTINGS.showQuickStart,
@@ -413,6 +416,17 @@ class AgentNoteSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: AgentNotePlugin) { super(app, plugin); }
   display(): void {
     this.containerEl.empty();
+    new Setting(this.containerEl).setName(t("语言与显示")).setHeading();
+    new Setting(this.containerEl)
+      .setName(t("界面语言"))
+      .setDesc(t("优先使用这里选择的语言；选择自动时跟随 Obsidian。命令和菜单名称在重启 Obsidian 后更新。"))
+      .addDropdown((dropdown) => dropdown.addOptions({ auto: t("自动（跟随 Obsidian）"), zh: t("简体中文"), en: "English" }).setValue(this.plugin.settings.language).onChange(async (value) => {
+        this.plugin.settings.language = value as LanguagePreference;
+        setLanguage(languageForPreference(this.plugin.settings.language, getLanguage()));
+        await this.plugin.saveSettings();
+        this.display();
+        this.plugin.refreshPanels();
+      }));
     new Setting(this.containerEl)
       .setName(t("连接 Agent"))
       .setDesc(t("Agent 的安装和提示词在接入台管理；这里设置插件与 Agent 的连接方式。"))

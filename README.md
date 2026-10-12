@@ -91,7 +91,7 @@ Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always ap
 - There is no account, cloud sync, telemetry service, or public sharing layer.
 - The plugin uses local filesystem access and the system clipboard for its sharing and agent integration features.
 - This is a desktop-only plugin because it uses Node.js, Electron, and a local HTTP server.
-- The interface and new installation tasks follow Obsidian's language setting: Chinese for Chinese locales, English for other languages. Change Obsidian's language in its settings and restart it. Your notes and existing custom Skills keep their original content.
+- Choose Auto, Simplified Chinese, or English under **Settings → agentNote → Interface language**. A manual choice takes priority; Auto follows Obsidian's language (Chinese for Chinese locales, English otherwise). The interface updates immediately; restart Obsidian to update command and menu names. Notes and existing custom Skills keep their original content.
 
 ## FAQ
 

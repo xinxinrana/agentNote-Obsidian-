@@ -1,5 +1,10 @@
 /** Chinese source text is the key; placeholders preserve user content verbatim. */
 export const en: Record<string, string> = {
+  "语言与显示": "Language and display",
+  "界面语言": "Interface language",
+  "优先使用这里选择的语言；选择自动时跟随 Obsidian。命令和菜单名称在重启 Obsidian 后更新。": "Your choice here takes priority. Auto follows Obsidian. Restart Obsidian to update command and menu names.",
+  "自动（跟随 Obsidian）": "Auto (follow Obsidian)",
+  "简体中文": "Simplified Chinese",
   "检查并修复": "Check and repair",
   "重新检查": "Check again",
   "正在读取接入状态…": "Loading connection status…",
