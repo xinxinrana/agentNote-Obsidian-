@@ -1,174 +1,57 @@
+[English](README.md) · **简体中文**
+
 # agentNote
 
-让本地 Obsidian 笔记和文件通过私有、仅本机可访问的 HTTP 服务，直接交给 AI agent 使用。
+**让笔记去上班，让成果回到笔记里。**
 
-> English version: [README.md](README.md)
+Obsidian 里积累的不只是信息，还有你的方法、项目经历和已经做过的判断。agentNote 让这些知识真正参与 Agent 的工作，也让这次工作的成果，成为下一次可以继续使用的知识。
 
-agentNote 是一个 Obsidian 桌面端插件，可连接 Claude Code、Codex、WorkBuddy 等 agent。你可以把选中的资料通过本地地址交给 agent，并让成果写回 vault。
+它是一个本地 Obsidian 桌面端插件：把资料分享给 Claude Code、Codex、WorkBuddy 等 Agent，再把成果写回自己的笔记库。
 
-<img src="assets/brand/xiaoji-wave.svg" alt="agentNote 的笔记伙伴小记" width="120">
+![在 Obsidian 的工作界面里，让本地资料参与 Agent 工作。](docs/img/readme/workspace-zh.png)
 
-<p align="center">
-  <img src="docs/img/整体页面展示.png" alt="agentNote 在 Obsidian 中展示知识洞察和 agent 接入台" width="920">
-  <br>
-  <sub>在 Obsidian 内查看本地知识活动，并管理 agent 接入。</sub>
-</p>
+*在 Obsidian 的工作界面里，让本地资料参与 Agent 工作。*
 
-## 核心能力
+## 第二大脑，也可以参与工作
 
-- 分享笔记、文件、文件夹或选中文本给 agent。
-- 附带背景信息，让 agent 知道资料是什么、从哪来、为什么重要。
-- 让 agent 通过自然语言新建或更新 vault 内的 Markdown 笔记。
-- 保持分享地址实时有效：原文件更新后，同一地址自动返回最新内容。
-- 即使未安装，也始终展示 Claude Code、Codex 和 WorkBuddy，并提供官网入口。
-- 用本地知识档案查看复用、活动、贡献与整理建议。
-- 生成可匿名展示的“开始以来”知识贡献 PNG 分享图。
-- 在知识档案中点击资料标题直达原文件，并查看本地活动记录。
-- 自动或手动留存历史活动日志的按日冷备份，不覆盖原日志。
+存下更多笔记只是开始。当过去的判断能帮助今天做计划，一套方法能指导新的任务，一份项目记录能补上 Agent 缺少的背景，知识才真正发挥了作用。
 
-## 三分钟开始
+用 agentNote，你可以从 Obsidian 中选出此刻有用的资料，交给 Agent。它可以是一篇笔记、一个文件夹，也可以只是其中一段内容，成为调研、写作或规划的起点。笔记里的双链，也能让 Agent 沿着已有联系理解相关知识。
 
-完整图文步骤见 [如何使用 agentNote](docs/如何使用.md)。简版流程如下：
+你负责指向，Agent 负责理解和执行。
 
-1. 打开 **agentNote 接入台**，确认本地服务正在运行。
-2. 在接入台点击 **接入**，把复制的安装任务发给目标 agent；它上报安装位置后会显示 **已接入**。
-3. 在 vault 文件或文件夹上右键，选择 **agentNote: 分享给 agent**，把复制的文件名链接粘贴到对话里。
-4. 请已接入的 agent 读取地址，或直接说“写到 Obsidian”。
+## 知识属于你，不属于某次对话
 
-<p align="center">
-  <img src="docs/img/agentnote-workflow.svg" alt="操作动画：接入 Agent、右键分享笔记、发送本地地址、把成果写回 Obsidian" width="920">
-  <br>
-  <sub>接入 Agent，分享笔记，发送本地地址，再把成果写回 Obsidian。</sub>
-</p>
+一个有价值的结果，应该在聊天结束后仍然可用。让 Agent 把结论写回 Obsidian，它就成为普通的 Markdown 笔记：可以编辑、与其他资料连接，也可以再次交给 Agent 使用。
 
-## 安装
+于是，工作形成一个循环：**已有知识 → Agent 工作 → 新的知识**。下一次协作可以接着上一次的成果继续。换一个 Agent，也不用从头重建自己的工作记忆。
 
-### 从 Obsidian 社区插件目录安装
+## 看见知识真正参与了什么
 
-1. 使用 **Obsidian 1.8.7 或更新版本**，打开 **设置 → 第三方插件**。
-2. 搜索 `agentNote`。
-3. 安装并启用插件。
-4. 打开 **agentNote 接入台**，确认本地服务正在运行。
+笔记库越积越多，哪些内容真正有用反而不容易看清。agentNote 的知识档案把这些活动呈现出来：哪些资料被阅读或继续建设，哪些 Agent 使用过它们，工作发生在什么时候。
 
-### 手动安装
+你可以从一份文档追溯到时间线，回到原笔记继续完善，或决定哪些资料值得保护、哪些可以归档。它帮助你维护仍在发挥作用的知识；活动值只是已记录行为的汇总，不是对工作质量的评分。
 
-1. 从[最新 GitHub Release](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest)下载 `main.js`、`manifest.json` 和 `styles.css`。
-2. 在 vault 内创建 `.obsidian/plugins/agentnote/`。
-3. 将三个文件复制到该目录。
-4. 重启 Obsidian，或在 **设置 → 第三方插件** 中重新加载插件。
+![回看知识持续参与工作的轨迹。图中统计来自个人笔记库。](docs/img/readme/profile-zh.png)
 
-## 基础使用
+*回看知识持续参与工作的轨迹。图中统计来自个人笔记库。*
 
-### 分享资料给 agent
+## 让知识流动，保留自己的掌控
 
-- 右键文件或文件夹，选择 **agentNote: 分享给 agent**。
-- 在文件树中多选文件或文件夹后右键，选择 **agentNote: 分享选中项目给 agent**；剪贴板会得到逐项标注标题、用分隔线区分的分享地址，一次粘贴给 agent 即可。
-- 在编辑器中选中文本，使用 **agentNote: 分享选中文本**。
-- 把自动复制的本地地址发给 agent。
+笔记和活动记录仍保存在你的笔记库。agentNote 为已有工作方式搭一座本地桥梁，不要求你把知识迁到另一个平台，也不需要注册云端账号。
 
-地址会返回当前内容、背景和本机文件路径。优先通过地址读取；更新已分享内容时使用分享 API。
+你继续用 Obsidian 编辑和整理，用自己习惯的 Agent 完成工作。agentNote 不会上传整个笔记库；交给 Agent 的内容，仍由该 Agent 及其服务商按照各自的方式处理。
 
-### 让 agent 写笔记
+## 从一次真实的任务开始
 
-接入 agent 后，直接说：
+接入一个 Agent，分享一份有用的背景，再让成果回到笔记里。例如：“结合这些项目笔记，整理下一步行动，把计划写到 Obsidian。”
 
-- “写到 Obsidian。”
-- “写到 agent 笔记。”
-- “记到笔记里。”
+[安装最新版本](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest) · [查看图文教程](docs/如何使用.md)
 
-agent 会整理标题、正文、背景与标签，并写入 vault。写入成功后会获得一条可供后续更新的永久本地地址。
+支持 **Obsidian 桌面端 1.8.7 或更新版本**，适用于 macOS、Windows、Linux。分享链接在同一台电脑的本地服务运行时可用。macOS 上，让 Agent 工作时请用 **⌘H** 隐藏或最小化 Obsidian；关闭笔记库窗口会停止服务。
 
-### 接入 agent
+[功能与使用](docs/功能与使用.md) · [产品哲学](docs/product-design.md) · [反馈问题](https://github.com/xinxinrana/agentNote-Obsidian-/issues)
 
-打开 **agentNote 接入台**。Claude Code、Codex、WorkBuddy 始终显示，其他 agent 可点击 **接入其他 Agent**。所有入口复制同一段安装任务：agent 下载本地 `SKILL.md`、配置固定身份，并上报实际安装路径。接入后可在本机预览和修改 Skill，也可填写只属于该 agent 的附加要求。
+开发资料：[开发说明](docs/开发.md) · [Git 活动记录同步](docs/Git活动记录同步.md) · [品牌资产](assets/brand/README.md)
 
-## 本地服务与隐私
-
-- 服务默认监听 `127.0.0.1`，通常是 `http://127.0.0.1:27182`。
-- 仅在 Obsidian 运行时可用。
-- vault 内容不会上传到 agentNote 服务器。
-- 不包含账号、云同步、遥测或公网分享层。
-- 插件使用本地文件系统与系统剪贴板完成分享和 agent 接入。
-- 由于依赖 Node.js、Electron 和本地 HTTP 服务，仅支持桌面端。
-- 在 **设置 → agentNote → 界面语言** 中可选自动、简体中文或 English；手动选择优先。自动模式跟随 Obsidian：中文语言显示中文，其他语言显示英文。切换后界面立即更新；命令和菜单名称重启 Obsidian 后更新。笔记及已有自定义 Skill 保留原内容。
-
-## 常见问题
-
-### 分享失败，提示 `shares.json` 无法读取或内容损坏，怎么办？
-
-先完成 Git 同步，解决提示文件中的冲突并保存，再在 **设置 → 第三方插件** 中关闭并重新启用 agentNote，重新分享。重启插件可以重新加载数据，但不能修复文件里尚未解决的冲突。
-
-新分享保存在 `agentNote/data/shares/`，旧 `shares.json` 损坏不会阻断新链接；只存在于旧文件里的历史链接，仍需要修复旧文件才能读取。同步时保留整个 `shares/` 目录及已有的 `shares.json`。不要删除原始记录来消除报错；不确定怎样处理时，先备份文件，再提交反馈并附上报错信息。
-
-### 接入台提示数据异常怎么办？
-
-接入台会保留服务控制和 Agent 接入入口，并在异常区域显示具体文件。点击“检查并修复”，可补齐缺失的文档索引或引用索引；能够明确合并的文档索引 Git 冲突会先备份再修复。备份保存在 `agentNote/data/repair-backups/`。
-
-涉及路径、删除状态或其他无法确定的差异不会自动覆盖，可点击“打开问题文件”在系统默认应用中处理，再点击“重新检查”。修复完成后看板自动重新加载，无需重启插件。
-
-### macOS 上 Obsidian 还在 Dock 中，为什么 Agent 无法连接？
-
-agentNote 的本地服务依赖打开的笔记库窗口。点击红色关闭按钮或按 `⌘W` 关闭该窗口后，服务可能停止；Dock 图标下面的小点只表示应用尚未退出。
-
-让 Agent 工作时，请保留笔记库窗口：按 `⌘H` 隐藏 Obsidian，或点击黄色按钮、按 `⌘M` 最小化窗口。需要恢复时点击 Dock 中的 Obsidian 图标。若已经关闭窗口，重新打开对应笔记库，并在接入台确认“服务正在运行”。系统休眠或退出 Obsidian 后，服务也不可用。
-
-Apple 的[键盘快捷键说明](https://support.apple.com/en-us/102650)区分了隐藏、最小化和关闭窗口。
-
-## 文档
-
-小记的角色、标记、品牌组合图、[VI 视觉识别规范](assets/brand/VI.md)和[三张使用场景插画](assets/brand/scenes/README.md)可在[产品形象资产目录](assets/brand/README.md)中直接下载与复用。
-
-通过 Git 同步多台设备的活动日志，见 [Git 活动记录同步](docs/Git活动记录同步.md)。每台设备只追加自己的记录，统计汇总所有设备的日志；此能力不覆盖正文及其他共享配置的冲突处理。
-
-| 中文主文档 | 英文副本 |
-| --- | --- |
-| [如何使用 agentNote](docs/如何使用.md) | [How to Use agentNote](docs/How%20to%20Use.md) |
-| [功能与使用说明](docs/功能与使用.md) | [Features and Usage](docs/Features%20and%20Usage.md) |
-| [核心产品设计](docs/product-design.md) | [Product Design](docs/Product%20Design.md) |
-| [产品介绍 PDF](docs/agentNote：让本地%20Obsidian%20内容直接流向%20AI%20agent.pdf) | [Product Overview PDF](docs/agentNote%20-%20Local%20Obsidian%20Knowledge%20for%20AI%20Agents.pdf) |
-| [官方社区市场上架流程](docs/官方社区市场上架流程.md) | [Obsidian Community Listing Guide](docs/Obsidian%20Community%20Listing%20Guide.md) |
-| [Git 活动记录同步](docs/Git活动记录同步.md) | [Git Activity Sync](docs/Git%20Activity%20Sync.md) |
-
-<details>
-<summary><strong>产品视觉概览</strong></summary>
-
-<br>
-
-<p align="center">
-  <img src="docs/img/一图看懂agentNote.png" alt="agentNote 本地知识与 agent 工作流概览" width="520">
-</p>
-
-<p align="center">
-  <img src="docs/img/主视觉概念图.jpg" alt="agentNote 本地知识连接 AI agent 的概念图" width="260">
-</p>
-
-</details>
-
-## 开发
-
-```sh
-npm ci
-npm test
-```
-
-构建会生成 Obsidian 插件包 `main.js`，以及 Node 兼容核心测试包 `test/core-bundle.cjs`。
-
-开发命令支持 macOS、Windows 和 Linux。`npm test` 依次执行类型检查、构建和核心端到端测试，不会部署到 vault。使用 `npm run dev` 可持续监听代码并重新构建。
-
-部署到本地测试 vault 时，明确指定已有目录（路径有空格时加引号）：
-
-```sh
-npm run deploy:test -- "/absolute/path/to/test-vault"
-```
-
-开发环境使用 Node.js 22 或更新版本。也可在项目根目录的 `.env.local` 中保存 `AGENTNOTE_TEST_VAULT="/absolute/path/to/test-vault"`，之后直接运行 `npm run deploy:test`。该本地文件已被 Git 忽略；命令行路径优先于环境变量，已有环境变量优先于 `.env.local`。追加 `--dry-run` 可检查部署位置而不写入文件。
-
-默认插件配置目录为 `.obsidian`；如有自定义目录，追加 `--config-dir .obsidian-test`。部署会覆盖该目录下 agentNote 的三个插件文件，完成后在 Obsidian 中重新加载插件。
-
-## 许可证
-
-agentNote 使用 [MIT License](LICENSE) 发布。
-
-## 作者
-
-Evan · [GitHub](https://github.com/xinxinrana)
+[MIT License](LICENSE) · Evan · [GitHub](https://github.com/xinxinrana)

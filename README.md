@@ -1,160 +1,57 @@
+**English** · [简体中文](README.zh-CN.md)
+
 # agentNote
 
-Share local Obsidian notes and files with AI agents through a private, local-only HTTP service.
+**Let your notes go to work. Bring the results home.**
 
-> 中文说明：[README.zh-CN.md](README.zh-CN.md)
+Your Obsidian vault holds more than information: it holds your methods, project history, and the decisions you have already made. agentNote lets that knowledge take part in an AI agent's work—and lets the work become knowledge you can use again.
 
-agentNote is an Obsidian desktop plugin that connects your vault with agents such as Claude Code, Codex, and WorkBuddy. Share selected material through a local URL and let an agent write its work back to your vault.
+It is a local Obsidian desktop plugin for sharing material with agents such as Claude Code, Codex, and WorkBuddy, and writing their results back to your own notes.
 
-<img src="assets/brand/xiaoji-wave.svg" alt="Xiaoji, the agentNote note companion" width="120">
+![Sharing local knowledge from the Obsidian workspace.](docs/img/readme/workspace-en.png)
 
-<p align="center">
-  <img src="docs/img/整体页面展示.png" alt="agentNote running inside Obsidian with the local knowledge dashboard and agent connection panel" width="920">
-  <br>
-  <sub>Local knowledge activity and agent connections, inside Obsidian.</sub>
-</p>
+*Sharing local knowledge from the Obsidian workspace.*
 
-## Features
+## A second brain that participates
 
-- Share a note, file, folder, or selected text with an agent.
-- Include background context so the agent understands what the shared material is and why it matters.
-- Let an agent create and update Markdown notes in your vault through natural language.
-- Keep share links live: updated files resolve to their latest content.
-- Show Claude Code, Codex, and WorkBuddy in the connection panel even when they are not installed.
-- Connect another agent through the same installation task used by the three presets.
-- Explore a local knowledge profile with reuse rankings, contribution history, activity, and archive suggestions.
-- Generate a privacy-aware PNG of all-time knowledge contributions for sharing.
-- Open a note directly from its title in the knowledge profile, and review its local activity history.
-- Keep immutable, per-day cold copies of past activity logs, either automatically or on demand.
+Saving more notes is only the beginning. Their value grows when a past decision informs today's plan, a method guides a new task, or a project brief gives an agent the context it was missing.
 
-## Start in 3 minutes
+With agentNote, you choose the material that matters and share it from Obsidian. A note, a folder, or a passage can become the starting point for research, writing, or planning. Connected notes can help the agent follow the ideas behind it.
 
-Read the illustrated [How to Use guide](docs/How%20to%20Use.md) for the complete first workflow. The short version is:
+You direct the context. The agent works with it.
 
-1. Open the **agentNote connection panel** and confirm that the local service is running.
-2. Select **Connect**, send the copied installation task to an agent, and wait for it to report its installed Skill path.
-3. Right-click a vault file or folder, choose **agentNote: Share with agent**, and paste the copied Markdown link with its file name into the conversation.
-4. Ask the connected agent to read the link, or simply say “Write this to Obsidian.”
+## Knowledge outlasts the conversation
 
-<p align="center">
-  <img src="docs/img/agentnote-workflow.svg" alt="Animated workflow: connect an agent, share a note, send the local address, and write the result back to Obsidian" width="920">
-  <br>
-  <sub>Connect an agent, share a note, send its local address, and write the result back.</sub>
-</p>
+A useful result should have a life beyond the chat where it was created. Ask an agent to save its conclusions to Obsidian, and they become ordinary Markdown notes: editable, connected to your other material, and ready for the next task.
 
-## Installation
+That creates a simple cycle: **existing knowledge → agent work → new knowledge**. Each conversation can build on what came before. Changing agents does not require starting your working memory from scratch.
 
-### From the Obsidian Community Plugins directory
+## See what your knowledge contributes
 
-1. Use Obsidian **1.8.7 or later** and open **Settings → Community plugins**.
-2. Search for `agentNote`.
-3. Install and enable the plugin.
-4. Open the **agentNote connection panel** and confirm that the local service is running.
+A growing vault can make it hard to tell what is useful. agentNote's knowledge profile makes the activity visible: which documents were read or developed, which agents used them, and when the work happened.
 
-### Manual installation
+Follow a document's records back to the timeline, revisit the original note, or decide what to protect and what to archive. The goal is to help you keep useful knowledge alive. Activity values describe recorded actions; they are not a judgment of the quality of your work.
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest GitHub release](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest).
-2. Create `.obsidian/plugins/agentnote/` inside your vault.
-3. Copy the three files into that folder.
-4. Restart Obsidian or reload the plugin from **Settings → Community plugins**.
+![Knowledge contributions over time. The figures shown are from a personal vault.](docs/img/readme/profile-en.png)
 
-## Basic usage
+*Knowledge contributions over time. The figures shown are from a personal vault.*
 
-### Share content with an agent
+## Your knowledge stays yours
 
-- Right-click a file or folder and choose **agentNote: Share with agent**.
-- Select multiple files or folders in the file explorer, then choose **agentNote: Share selected items with agent**. The clipboard contains title-labeled links separated by horizontal rules, ready to paste together.
-- Select text in the editor and use **agentNote: Share selected content**.
-- Send the copied local URL to your agent.
+Your files and activity records stay in your vault. agentNote adds a local bridge to your existing workflow, without asking you to move your knowledge into another platform or create a cloud account.
 
-The response includes the current content, its background, and the local file path. Read through the link; update shared content through the share API.
+You keep using Obsidian to edit and organize your notes, and your preferred agent to do the work. agentNote does not upload your vault; material you give an agent is still processed according to that agent and its provider.
 
-### Write notes from an agent
+## Try it with one real task
 
-After connecting an agent, say one of the following:
+Connect an agent, share a piece of useful context, and ask it to save the result back. For example: “Use these project notes to draft the next steps, then write the plan to Obsidian.”
 
-- “Write this to Obsidian.”
-- “Save this to my agent notes.”
-- “Remember this in my notes.”
+[Install the latest release](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest) · [Follow the illustrated guide](docs/How%20to%20Use.md)
 
-The agentNote skill asks the agent to create a title, body, background, and tags, then write the result to the vault. The agent receives a permanent local link that can be used for later updates.
+Requires **Obsidian desktop 1.8.7 or later** on macOS, Windows, or Linux. Share links work on the same computer while the vault's local service is running. On macOS, hide Obsidian with **⌘H** or minimize it while your agent works; closing the vault window stops the service.
 
-### Connect an agent
+[Features and usage](docs/Features%20and%20Usage.md) · [Product philosophy](docs/Product%20Design.md) · [Report an issue](https://github.com/xinxinrana/agentNote-Obsidian-/issues)
 
-Open the agentNote connection panel. Claude Code, Codex, and WorkBuddy always appear; use **Connect another agent** for another agent. Every entry copies the same task: the agent downloads the local `SKILL.md`, sets up its fixed identity, and reports its actual installation path. Once registered, you can preview and edit that local Skill or add instructions specific to the agent.
+For contributors: [Development](docs/Development.md) · [Git activity sync](docs/Git%20Activity%20Sync.md) · [Brand assets](assets/brand/README.md)
 
-## Local service and privacy
-
-- The service listens on `127.0.0.1` by default, usually at `http://127.0.0.1:27182`.
-- It is available only while Obsidian is running.
-- Vault contents are not uploaded to agentNote's servers.
-- There is no account, cloud sync, telemetry service, or public sharing layer.
-- The plugin uses local filesystem access and the system clipboard for its sharing and agent integration features.
-- This is a desktop-only plugin because it uses Node.js, Electron, and a local HTTP server.
-- Choose Auto, Simplified Chinese, or English under **Settings → agentNote → Interface language**. A manual choice takes priority; Auto follows Obsidian's language (Chinese for Chinese locales, English otherwise). The interface updates immediately; restart Obsidian to update command and menu names. Notes and existing custom Skills keep their original content.
-
-## FAQ
-
-### Sharing fails because `shares.json` cannot be read or is damaged. What should I do?
-
-Finish Git synchronization, resolve conflicts in the reported file, and save it. Then disable and re-enable agentNote in **Settings → Community plugins** and share again. Reloading the plugin refreshes its data; it does not repair unresolved conflicts inside a file.
-
-New links are stored in `agentNote/data/shares/`, so a damaged legacy `shares.json` does not block new links. Historical links stored only in that legacy file still require it to be repaired. Keep the entire `shares/` directory and any existing `shares.json` when syncing. Do not delete original records to dismiss an error. If you need help, back up the file and submit feedback with the error message.
-
-### What if the connection panel reports a data problem?
-
-Service controls and Agent setup remain available, with the affected file shown in the error section. Choose **Check and repair** to restore missing document or reference indexes, or repair document-index Git conflicts with an unambiguous result. Existing files are backed up in `agentNote/data/repair-backups/` before repair.
-
-Conflicting paths, deletion states, and other ambiguous changes are preserved for manual attention. Choose **Open affected file** to open it in your default application, then **Check again**. Successful repairs reload the dashboard without restarting the plugin.
-
-### Why can't my agent connect on macOS when Obsidian is still in the Dock?
-
-agentNote's local service depends on the open vault window. Clicking the red close button or pressing `⌘W` can stop the service. The dot below Obsidian in the Dock only means the application has not quit.
-
-Keep the vault window open while your agent works. Press `⌘H` to hide Obsidian, or use the yellow button or `⌘M` to minimize the window. Click Obsidian in the Dock to return. If you closed the window, reopen the vault and confirm **Service running** in the connection panel. The service is also unavailable while the computer sleeps or after Obsidian quits.
-
-Apple's [keyboard shortcut guide](https://support.apple.com/en-us/102650) distinguishes hiding, minimizing, and closing windows.
-
-## Documentation
-
-The reusable Xiaoji character, mark, logo, visual identity guide, and [three usage illustrations](assets/brand/scenes/README.md) are in the [brand asset kit](assets/brand/README.md).
-
-For device-specific activity logs, see [Git activity sync](docs/Git%20Activity%20Sync.md). Each device appends to its own log; statistics merge all device logs. This does not resolve conflicts in note contents or other shared state.
-
-| Chinese primary document | English copy |
-| --- | --- |
-| [How to Use agentNote](docs/如何使用.md) | [How to Use agentNote](docs/How%20to%20Use.md) |
-| [Features and Usage](docs/功能与使用.md) | [Features and Usage](docs/Features%20and%20Usage.md) |
-| [Product Design](docs/product-design.md) | [Product Design](docs/Product%20Design.md) |
-| [Product Overview PDF](docs/agentNote：让本地%20Obsidian%20内容直接流向%20AI%20agent.pdf) | [Product Overview PDF](docs/agentNote%20-%20Local%20Obsidian%20Knowledge%20for%20AI%20Agents.pdf) |
-| [Obsidian Community Listing Guide](docs/官方社区市场上架流程.md) | [Obsidian Community Listing Guide](docs/Obsidian%20Community%20Listing%20Guide.md) |
-| [Git 活动记录同步](docs/Git活动记录同步.md) | [Git Activity Sync](docs/Git%20Activity%20Sync.md) |
-
-## Development
-
-```sh
-npm ci
-npm test
-```
-
-The build produces the Obsidian plugin bundle in `main.js` and the Node-compatible core test bundle in `test/core-bundle.cjs`.
-
-Development commands support macOS, Windows, and Linux. `npm test` runs type checking, builds, and core end-to-end tests without deploying to a vault. Use `npm run dev` to watch for changes and rebuild.
-
-To deploy to a local test vault, specify an existing directory (quote paths containing spaces):
-
-```sh
-npm run deploy:test -- "/absolute/path/to/test-vault"
-```
-
-Use Node.js 22 or newer for development. Alternatively, save `AGENTNOTE_TEST_VAULT="/absolute/path/to/test-vault"` in `.env.local` at the project root, then run `npm run deploy:test`. Git ignores this local file. A command-line path takes precedence over environment variables, and existing environment variables take precedence over `.env.local`. Append `--dry-run` to check the destination without writing files.
-
-The default configuration directory is `.obsidian`; append `--config-dir .obsidian-test` for a custom directory. Deployment overwrites the three agentNote plugin files there. Reload the plugin in Obsidian afterward.
-
-## License
-
-agentNote is released under the [MIT License](LICENSE).
-
-## Author
-
-Evan · [GitHub](https://github.com/xinxinrana)
+[MIT License](LICENSE) · Evan · [GitHub](https://github.com/xinxinrana)
