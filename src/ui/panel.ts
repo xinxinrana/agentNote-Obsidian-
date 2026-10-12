@@ -16,6 +16,15 @@ import { toBlob } from "html-to-image";
 import type { DashboardInsights, InsightEvent, InsightNote } from "../core/store";
 import type { DataIssue } from "../core/dataRepair";
 
+function renderMacOsReminder(parent: HTMLElement): void {
+  const reminder = parent.createDiv({ cls: "agentnote-macos-reminder" });
+  const icon = reminder.createSpan({ cls: "agentnote-macos-reminder-icon", attr: { "aria-hidden": "true" } });
+  setIcon(icon, "alert-triangle");
+  const copy = reminder.createDiv();
+  copy.createEl("strong", { text: t("使用前必看") });
+  copy.createEl("p", { text: t("macOS 使用提醒：让 Agent 持续工作时，请用 ⌘H 隐藏或最小化 Obsidian。关闭笔记库窗口会停止服务，重新打开笔记库即可恢复。") });
+}
+
 export const AGENTNOTE_VIEW = "agentnote-view";
 type ActivityLinkTarget = Pick<InsightEvent, "nodeId" | "documentId" | "shareId" | "path"> & Partial<Pick<InsightEvent, "type" | "targetKind">>;
 
@@ -155,7 +164,7 @@ export class AgentNoteView extends ItemView {
     for (const [number, titleText, description] of [["01", t("接入一个 agent"), t("在下方选择已安装的 agent 并完成接入。")], ["02", t("分享一份资料"), t("右键文件或文件夹，复制 agentNote 地址。")], ["03", t("直接开始对话"), t("把地址发给 agent，或说“写到 Obsidian”。")]] as const) {
       const step = steps.createDiv({ cls: "agentnote-quick-start-step" }); step.createSpan({ text: number }); const copy = step.createDiv(); copy.createEl("strong", { text: titleText }); copy.createEl("small", { text: description });
     }
-    guide.createEl("p", { cls: "agentnote-guide-help", text: t("macOS 使用提醒：让 Agent 持续工作时，请用 ⌘H 隐藏或最小化 Obsidian。关闭笔记库窗口会停止服务，重新打开笔记库即可恢复。") });
+    renderMacOsReminder(guide);
   }
   private activityText(event: InsightEvent): string {
     if (event.type === "node-created") return t("创建「{0}」", event.title ?? t("未命名资料"));
@@ -369,7 +378,7 @@ export class QuickStartModal extends Modal {
     this.contentEl.createSpan({ cls: "agentnote-eyebrow", text: "AGENTNOTE · QUICK START" });
     this.contentEl.createEl("h2", { text: t("三分钟开始使用") });
     this.contentEl.createEl("p", { text: t("完成一次接入、一次分享和一次对话，你就已经掌握 agentNote 的核心流程。") });
-    this.contentEl.createEl("p", { cls: "agentnote-guide-help", text: t("macOS 使用提醒：让 Agent 持续工作时，请用 ⌘H 隐藏或最小化 Obsidian。关闭笔记库窗口会停止服务，重新打开笔记库即可恢复。") });
+    renderMacOsReminder(this.contentEl);
     this.stopDemo = renderWorkflowDemo(this.contentEl);
     const steps = this.contentEl.createEl("ol", { cls: "agentnote-guide-steps" });
     for (const [title, description] of [[t("确认本地服务"), t("在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。")], [t("接入一个 agent"), t("点击目标 Agent 的“接入”，查看并复制安装任务。Agent 安装并上报后，可在接入台核对状态。")], [t("分享并开始工作"), t("右键文件或文件夹选择“agentNote: 分享给 agent”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。")]] as const) {

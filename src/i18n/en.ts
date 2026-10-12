@@ -1,5 +1,6 @@
 /** Chinese source text is the key; placeholders preserve user content verbatim. */
 export const en: Record<string, string> = {
+  "使用前必看": "Read before using",
   "全部记录": "All activity",
   "当日没有活动": "No activity on this day",
   "清除日期": "Clear date",
