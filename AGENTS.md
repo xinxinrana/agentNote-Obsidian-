@@ -14,8 +14,12 @@
 
 用户明确要求发布时，完成 GitHub Release 后，运行社区版本检查脚本。用户要求“帮我点社区检查”时也直接运行。
 
+## 社区商店发布
+
+脚本使用已登录的 360 极速浏览器 Pro，打开 agentNote 管理页及“Check for new releases”对应地址。用户主动提示帮我发布时触发
+
 - 项目内路径：`scripts/check-community-release.py`
 - 本机完整路径：`/Users/evan/Code/agentNote-Obsidian-/scripts/check-community-release.py`
 - 在项目根目录执行：`python3 scripts/check-community-release.py`
 
-脚本使用已登录的 360 极速浏览器 Pro，打开 agentNote 管理页及“Check for new releases”对应地址。以页面的扫描排队提示或对应版本审查记录确认结果；如果提示近期已经检查，请稍后再试。脚本不创建 GitHub Release，用户仅说“处理 GitHub”时默认不发布。
+
