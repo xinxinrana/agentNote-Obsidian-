@@ -662,7 +662,6 @@ class InsightsModal extends Modal {
         lastMonthColumn = column;
       }
       const cell = grid.createEl("button", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": t("{0}：{1} 知识活跃分", point.label, point.count) } });
-      cell.setAttribute("title", t("{0}：{1} 知识活跃分", point.label, point.count));
       cell.setAttribute("aria-pressed", String(this.selectedDay === point.label));
       cell.onclick = () => { this.selectedDay = this.selectedDay === point.label ? null : point.label; void this.render(); };
       if (point.count) cell.setCssProps({ ...contributionShade(point.count, min, max), "--agentnote-reveal-delay": `${Math.round(Math.pow((column - firstActiveColumn) / activeColumnSpan, 0.72) * 425 + date.getDay() * 2)}ms` });
@@ -1029,15 +1028,21 @@ export class FeedbackModal extends Modal {
   private async submit(target: "github" | "site"): Promise<void> {
     if (!await this.copy()) return;
     const params = new URLSearchParams({ title: `[${t(this.type)}] ${this.title.trim()}`, body: this.report() });
+    const url = target === "github"
+      ? `https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`
+      : "https://agentnote-feedback.pocketbay.app/";
+    this.contentEl.querySelector(".agentnote-feedback-fallback")?.remove();
     try {
-      const { shell } = await import("electron");
-      const url = target === "github"
-        ? `https://github.com/xinxinrana/agentNote-Obsidian-/issues/new?${params.toString()}`
-        : "https://agentnote-feedback.pocketbay.app/";
-      await shell.openExternal(url);
+      window.open(url, "_external");
       if (target === "site") new Notice(t("反馈站已打开，请粘贴反馈内容；首次启动时可稍等片刻。"), 6000);
       this.close();
-    } catch (error) { new Notice(t("无法打开系统浏览器：{0}", (error as Error).message)); }
+    } catch {
+      const fallback = this.contentEl.createDiv({ cls: "agentnote-feedback-fallback" });
+      fallback.createEl("p", { text: t("无法自动打开浏览器，请复制链接手动访问。") });
+      const link = fallback.createEl("input", { attr: { type: "text", readonly: "", "aria-label": t("反馈链接") } });
+      link.value = url;
+      link.onclick = () => link.select();
+    }
   }
 }
 

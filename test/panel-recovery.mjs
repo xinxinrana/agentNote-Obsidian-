@@ -24,7 +24,15 @@ class Element {
 export class ItemView { constructor(leaf) { this.app = leaf.app; this.contentEl = new Element(); } registerEvent() {} }
 export class Modal { constructor(app) { this.app = app; this.contentEl = new Element(); this.modalEl = new Element(); } close() { this.onClose?.(); } }
 export class Menu {}
-export class Setting {}
+export class Setting {
+  constructor(parent) { this.element = parent.createDiv(); }
+  setName() { return this; }
+  setDesc() { return this; }
+  addDropdown(callback) { const control = { addOptions: () => control, setValue: () => control, onChange: () => control }; callback(control); return this; }
+  addText(callback) { const control = { setPlaceholder: () => control, onChange: () => control }; callback(control); return this; }
+  addTextArea(callback) { const control = { inputEl: { addClass() {} }, setPlaceholder: () => control, onChange: () => control }; callback(control); return this; }
+  addButton(callback) { const element = this.element.createEl('button'); const control = { setButtonText: text => { element.setText(text); return control; }, setCta: () => control, onClick: handler => { element.onclick = handler; return control; } }; callback(control); return this; }
+}
 export class Notice {}
 export class App {}
 export class TFile {}
@@ -33,7 +41,7 @@ export function setIcon() {}
 `;
 try {
   await esbuild.build({
-    stdin: { contents: 'export { AgentNoteView, DataRepairModal, InsightsModal } from "./src/ui/panel"; export { VaultStore } from "./src/core/store"; export { setLanguage } from "./src/i18n";', resolveDir: process.cwd(), loader: 'ts' },
+    stdin: { contents: 'export { AgentNoteView, DataRepairModal, FeedbackModal, InsightsModal } from "./src/ui/panel"; export { VaultStore } from "./src/core/store"; export { setLanguage } from "./src/i18n";', resolveDir: process.cwd(), loader: 'ts' },
     bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(dir, 'ui.cjs'),
     loader: { '.png': 'dataurl', '.svg': 'dataurl' },
     plugins: [{ name: 'test-host', setup(build) {
@@ -42,7 +50,7 @@ try {
       build.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: stub, loader: 'js' }));
     } }],
   });
-  const { AgentNoteView, DataRepairModal, InsightsModal, VaultStore, setLanguage } = createRequire(import.meta.url)(path.join(dir, 'ui.cjs'));
+  const { AgentNoteView, DataRepairModal, FeedbackModal, InsightsModal, VaultStore, setLanguage } = createRequire(import.meta.url)(path.join(dir, 'ui.cjs'));
   globalThis.window = { setTimeout: () => 0, requestAnimationFrame: () => 0 };
   setLanguage('zh');
   const vault = path.join(dir, 'vault');
@@ -83,6 +91,12 @@ try {
   assert.ok(!elements.some(element => element.attrs.role === 'tab' && element.text === '本周'));
   assert.ok(elements.some(element => element.tag === 'button' && element.cls.startsWith('agentnote-profile-day')));
   assert.ok(elements.some(element => element.tag === 'button' && element.text === '累计'));
+  profile.tab = 'month';
+  await profile.render();
+  const graphCells = profile.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).filter(element => element.cls?.includes('agentnote-contribution-cell') && element.tag === 'button');
+  assert.ok(graphCells.length > 0);
+  assert.ok(graphCells.every(element => element.attrs['aria-label'] && !element.attrs.title));
+  console.log('PASS contribution cells expose one accessible tooltip without a native title');
   const contribution = { document: { id: 'd-launch', title: 'Launch plan', path: 'Launch plan.md' }, score: 3, construction: 3, reuse: 0, connection: 0, organization: 0 };
   snapshot.documents = [contribution];
   snapshot.weeklyDocuments = [contribution];
@@ -103,6 +117,28 @@ try {
     assert.doesNotMatch(profile.contentEl.textContent, /访问分享链接「Research notes」/);
   }
   console.log('PASS profile search, collaborator/date filters, privacy, inline day records and document-to-timeline navigation');
+  const copied = [];
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText: async value => copied.push(value) } } });
+  const feedback = new FeedbackModal({}, { manifest: { version: '0.5.3' } });
+  feedback.onOpen();
+  feedback.title = 'Feedback link test';
+  const opened = [];
+  window.open = (url, target) => { opened.push({ url, target }); return null; };
+  const feedbackButton = (modal, label) => modal.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find(element => element.tag === 'button' && element.text === label);
+  feedbackButton(feedback, '前往 GitHub').onclick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened[0].target, '_external');
+  assert.match(opened[0].url, /github\.com\/xinxinrana\/agentNote-Obsidian-\/issues\/new\?/);
+  assert.match(copied[0], /Feedback link test/);
+  assert.ok(!feedback.contentEl.children.some(element => element.cls === 'agentnote-feedback-fallback'));
+  window.open = () => { throw new Error('blocked'); };
+  const blockedFeedback = new FeedbackModal({}, { manifest: { version: '0.5.3' } });
+  blockedFeedback.onOpen();
+  blockedFeedback.title = 'Blocked feedback';
+  feedbackButton(blockedFeedback, '前往反馈站').onclick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(blockedFeedback.contentEl.children.at(-1).children[1].value, 'https://agentnote-feedback.pocketbay.app/');
+  console.log('PASS feedback uses the external browser and leaves a manual URL when opening fails');
   const file = path.join(vault, 'agentNote/data/documents.json');
   const damaged = process.env.AGENTNOTE_DAMAGED_DOCUMENTS
     ? await fs.readFile(process.env.AGENTNOTE_DAMAGED_DOCUMENTS, 'utf8')
