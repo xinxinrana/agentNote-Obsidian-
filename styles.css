@@ -1844,8 +1844,8 @@ span.agentnote-agent-icon svg {
 .agentnote-panel .agentnote-quick-start { margin: 22px 0 0; border: 1px solid var(--agentnote-line); border-radius: 11px; background: var(--background-secondary); }
 .agentnote-panel .agentnote-agents-section { gap: 13px; margin-top: 20px; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .agentnote-agents-section > .agentnote-section-heading h4 { font-size: 13px; }
-.agentnote-agent-list { display: flex; flex-direction: column; gap: 3px; }
-.agentnote-agent-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 28px; align-items: center; gap: 9px; min-height: 49px; border-radius: 8px; }
+.agentnote-agent-list { display: flex; flex-direction: column; gap: 2px; padding: 6px; border: 1px solid var(--agentnote-line); border-radius: 11px; background: var(--background-primary); }
+.agentnote-agent-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 28px; align-items: center; gap: 9px; min-height: 51px; padding: 5px 8px; border-radius: 7px; box-sizing: border-box; }
 .agentnote-agent-row:hover { background: var(--background-secondary); }
 .agentnote-agent-identity { min-width: 0; }
 .agentnote-agent-identity strong { display: block; overflow: hidden; font-size: 12px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }

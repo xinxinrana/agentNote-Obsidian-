@@ -203,9 +203,9 @@ export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "po
 
 1. 从 ${base}/api/skill.md 下载 Skill 文件，保存为你实际使用的技能目录中的 agentnote/SKILL.md，并完成当前 Agent 所需的技能配置。
 2. 在同一目录创建 agentnote.identity.json，填写你固定的 id 和 name，例如 {"id":"your-agent-id","name":"Your Agent Name"}。之后按 Skill 说明使用这份身份。
-3. 安装后 POST ${base}/api/agents/register，上报 {"name":"你的 Agent 名称","skillPath":"SKILL.md 的绝对路径"}。上报名称与身份文件中的 name 保持一致，供 Obsidian 管理这份 Skill。可选填 "iconPath":"同一 Skill 目录中的 PNG、ICO 或 SVG 图标绝对路径"，让接入台显示你的图标；不提供则使用默认图标。
+3. 安装后 POST ${base}/api/agents/register，上报 {"name":"你的 Agent 名称","skillPath":"SKILL.md 的绝对路径"}。上报名称与身份文件中的 name 保持一致，供 Obsidian 管理这份 Skill。可选的 iconPath 是上报当前 Agent 自身 ico，不是 agentNote 的图标。优先从当前 Agent 的官方网站获取其官方 PNG、ICO 或 SVG 图标；官网没有时可用本地安装资源中的官方图标。将确认属于当前 Agent 的图标复制到同一 Skill 目录，并附带 "iconPath":"该图标的绝对路径"；无法确认或获取时就省略，接入台会显示默认图标。
 
-如当前 Agent 支持为 Skill 设置图标，推荐从 ${base}/api/skill-icon.svg 下载并使用；不支持则跳过。
+如当前 Agent 支持为 Skill 设置图标，可从 ${base}/api/skill-icon.svg 下载 agentNote 的产品图标，仅用于 agentNote Skill 自身；它不是当前 Agent 的 Logo，不要作为 iconPath 上报。不支持 Skill 图标则跳过。
 
 最后简单确认新会话能够使用该 Skill。如果本地链接无法访问，提醒用户打开 Obsidian 的 agentNote 服务。`;
 }

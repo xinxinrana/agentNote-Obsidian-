@@ -4,8 +4,12 @@ import * as path from "path";
 import { createHash, randomUUID } from "crypto";
 import { constants } from "fs";
 import { parse } from "yaml";
+import xiaojiMarkUrl from "../../assets/brand/xiaoji-mark.svg";
 
 export interface AgentConnection { name: string; skillPath: string; connectedAt: string; icon?: string }
+
+const productIcon = `data:image/svg+xml;base64,${Buffer.from(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1))).toString("base64")}`;
+function isProductIcon(icon?: string): boolean { return icon === productIcon; }
 
 function isAgentConnection(value: unknown): value is AgentConnection {
   return !!value && typeof value === "object"
@@ -60,7 +64,7 @@ export class AgentConnections {
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
     const value: unknown = JSON.parse(raw);
     if (!Array.isArray(value) || !value.every(isAgentConnection)) throw new Error(t("本机 Agent 接入记录格式无效"));
-    return value;
+    return value.map((connection) => isProductIcon(connection.icon) ? { ...connection, icon: undefined } : connection);
   }
 
   private async save(connections: AgentConnection[]): Promise<void> {
@@ -94,7 +98,8 @@ export class AgentConnections {
         : mime === "image/x-icon" ? bytes.subarray(0, 4).equals(Buffer.from("00000100", "hex"))
           : /<svg[\s>]/i.test(bytes.toString("utf8").slice(0, 1024));
       if (!valid) throw new Error(t("图标需要是小于 128 KB 的 PNG、ICO 或 SVG 文件"));
-      icon = `data:${mime};base64,${bytes.toString("base64")}`;
+      const candidate = `data:${mime};base64,${bytes.toString("base64")}`;
+      if (!isProductIcon(candidate)) icon = candidate;
     }
     return this.queued(async () => {
       const connections = await this.list();

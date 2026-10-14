@@ -96,8 +96,8 @@ export const ENGLISH_INSTALL_PROMPT = `Please install the agentNote Skill. It is
 
 1. Download the Skill from {{baseUrl}}/api/skill.md and save it as agentnote/SKILL.md in your actual skills directory. Complete any Skill configuration required by your agent.
 2. Create agentnote.identity.json in the same directory with your fixed id and name, for example {"id":"your-agent-id","name":"Your Agent Name"}. Use this identity as described in the Skill.
-3. After installation, POST {{baseUrl}}/api/agents/register with {"name":"Your Agent Name","skillPath":"<absolute path to SKILL.md>"}. Use the same name as in the identity file so Obsidian can manage this Skill. Optionally include "iconPath":"<absolute path to a PNG, ICO, or SVG in the same Skill directory>" to display your agent's icon; otherwise the default icon is used.
+3. After installation, POST {{baseUrl}}/api/agents/register with {"name":"Your Agent Name","skillPath":"<absolute path to SKILL.md>"}. Use the same name as in the identity file so Obsidian can manage this Skill. The optional iconPath reports this Agent's own icon, not the agentNote icon. Prefer an official PNG, ICO, or SVG icon from this Agent's own website; if unavailable, use an official icon from its local installation. Copy the confirmed icon into the same Skill directory and include "iconPath":"<absolute path to that icon>". If you cannot confirm or obtain one, omit iconPath and the panel will show a default icon.
 
-If your agent supports Skill icons, use {{baseUrl}}/api/skill-icon.svg. Otherwise, skip it.
+If your agent supports Skill icons, you may use {{baseUrl}}/api/skill-icon.svg for the agentNote Skill itself. This is the agentNote product icon, not your agent's logo; never report it as iconPath. Otherwise, skip it.
 
 Finally, briefly confirm that a new conversation can use the Skill. If the local URL is unavailable, ask the user to start the agentNote service in Obsidian.`;

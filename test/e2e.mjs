@@ -809,7 +809,9 @@ try {
   await test("installation prompt gives one shared skill, identity setup, and first report", async () => {
     const prompt = renderManualInstallPrompt({ port });
     assert.match(prompt, /\/api\/skill\.md/); assert.match(prompt, /SKILL\.md/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /\/api\/agents\/register/); assert.match(prompt, /skillPath/); assert.match(prompt, /最后简单确认/);
-    assert.match(prompt, /如当前 Agent 支持为 Skill 设置图标，推荐从 http:\/\/127\.0\.0\.1:\d+\/api\/skill-icon\.svg 下载并使用；不支持则跳过/);
+    assert.match(prompt, /iconPath 是上报当前 Agent 自身 ico，不是 agentNote 的图标/);
+    assert.match(prompt, /优先从当前 Agent 的官方网站获取其官方 PNG、ICO 或 SVG 图标/);
+    assert.match(prompt, /\/api\/skill-icon\.svg.*不要作为 iconPath 上报/);
     assert.doesNotMatch(prompt, /\/api\/health/);
   });
   await test("first Agent report stores a local path and matches names case-insensitively", async () => {
@@ -825,12 +827,23 @@ try {
       assert.equal(connected.status, 200);
       assert.equal(connected.data.skillPath, await fsp.realpath(skillPath));
       assert.equal((await connections.list()).length, 1);
+      const productIconPath = path.join(skillDir, "product.svg");
+      await fsp.copyFile("assets/brand/xiaoji-mark.svg", productIconPath);
+      const productIconReport = await api("POST", "/api/agents/register", { name: "Codex", skillPath, iconPath: productIconPath });
+      assert.equal(productIconReport.status, 200);
+      assert.equal(productIconReport.data.icon, undefined);
       const iconPath = path.join(skillDir, "agent.svg");
       await fsp.writeFile(iconPath, '<svg xmlns="http://www.w3.org/2000/svg"/>');
       const withIcon = await api("POST", "/api/agents/register", { name: "Codex", skillPath, iconPath });
       assert.equal(withIcon.status, 200);
       assert.match(withIcon.data.icon, /^data:image\/svg\+xml;base64,/);
       assert.equal((await connections.list())[0].icon, withIcon.data.icon);
+      const legacyFile = path.join(directory, "legacy-connections.json");
+      const productIconData = `data:image/svg+xml;base64,${(await fsp.readFile(productIconPath)).toString("base64")}`;
+      const legacyContent = JSON.stringify([{ name: "Example", skillPath, connectedAt: new Date().toISOString(), icon: productIconData }]);
+      await fsp.writeFile(legacyFile, legacyContent);
+      assert.equal((await new AgentConnections(legacyFile).list())[0].icon, undefined);
+      assert.equal(await fsp.readFile(legacyFile, "utf8"), legacyContent);
       assert.equal((await api("POST", "/api/agents/register", { name: "Codex", skillPath })).status, 200);
       assert.equal((await connections.list()).length, 1);
       assert.equal((await connections.list())[0].icon, withIcon.data.icon);

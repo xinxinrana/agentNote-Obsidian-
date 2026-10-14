@@ -61,6 +61,8 @@ export default class AgentNotePlugin extends Plugin {
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
     const mark = new DOMParser().parseFromString(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1)), "image/svg+xml").documentElement;
     mark.querySelector("title")?.remove();
+    mark.querySelectorAll("path").forEach((shape) => { shape.setAttribute("fill", "none"); shape.setAttribute("stroke", "currentColor"); });
+    mark.querySelectorAll("ellipse").forEach((shape) => shape.setAttribute("fill", "currentColor"));
     addIcon("agentnote-mark", `<g transform="scale(0.78125)">${mark.innerHTML}</g>`);
     this.addRibbonIcon("agentnote-mark", t("打开 agentNote 接入台"), () => void this.activatePanel());
     this.addCommand({ id: "open-panel", name: t("打开接入台"), callback: () => void this.activatePanel() });
