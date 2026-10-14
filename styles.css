@@ -329,6 +329,7 @@
 
 .agentnote-guide-example code { white-space: normal; line-height: 1.5; }
 .agentnote-guide-help { margin-top: 10px; color: var(--text-muted); font-size: 0.86em; }
+.agentnote-guide-introduction { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; color: var(--text-muted); font-size: 0.86em; }
 
 @media (max-width: 520px) {
   .agentnote-quick-start-steps { grid-template-columns: 1fr; }

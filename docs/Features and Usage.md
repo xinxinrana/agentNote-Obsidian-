@@ -68,7 +68,7 @@ Select **Connected** to preview the full installed Skill. The additional-instruc
 
 ### Feedback
 
-Select **Author Evan · Feedback** at the bottom of the connection panel. Enter a title and details, then choose GitHub Issue or the feedback site. agentNote copies the report first. GitHub opens with the title and details pre-filled; paste the copied report into the feedback site after it opens. The site may take a moment to start on the first visit. You can also copy the report without opening either destination.
+The first-use tutorial links to the product introduction for a quick overview. Select **Author Evan · Feedback** at the bottom of the connection panel, enter a title and details, then choose GitHub Issue or the feedback site. agentNote copies the report first. GitHub opens with the title and details pre-filled; paste the copied report into the feedback site after it opens.
 
 ## 4. Archive and protect notes
 

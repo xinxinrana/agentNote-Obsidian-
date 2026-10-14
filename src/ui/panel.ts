@@ -329,8 +329,8 @@ export class AgentNoteView extends ItemView {
     const list = section.createDiv({ cls: "agentnote-agent-list" });
     for (const agent of entries) {
       const card = list.createDiv({ cls: "agentnote-agent-row" });
-      if (agent.id) {
-        const icon = card.createEl("img", { cls: "agentnote-agent-icon", attr: { src: AGENT_ICONS[agent.id], alt: t("{0} 图标", agent.name) } });
+      if (agent.connection?.icon || agent.id) {
+        const icon = card.createEl("img", { cls: "agentnote-agent-icon", attr: { src: agent.connection?.icon ?? AGENT_ICONS[agent.id], alt: t("{0} 图标", agent.name) } });
         icon.decoding = "async";
       } else setIcon(card.createSpan({ cls: "agentnote-agent-icon" }), "bot");
       const identity = card.createDiv({ cls: "agentnote-agent-identity" });
@@ -378,6 +378,9 @@ export class QuickStartModal extends Modal {
     this.contentEl.createSpan({ cls: "agentnote-eyebrow", text: "AGENTNOTE · QUICK START" });
     this.contentEl.createEl("h2", { text: t("三分钟开始使用") });
     this.contentEl.createEl("p", { text: t("完成一次接入、一次分享和一次对话，你就已经掌握 agentNote 的核心流程。") });
+    const introduction = this.contentEl.createDiv({ cls: "agentnote-guide-introduction" });
+    introduction.createSpan({ text: t("想先了解产品全貌？") });
+    introduction.createEl("a", { text: t("浏览产品介绍"), cls: "external-link", attr: { href: "https://agentnote-intro.app.workbuddy.host/", target: "_blank", rel: "noopener noreferrer" } });
     renderMacOsReminder(this.contentEl);
     this.stopDemo = renderWorkflowDemo(this.contentEl);
     const steps = this.contentEl.createEl("ol", { cls: "agentnote-guide-steps" });

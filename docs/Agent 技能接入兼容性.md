@@ -10,7 +10,7 @@ agentnote/
 └── agentnote.identity.json
 ```
 
-身份文件至少包含当前 Agent 固定的 `id` 和 `name`。安装完成后，通过 `POST /api/agents/register` 上报 `{"name":"Agent 名称","skillPath":"SKILL.md 的绝对路径"}`。名称须与身份文件一致。插件核对文件存在、Skill 元信息和身份文件后，将真实路径登记在本机配置中。接入控制面板显示完整 Skill 预览，并提供独立的附加要求输入框；也可以解锁编辑全文。保存时保留备份，外部修改过的文件不会被静默覆盖。
+身份文件至少包含当前 Agent 固定的 `id` 和 `name`。安装完成后，通过 `POST /api/agents/register` 上报 `{"name":"Agent 名称","skillPath":"SKILL.md 的绝对路径"}`。也可附带 `iconPath`，指向同一 Skill 目录中不超过 128 KB 的 PNG、ICO 或 SVG 文件；不提供时使用默认图标。名称须与身份文件一致。插件核对文件存在、Skill 元信息和身份文件后，将真实路径登记在本机配置中。接入控制面板显示完整 Skill 预览，并提供独立的附加要求输入框；也可以解锁编辑全文。保存时保留备份，外部修改过的文件不会被静默覆盖。
 
 如 Agent 支持 Skill 图标，可从 `GET http://127.0.0.1:27182/api/skill-icon.svg` 下载小记图标，按该 Agent 的规范配置；不支持时直接跳过。端口以本机设置为准。
 

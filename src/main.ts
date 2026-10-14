@@ -283,8 +283,8 @@ export default class AgentNotePlugin extends Plugin {
   }
   async startServer(quiet = false): Promise<void> {
     if (this.server) return;
-    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity), listLinks: (sourcePath) => this.listShareLinks(sourcePath), registerAgent: async (name, skillPath) => {
-      const connection = await this.connections.register(name, skillPath);
+    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity), listLinks: (sourcePath) => this.listShareLinks(sourcePath), registerAgent: async (name, skillPath, iconPath) => {
+      const connection = await this.connections.register(name, skillPath, iconPath);
       this.refreshPanels();
       return connection;
     } });

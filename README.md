@@ -2,6 +2,8 @@
 
 # agentNote
 
+[Product website](https://agentnote-intro.app.workbuddy.host/)
+
 **Let your notes go to work. Bring the results home.**
 
 Your Obsidian vault holds more than information: it holds your methods, project history, and the decisions you have already made. agentNote lets that knowledge take part in an AI agent's work—and lets the work become knowledge you can use again.

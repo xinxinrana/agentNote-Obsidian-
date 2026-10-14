@@ -96,7 +96,7 @@ export const ENGLISH_INSTALL_PROMPT = `Please install the agentNote Skill. It is
 
 1. Download the Skill from {{baseUrl}}/api/skill.md and save it as agentnote/SKILL.md in your actual skills directory. Complete any Skill configuration required by your agent.
 2. Create agentnote.identity.json in the same directory with your fixed id and name, for example {"id":"your-agent-id","name":"Your Agent Name"}. Use this identity as described in the Skill.
-3. After installation, POST {{baseUrl}}/api/agents/register with {"name":"Your Agent Name","skillPath":"<absolute path to SKILL.md>"}. Use the same name as in the identity file so Obsidian can manage this Skill.
+3. After installation, POST {{baseUrl}}/api/agents/register with {"name":"Your Agent Name","skillPath":"<absolute path to SKILL.md>"}. Use the same name as in the identity file so Obsidian can manage this Skill. Optionally include "iconPath":"<absolute path to a PNG, ICO, or SVG in the same Skill directory>" to display your agent's icon; otherwise the default icon is used.
 
 If your agent supports Skill icons, use {{baseUrl}}/api/skill-icon.svg. Otherwise, skip it.
 

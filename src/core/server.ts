@@ -9,7 +9,7 @@ import xiaojiMarkUrl from "../../assets/brand/xiaoji-mark.svg";
 export type AgentOperation = "read" | "created" | "updated" | "archived";
 export interface AgentActivity { operation: AgentOperation; title: string; nodeId?: string; shareId?: string; targetKind?: ShareTarget["kind"]; actor?: ActivityContext["actor"] }
 export interface ShareLinkInfo { original: string; link: string; displayText?: string; targetPath: string | null; subpath: string | null; status: "resolved" | "unresolved" }
-export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void; listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]>; registerAgent?: (name: string, skillPath: string) => Promise<AgentConnection> }
+export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void; listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]>; registerAgent?: (name: string, skillPath: string, iconPath?: string) => Promise<AgentConnection> }
 const nodeView = (node: Awaited<ReturnType<VaultStore["getNode"]>>) => ({ ...node, warnings: qualityWarnings(node) });
 
 async function readBody(req: http.IncomingMessage): Promise<unknown> {
@@ -62,9 +62,10 @@ export class AgentServer {
     }
     if (url.pathname === "/api/agents/register" && method === "POST") {
       if (!this.opts.registerAgent) throw new StoreError(503, t("Agent 接入登记不可用"));
-      const body = await readBody(req) as { name?: unknown; skillPath?: unknown };
+      const body = await readBody(req) as { name?: unknown; skillPath?: unknown; iconPath?: unknown };
       if (typeof body.name !== "string" || typeof body.skillPath !== "string") throw new StoreError(400, t("请提供 name 和 skillPath"));
-      try { return send(res, 200, { ok: true, data: await this.opts.registerAgent(body.name, body.skillPath) }); }
+      if (body.iconPath !== undefined && typeof body.iconPath !== "string") throw new StoreError(400, t("图标必须是 Skill 目录中的图片文件"));
+      try { return send(res, 200, { ok: true, data: await this.opts.registerAgent(body.name, body.skillPath, body.iconPath) }); }
       catch (error) { throw new StoreError(400, error instanceof Error ? error.message : String(error)); }
     }
     if (parts[0] !== "api") return send(res, 404, { ok: false, error: t("接口不存在") });

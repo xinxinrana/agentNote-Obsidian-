@@ -5,13 +5,14 @@ import { createHash, randomUUID } from "crypto";
 import { constants } from "fs";
 import { parse } from "yaml";
 
-export interface AgentConnection { name: string; skillPath: string; connectedAt: string }
+export interface AgentConnection { name: string; skillPath: string; connectedAt: string; icon?: string }
 
 function isAgentConnection(value: unknown): value is AgentConnection {
   return !!value && typeof value === "object"
     && "name" in value && typeof value.name === "string"
     && "skillPath" in value && typeof value.skillPath === "string"
-    && "connectedAt" in value && typeof value.connectedAt === "string";
+    && "connectedAt" in value && typeof value.connectedAt === "string"
+    && (!("icon" in value) || typeof value.icon === "string");
 }
 
 const ADDITION_HEADER = /\n\n<!-- agentNote:additional -->\n## (?:附加要求|Additional instructions)\n\n/g;
@@ -69,7 +70,7 @@ export class AgentConnections {
     finally { await fs.rm(temporary, { force: true }); }
   }
 
-  async register(name: string, reportedPath: string): Promise<AgentConnection> {
+  async register(name: string, reportedPath: string, reportedIconPath?: string): Promise<AgentConnection> {
     const cleanName = name.trim();
     if (!cleanName || cleanName.length > 80 || !path.isAbsolute(reportedPath) || path.basename(reportedPath) !== "SKILL.md") throw new Error(t("请上报 Agent 名称和 SKILL.md 的绝对路径"));
     const skillPath = await fs.realpath(reportedPath);
@@ -80,10 +81,25 @@ export class AgentConnections {
     const identity: unknown = JSON.parse(await fs.readFile(identityPath, "utf8"));
     if (!identity || typeof identity !== "object" || !("id" in identity) || typeof identity.id !== "string" || !identity.id.trim()
       || !("name" in identity) || typeof identity.name !== "string" || agentNameKey(identity.name) !== agentNameKey(cleanName)) throw new Error(t("身份文件中的名称必须与上报的 Agent 名称一致"));
+    let icon: string | undefined;
+    if (reportedIconPath !== undefined) {
+      if (!path.isAbsolute(reportedIconPath)) throw new Error(t("图标必须是 Skill 目录中的图片文件"));
+      const iconPath = await fs.realpath(reportedIconPath);
+      if (path.dirname(iconPath) !== path.dirname(skillPath)) throw new Error(t("图标必须是 Skill 目录中的图片文件"));
+      const mime = { ".png": "image/png", ".ico": "image/x-icon", ".svg": "image/svg+xml" }[path.extname(iconPath).toLowerCase()];
+      const iconStat = await fs.stat(iconPath);
+      if (!mime || !iconStat.isFile() || !iconStat.size || iconStat.size > 128_000) throw new Error(t("图标需要是小于 128 KB 的 PNG、ICO 或 SVG 文件"));
+      const bytes = await fs.readFile(iconPath);
+      const valid = mime === "image/png" ? bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))
+        : mime === "image/x-icon" ? bytes.subarray(0, 4).equals(Buffer.from("00000100", "hex"))
+          : /<svg[\s>]/i.test(bytes.toString("utf8").slice(0, 1024));
+      if (!valid) throw new Error(t("图标需要是小于 128 KB 的 PNG、ICO 或 SVG 文件"));
+      icon = `data:${mime};base64,${bytes.toString("base64")}`;
+    }
     return this.queued(async () => {
       const connections = await this.list();
       const previous = connections.findIndex((item) => agentNameKey(item.name) === agentNameKey(cleanName));
-      const connection = { name: cleanName, skillPath, connectedAt: new Date().toISOString() };
+      const connection = { name: cleanName, skillPath, connectedAt: new Date().toISOString(), icon: icon ?? (previous === -1 ? undefined : connections[previous].icon) };
       if (previous === -1) connections.push(connection); else connections[previous] = connection;
       await this.save(connections);
       return connection;
