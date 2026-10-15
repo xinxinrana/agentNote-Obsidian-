@@ -10,6 +10,7 @@ export function validDocuments(value: unknown): value is DocumentRecord[] {
   return Array.isArray(value) && value.every(d => record(d) && ['id', 'path', 'title', 'created', 'updated'].every(key => typeof d[key] === 'string') && (d.deletedAt === undefined || typeof d.deletedAt === 'string') && (d.protected === undefined || typeof d.protected === 'boolean'));
 }
 function valid(name: string, value: unknown): boolean {
+  if (name.startsWith(`events${path.sep}`)) return record(value) && typeof value.at === 'string' && typeof value.type === 'string' && typeof value.eventId === 'string' && value.eventId === path.basename(name, '.json') && (value.deviceId === undefined || (typeof value.deviceId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(value.deviceId)));
   if (name === 'documents.json') return validDocuments(value);
   if (name === 'references.json') return record(value) && Object.values(value).every(targets => Array.isArray(targets) && targets.every(target => typeof target === 'string'));
   return Array.isArray(value) && value.every(event => record(event) && typeof event.at === 'string' && typeof event.type === 'string' && (event.eventId === undefined || typeof event.eventId === 'string') && (event.deviceId === undefined || (typeof event.deviceId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(event.deviceId))));
@@ -52,7 +53,15 @@ export function mergeDocumentConflicts(raw: string): DocumentRecord[] | null {
 
 async function candidates(directory: string): Promise<string[]> {
   const files = await fs.readdir(directory).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return []; throw error; });
-  return ['documents.json', 'references.json', ...files.filter(name => name === 'events.json' || /^events\.[a-zA-Z0-9-]+\.json$/.test(name))];
+  const existing = files.filter(name => name === 'documents.json' || name === 'references.json' || name === 'events.json' || /^events\.[a-zA-Z0-9-]+\.json$/.test(name));
+  const months = await fs.readdir(path.join(directory, 'events'), { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return []; throw error; });
+  for (const month of months) {
+    if (!month.isDirectory() || !/^\d{4}-\d{2}$/.test(month.name)) continue;
+    for (const name of await fs.readdir(path.join(directory, 'events', month.name))) {
+      if (/^[a-f0-9-]{36}\.json$/i.test(name)) existing.push(path.join('events', month.name, name));
+    }
+  }
+  return existing;
 }
 async function inspect(directory: string, name: string): Promise<{ issue?: DataIssue; raw?: string; replacement?: string }> {
   const file = `agentNote/data/${name}`;
@@ -72,6 +81,9 @@ async function inspect(directory: string, name: string): Promise<{ issue?: DataI
 }
 export async function inspectData(directory: string): Promise<DataIssue[]> {
   const issues: DataIssue[] = [];
+  const eventsPath = path.join(directory, 'events');
+  const events = await fs.stat(eventsPath).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+  if (events && !events.isDirectory()) issues.push({ file: 'agentNote/data/events', kind: 'invalid', canRepair: false });
   for (const name of await candidates(directory)) { const result = await inspect(directory, name); if (result.issue) issues.push(result.issue); }
   return issues;
 }

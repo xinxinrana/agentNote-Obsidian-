@@ -30,6 +30,8 @@ export default class AgentNotePlugin extends Plugin {
   store!: VaultStore;
   connections!: AgentConnections;
   server: AgentServer | null = null;
+  serverPortInUse = false;
+  private portConflictModal: PortConflictModal | null = null;
   private panelRefreshTimer: number | null = null;
   private coldBackupTimer: number | null = null;
   private coldBackupTask: Promise<{ created: number; existing: number }> | null = null;
@@ -86,6 +88,7 @@ export default class AgentNotePlugin extends Plugin {
   }
   onunload(): void {
     removeIcon("agentnote-mark");
+    this.portConflictModal?.close();
     this.bulkModal?.close();
     if (this.panelRefreshTimer !== null) window.clearTimeout(this.panelRefreshTimer);
     if (this.coldBackupTimer !== null) window.clearTimeout(this.coldBackupTimer);
@@ -153,7 +156,7 @@ export default class AgentNotePlugin extends Plugin {
     }
     void this.store.recordLocalActivity(type, filePath, oldPath)
       .then((recorded) => { if (recorded) this.schedulePanelRefresh(); })
-      .catch(() => undefined);
+      .catch((error) => { new Notice(t("本次活动未记录：{0}", error instanceof Error ? error.message : String(error))); this.schedulePanelRefresh(); });
   }
   private async chooseBulkActivity(count: number): Promise<boolean> {
     if (this.settings.bulkActivityAction !== "ask") return this.settings.bulkActivityAction === "record";
@@ -191,7 +194,7 @@ export default class AgentNotePlugin extends Plugin {
             const file = this.app.vault.getAbstractFileByPath(item.path);
             if (file instanceof TFile) this.trackDocumentReferences(file, record);
           }
-        } catch { /* Keep processing other vault changes. */ }
+        } catch (error) { new Notice(t("本次活动未记录：{0}", error instanceof Error ? error.message : String(error))); this.schedulePanelRefresh(); }
       }
     });
     this.localActivityTask = task.catch(() => undefined);
@@ -275,7 +278,7 @@ export default class AgentNotePlugin extends Plugin {
     if (!this.isTrackedMarkdown(file)) return;
     void this.store.recordDocumentReferences(file.path, this.referenceTargets(file), recordAdditions)
       .then(() => { if (recordAdditions) this.schedulePanelRefresh(); })
-      .catch(() => undefined);
+      .catch(() => this.schedulePanelRefresh());
   }
   connectedAgents(): Promise<AgentConnection[]> { return this.connections.list(); }
   async forgetAgent(name: string): Promise<void> { await this.connections.remove(name); this.refreshPanels(); }
@@ -290,8 +293,23 @@ export default class AgentNotePlugin extends Plugin {
       this.refreshPanels();
       return connection;
     } });
-    try { await this.server.start(); if (!quiet) new Notice(t("agentNote 服务已启动：127.0.0.1:{0}", this.server.port)); }
-    catch (error) { this.server = null; new Notice(t("agentNote 服务启动失败：{0}", (error as Error).message)); }
+    try {
+      await this.server.start();
+      this.serverPortInUse = false;
+      this.portConflictModal?.close();
+      if (!quiet) new Notice(t("agentNote 服务已启动：127.0.0.1:{0}", this.server.port));
+    } catch (error) {
+      this.server = null;
+      this.serverPortInUse = (error as NodeJS.ErrnoException).code === "EADDRINUSE";
+      new Notice(this.serverPortInUse
+        ? t("端口 {0} 已被占用。若另一个仓库正在分享，请先在那个仓库的接入台停止服务，再回到这里点击启动服务。", this.settings.port)
+        : t("agentNote 服务启动失败：{0}", (error as Error).message), 10000);
+      if (this.serverPortInUse) this.app.workspace.onLayoutReady(() => {
+        if (!this.serverPortInUse || this.portConflictModal) return;
+        this.portConflictModal = new PortConflictModal(this.app, this.settings.port, () => { this.portConflictModal = null; });
+        this.portConflictModal.open();
+      });
+    }
     this.refreshPanels();
   }
   async stopServer(quiet = false): Promise<void> { if (!this.server) return; await this.server.stop(); this.server = null; if (!quiet) new Notice(t("agentNote 服务已停止。")); this.refreshPanels(); }
@@ -319,10 +337,13 @@ export default class AgentNotePlugin extends Plugin {
   private async shareSelection(editor: Editor): Promise<void> {
     const selection = editor.getSelection();
     if (!selection) return;
-    const nodeId = await this.currentNodeId();
-    if (nodeId) { const share = await this.store.createShare(nodeId, selection); await this.copyShareLink(share.id, (await this.store.getNode(nodeId)).title); return; }
-    const file = this.app.workspace.getActiveFile();
-    if (file) await this.sharePath(file.path, selection);
+    try {
+      this.shareServicePort();
+      const nodeId = await this.currentNodeId();
+      if (nodeId) { const share = await this.store.createShare(nodeId, selection); await this.copyShareLink(share.id, (await this.store.getNode(nodeId)).title); return; }
+      const file = this.app.workspace.getActiveFile();
+      if (file) await this.sharePath(file.path, selection);
+    } catch (error) { new Notice(t("分享失败：{0}", (error as Error).message)); }
   }
   private async shareCurrentFile(): Promise<void> { const file = this.app.workspace.getActiveFile(); if (file) await this.sharePath(file.path); }
   private async sharePath(relPath: string, selection?: string): Promise<void> {
@@ -330,6 +351,7 @@ export default class AgentNotePlugin extends Plugin {
   }
   async shareFileFromPanel(relPath: string, selection?: string): Promise<boolean> {
     try {
+      this.shareServicePort();
       const share = await this.store.createPathShare(relPath, undefined, selection);
       await this.copyShareLink(share.id, path.basename(relPath));
       return true;
@@ -339,6 +361,8 @@ export default class AgentNotePlugin extends Plugin {
     }
   }
   private async sharePaths(files: TAbstractFile[]): Promise<void> {
+    try { this.shareServicePort(); }
+    catch (error) { new Notice(t("分享失败：{0}", (error as Error).message)); return; }
     const links: { id: string; title: string }[] = [];
     const failures: string[] = [];
     const seen = new Set<string>();
@@ -359,15 +383,18 @@ export default class AgentNotePlugin extends Plugin {
     }
     if (failures.length) new Notice(t("有 {0} 项分享失败：{1}", failures.length, failures.join("；")), 7000);
   }
-  private shareUrl(id: string): string {
-    const port = this.server?.port ?? this.settings.port;
-    return `http://127.0.0.1:${port}/api/shares/${id}/resolve`;
+  private shareServicePort(): number {
+    const port = this.server?.port;
+    if (!port) throw new Error(t("当前仓库的本地服务未运行，请先在接入台启动服务。"));
+    return port;
   }
+  private shareUrl(id: string): string { return `http://127.0.0.1:${this.shareServicePort()}/api/shares/${id}/resolve`; }
   private shareMarkdownLink(id: string, title: string): string {
     const label = title.replace(/[\\[\]]/g, (character) => `\\${character}`);
     return `[${label}](${this.shareUrl(id)})`;
   }
   private async writeShareLinks(links: { id: string; title: string }[]): Promise<boolean> {
+    this.shareServicePort();
     const text = links.map(({ id, title }) => this.shareMarkdownLink(id, title)).join("\n\n---\n\n");
     const html = links.map(({ id, title }) => {
       const label = title.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
@@ -403,6 +430,17 @@ export default class AgentNotePlugin extends Plugin {
     };
   }
   async saveSettings(): Promise<void> { await this.saveData(this.settings); }
+}
+
+class PortConflictModal extends Modal {
+  constructor(app: App, private port: number, private dismissed: () => void) { super(app); }
+  onOpen(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("h2", { text: t("端口被占用，当前仓库尚未开始分享") });
+    this.contentEl.createEl("p", { text: t("本机端口 {0} 正被占用。如果另一个仓库正在使用 agentNote，请先到那个仓库的接入台点击“停止服务”，再回到当前仓库点击“重试启动”。", this.port) });
+    new Setting(this.contentEl).addButton((button) => button.setButtonText(t("我知道了")).setCta().onClick(() => this.close()));
+  }
+  onClose(): void { this.dismissed(); this.contentEl.empty(); }
 }
 
 class CreateNoteModal extends Modal {

@@ -34,7 +34,8 @@ export class AgentServer {
   async start(): Promise<number> {
     await this.store.init();
     this.server = http.createServer((req, res) => void this.handle(req, res).catch((error) => send(res, error instanceof StoreError ? error.statusCode : 500, { ok: false, error: error instanceof Error ? error.message : String(error) })));
-    await new Promise<void>((resolve, reject) => { this.server!.once("error", reject); this.server!.listen(this.opts.port, this.opts.host ?? "127.0.0.1", resolve); });
+    try { await new Promise<void>((resolve, reject) => { this.server!.once("error", reject); this.server!.listen(this.opts.port, this.opts.host ?? "127.0.0.1", resolve); }); }
+    catch (error) { this.server = null; throw error; }
     return this.port!;
   }
   async stop(): Promise<void> { if (this.server) await new Promise<void>((resolve) => this.server!.close(() => resolve())); this.server = null; }

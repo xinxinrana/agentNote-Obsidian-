@@ -260,6 +260,7 @@ export class AgentNoteView extends ItemView {
     this.recentActivityToggle = null;
     this.pendingAgentActivity = null;
     const dashboard = parent.createDiv({ cls: "agentnote-dashboard" });
+    if (!insights.health.complete) dashboard.createEl("p", { cls: "agentnote-health-notice", text: t("部分历史暂时不可用，已保留原文件：{0}", insights.health.issues.join("；")), attr: { role: "status" } });
     const overview = dashboard.createDiv({ cls: "agentnote-dashboard-hero" });
     const heroHeading = overview.createDiv({ cls: "agentnote-hero-heading" });
     const heroCopy = heroHeading.createDiv();
@@ -306,15 +307,17 @@ export class AgentNoteView extends ItemView {
     const section = this.contentEl.createDiv({ cls: "agentnote-section agentnote-service-section" });
     section.createEl("h4", { text: t("本地服务") });
     const running = !!this.plugin.server?.port;
+    const portInUse = !running && this.plugin.serverPortInUse;
     const port = this.plugin.server?.port ?? this.plugin.settings.port;
     const status = section.createDiv({ cls: `agentnote-service-status${running ? " is-running" : ""}`, attr: { role: "status", "aria-live": "polite" } });
     status.createSpan({ cls: "agentnote-service-indicator", attr: { "aria-hidden": "true" } });
     const copy = status.createDiv();
-    copy.createEl("strong", { text: running ? t("服务正在运行") : t("服务未运行") });
+    copy.createEl("strong", { text: running ? t("服务正在运行") : portInUse ? t("端口已被占用") : t("服务未运行") });
     copy.createSpan({ text: running ? t("agent 可以读取分享和写入笔记") : t("启动后，agent 才能读取分享和写入笔记") });
     if (running) status.createEl("code", { text: `127.0.0.1:${port}`, attr: { "aria-label": t("本地服务地址 127.0.0.1:{0}", port) } });
-    const button = section.createEl("button", { text: running ? t("停止服务") : t("启动服务"), cls: running ? "mod-warning" : "mod-cta" });
+    const button = section.createEl("button", { text: running ? t("停止服务") : portInUse ? t("重试启动") : t("启动服务"), cls: running ? "mod-warning" : "mod-cta" });
     button.onclick = () => void (this.plugin.server ? this.plugin.stopServer() : this.plugin.startServer());
+    if (portInUse) section.createEl("p", { cls: "agentnote-service-conflict", text: t("若另一个仓库正在分享，请先到那个仓库的接入台停止服务，再回来重试。") });
   }
   private renderAgents(connections: AgentConnection[], parent = this.contentEl, unavailable?: string): void {
     const section = parent.createDiv({ cls: "agentnote-section agentnote-agents-section" });
@@ -477,6 +480,8 @@ class InsightsModal extends Modal {
     const privacy = actions.createEl("button", { text: this.privateView ? t("退出隐私展示") : t("隐私展示") });
     privacy.onclick = () => { this.privateView = !this.privateView; this.timelineQuery = ""; void this.render(); };
     const share = actions.createEl("button", { text: t("生成分享图"), cls: "mod-cta" });
+    share.disabled = !insights.health.complete;
+    if (share.disabled) share.setAttribute("title", t("历史不完整时暂不能生成分享图"));
     share.onclick = () => new InsightShareModal(this.app, insights, this.privateView).open();
     const tabs = this.contentEl.createDiv({ cls: "agentnote-insight-tabs", attr: { role: "tablist", "aria-labelledby": "agentnote-profile-title" } });
     for (const [tab, label] of [["overview", t("档案")], ["month", t("累计")], ["agents", "Agent"], ["timeline", t("时间线")], ["archive", t("整理")]] as const) {
@@ -492,6 +497,7 @@ class InsightsModal extends Modal {
       };
     }
     const body = this.contentEl.createDiv({ cls: "agentnote-modal-body", attr: { role: "tabpanel", id: "agentnote-insight-panel", "aria-labelledby": `agentnote-insight-tab-${this.tab}` } });
+    if (!insights.health.complete) body.createEl("p", { cls: "agentnote-health-notice", text: t("部分历史暂时不可用，已保留原文件：{0}", insights.health.issues.join("；")), attr: { role: "status" } });
     if (this.tab === "overview") {
       this.renderOverview(body, insights, agents);
       this.renderDocumentContributions(body, insights.weeklyDocuments, t("本周文档贡献"));
@@ -713,6 +719,7 @@ class InsightsModal extends Modal {
     if (visible.length > this.timelineLimit) parent.createEl("button", { text: t("再看 {0} 条", Math.min(100, visible.length - this.timelineLimit)) }).onclick = () => { this.timelineLimit += 100; void this.render(); };
   }
   private renderArchive(parent: HTMLElement, insights: DashboardInsights): void {
+    if (!insights.health.complete) { parent.createEl("p", { cls: "agentnote-health-notice", text: t("历史尚不完整，整理建议暂不可用。"), attr: { role: "status" } }); return; }
     this.renderTabHero(parent, "KNOWLEDGE HYGIENE", t("资料整理建议"), insights.archiveCandidates.length ? t("这里只给出可解释的建议，是否保留或归档始终由你决定。") : t("目前没有需要优先整理的资料；被保护或近期使用的文档不会进入建议。"), [[insights.archiveCandidates.length, t("待整理资料")], [insights.summary.monthResolves, t("本月协作")], [insights.monthly.length, t("活跃资料")]]);
     const heading = parent.createDiv({ cls: "agentnote-section-heading agentnote-archive-heading" }); heading.createEl("h3", { text: insights.archiveCandidates.length ? t("建议处理的资料") : t("整理状态良好") });
     const nodeCandidates = insights.archiveCandidates.filter((candidate) => !!candidate.node);
@@ -920,23 +927,31 @@ class ManualInstallModal extends Modal {
       if (this.checkedConnections.length) for (const connection of this.checkedConnections) result.createEl("p", { text: `${connection.name} · ${connection.skillPath}` });
       else result.createEl("p", { text: t("确认 Agent 已执行安装任务后，再检查一次。") });
     }
-    const prompt = renderManualInstallPrompt({ port: this.plugin.server?.port ?? this.plugin.settings.port });
-    const details = this.contentEl.createEl("details", { cls: "agentnote-connect-task" });
-    details.createEl("summary", { text: t("查看完整安装任务") });
-    const text = details.createEl("textarea", { cls: "agentnote-manual-prompt", attr: { "aria-label": t("完整安装任务") } });
-    text.value = prompt; text.readOnly = true;
-    const actions = this.contentEl.createDiv({ cls: "agentnote-connect-actions" });
-    actions.createEl("button", { text: t("复制安装任务"), cls: "mod-cta" }).onclick = () => void (async () => {
-      try {
-        await navigator.clipboard.writeText(prompt);
-        this.copied = true;
-        this.render();
-        new Notice(t("已复制手动安装任务。"));
-      } catch (error) {
-        details.open = true;
-        new Notice(t("复制失败：{0}", (error as Error).message));
-      }
-    })();
+    const port = this.plugin.server?.port;
+    let actions: HTMLDivElement;
+    if (port) {
+      const prompt = renderManualInstallPrompt({ port });
+      const details = this.contentEl.createEl("details", { cls: "agentnote-connect-task" });
+      details.createEl("summary", { text: t("查看完整安装任务") });
+      const text = details.createEl("textarea", { cls: "agentnote-manual-prompt", attr: { "aria-label": t("完整安装任务") } });
+      text.value = prompt; text.readOnly = true;
+      actions = this.contentEl.createDiv({ cls: "agentnote-connect-actions" });
+      actions.createEl("button", { text: t("复制安装任务"), cls: "mod-cta" }).onclick = () => void (async () => {
+        try {
+          await navigator.clipboard.writeText(prompt);
+          this.copied = true;
+          this.render();
+          new Notice(t("已复制手动安装任务。"));
+        } catch (error) {
+          details.open = true;
+          new Notice(t("复制失败：{0}", (error as Error).message));
+        }
+      })();
+    } else {
+      this.contentEl.createEl("p", { text: t("当前仓库的本地服务未运行，请先在接入台启动服务。") });
+      actions = this.contentEl.createDiv({ cls: "agentnote-connect-actions" });
+      actions.createEl("button", { text: t("启动服务"), cls: "mod-cta" }).onclick = () => void (async () => { await this.plugin.startServer(); this.render(); })();
+    }
     actions.createEl("button", { text: t("检查接入") }).onclick = () => void (async () => {
       try { this.checkedConnections = await this.plugin.connectedAgents(); this.render(); }
       catch (error) { new Notice(t("接入状态暂时不可用：{0}", (error as Error).message)); }

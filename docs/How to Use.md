@@ -96,6 +96,7 @@ Once the first workflow works, use agentNote for these repeatable jobs:
 | Situation | What to check |
 | --- | --- |
 | The agent cannot open a link | Keep Obsidian open and confirm the local service is running. |
+| Another open vault is using the port | Stop the service in that vault's connection panel, then return to this vault and select **Try again**. Only one vault can share through the same port at a time. |
 | The agent does not know how to write notes | Connect or update the agent, then restart it once. |
 | The agent is not listed | Select **Connect another agent**. |
 | You shared too much context | Share a text selection instead of the full file or folder. |

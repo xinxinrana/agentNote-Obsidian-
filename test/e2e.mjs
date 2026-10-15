@@ -13,12 +13,13 @@ const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identit
 const defaultDeviceIdFile = path.join(identityRoot, "default-device-id");
 class VaultStore extends CoreVaultStore {
   constructor(root, configDir = ".obsidian", options = {}) {
-    super(root, configDir, { deviceIdFile: defaultDeviceIdFile, ...options });
+    super(root, configDir, { deviceIdFile: defaultDeviceIdFile, referencesFile: path.join(identityRoot, `references-${Buffer.from(root).toString('hex')}.json`), ...options });
   }
 }
-async function localEventsPath(root) {
-  const deviceId = (await fsp.readFile(defaultDeviceIdFile, "utf8")).trim();
-  return path.join(root, "agentNote", "data", `events.${deviceId}.json`);
+async function eventFiles(root) {
+  const directory = path.join(root, "agentNote", "data", "events");
+  const months = await fsp.readdir(directory).catch(() => []);
+  return (await Promise.all(months.map(async (month) => (await fsp.readdir(path.join(directory, month))).map((name) => path.join(month, name))))).flat().sort();
 }
 const store = new VaultStore(vault);
 const connections = new AgentConnections(localConnectionsFile(identityRoot, vault));
@@ -40,6 +41,30 @@ try {
   await test("health exposes the local sharing service", async () => {
     const result = await api("GET", "/api/health");
     assert.equal(result.status, 200); assert.equal(result.data.version, 2);
+  });
+
+  await test("a second vault waits for an occupied port and can start after release", async () => {
+    const firstVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-port-owner-"));
+    const secondVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-port-waiter-"));
+    const firstServer = new AgentServer(new VaultStore(firstVault), { port: 0 });
+    let secondServer;
+    try {
+      const occupiedPort = await firstServer.start();
+      secondServer = new AgentServer(new VaultStore(secondVault), { port: occupiedPort });
+      await assert.rejects(secondServer.start(), (error) => error.code === "EADDRINUSE");
+      assert.equal(secondServer.port, null);
+      const firstHealth = await (await fetch(`http://127.0.0.1:${occupiedPort}/api/health`)).json();
+      assert.equal(firstHealth.data.vault, firstVault);
+      await firstServer.stop();
+      assert.equal(await secondServer.start(), occupiedPort);
+      const secondHealth = await (await fetch(`http://127.0.0.1:${occupiedPort}/api/health`)).json();
+      assert.equal(secondHealth.data.vault, secondVault);
+    } finally {
+      await firstServer.stop();
+      if (secondServer) await secondServer.stop();
+      await fsp.rm(firstVault, { recursive: true, force: true });
+      await fsp.rm(secondVault, { recursive: true, force: true });
+    }
   });
 
   let textId, textLink;
@@ -195,11 +220,9 @@ try {
       const candidatesAt = async (days) => (await lifecycleStore.getDashboardInsights(new Date(baseTime + days * 86_400_000))).archiveCandidates;
       assert.equal((await candidatesAt(8)).some((candidate) => candidate.node?.id === note.id), false);
       assert.equal((await candidatesAt(31)).some((candidate) => candidate.node?.id === note.id), true);
-      const eventsPath = await localEventsPath(lifecycleVault);
-      const events = JSON.parse(await fsp.readFile(eventsPath, "utf8"));
+      const events = await lifecycleStore.listActivity();
       const use = events.find((event) => event.type === "share-resolved");
-      events.push({ ...use, eventId: "second-use", at: new Date(baseTime + 8 * 86_400_000).toISOString() });
-      await fsp.writeFile(eventsPath, JSON.stringify(events));
+      await fsp.writeFile(path.join(lifecycleVault, "agentNote", "data", "events.injected.json"), JSON.stringify([{ ...use, eventId: "second-use", at: new Date(baseTime + 8 * 86_400_000).toISOString() }]));
       assert.equal((await candidatesAt(40)).some((candidate) => candidate.node?.id === note.id), false);
       assert.equal((await candidatesAt(99)).some((candidate) => candidate.node?.id === note.id), true);
     } finally {
@@ -401,9 +424,9 @@ try {
       await isolated.recordLocalActivity("local-moved", "final.md", "draft.md", false);
       assert.equal((await isolated.listActivity()).filter((event) => event.type.startsWith("local-")).length, 0);
       assert.equal((await isolated.listShares()).find((entry) => entry.id === share.id)?.target.path, "final.md");
-      const documents = JSON.parse(await fsp.readFile(path.join(root, "agentNote", "data", "documents.json"), "utf8"));
-      assert.equal(documents.length, 1);
-      assert.equal(documents[0].path, "final.md");
+      assert.equal(fs.existsSync(path.join(root, "agentNote", "data", "documents.json")), false);
+      const document = (await isolated.getDashboardInsights()).archiveCandidates.find((entry) => entry.document.path === "final.md");
+      assert.equal(document, undefined);
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
   await test("new document references contribute after their first observed baseline", async () => {
@@ -462,19 +485,18 @@ try {
       const note = await first.createNode({ title: "跨设备资料", content: "原文件仍由 Git 同步。" }, undefined, { actor: { id: "codex", name: "Codex" } });
       const share = await first.createShare(note.id);
       await first.resolveShare(share.id, { actor: { id: "codex", name: "Codex" } });
-      const firstLog = await new ActivityLog(path.join(firstVault, "agentNote", "data"), firstOptions).filePath();
-      const firstBytes = await fsp.readFile(firstLog);
+      const firstFiles = await eventFiles(firstVault);
+      const firstBytes = await Promise.all(firstFiles.map((file) => fsp.readFile(path.join(firstVault, "agentNote", "data", "events", file))));
       await fsp.cp(firstVault, secondVault, { recursive: true });
       const second = new VaultStore(secondVault, ".obsidian", secondOptions);
       await second.init();
       assert.equal((await second.listActivity()).length, 3, "initializing a copied vault does not create events");
       await second.resolveShare(share.id, { actor: { id: "claude-code", name: "Claude Code" } });
-      const secondLog = await new ActivityLog(path.join(secondVault, "agentNote", "data"), secondOptions).filePath();
-      assert.notEqual(path.basename(firstLog), path.basename(secondLog));
-      assert.equal(JSON.parse(await fsp.readFile(secondLog, "utf8")).length, 1, "foreign history is not copied into the writer's file");
-      assert.deepEqual(await fsp.readFile(path.join(secondVault, "agentNote", "data", path.basename(firstLog))), firstBytes);
-      const syncedSecondLog = path.join(firstVault, "agentNote", "data", path.basename(secondLog));
-      await fsp.copyFile(secondLog, syncedSecondLog);
+      const secondFiles = await eventFiles(secondVault);
+      const newFile = secondFiles.find((file) => !firstFiles.includes(file));
+      assert.ok(newFile);
+      const syncedSecondLog = path.join(firstVault, "agentNote", "data", "events", newFile);
+      await fsp.copyFile(path.join(secondVault, "agentNote", "data", "events", newFile), syncedSecondLog);
       for (const current of [first, second]) {
         assert.equal((await current.listActivity()).length, 4);
         const insights = await current.getDashboardInsights();
@@ -484,18 +506,16 @@ try {
         assert.equal((await current.getDocumentInsights()).find((row) => row.nodeId === note.id)?.uses, 2);
         assert.deepEqual((await current.getAgentInsights()).map((row) => [row.name, row.uses]).sort(), [["Claude Code", 1], ["Codex", 1]]);
       }
-      await fsp.copyFile(secondLog, syncedSecondLog);
+      assert.deepEqual(await eventFiles(firstVault), secondFiles);
       assert.equal((await first.listActivity()).length, 4, "repeated sync does not count events twice");
       const foreignBytes = await fsp.readFile(syncedSecondLog);
       const restarted = new VaultStore(firstVault, ".obsidian", firstOptions);
       await restarted.init();
       await restarted.resolveShare(share.id);
-      const appended = JSON.parse(await fsp.readFile(firstLog, "utf8"));
-      assert.deepEqual(appended.slice(0, 3), JSON.parse(firstBytes.toString("utf8")), "previous operations stay unchanged");
-      assert.equal(appended.length, 4);
+      for (const [index, file] of firstFiles.entries()) assert.deepEqual(await fsp.readFile(path.join(firstVault, "agentNote", "data", "events", file)), firstBytes[index], "previous operations stay unchanged");
       assert.deepEqual(await fsp.readFile(syncedSecondLog), foreignBytes);
       assert.equal((await first.listActivity()).length, 5);
-      assert.equal((await fsp.readdir(path.join(firstVault, "agentNote", "data"))).filter((name) => /^events\..*\.json$/.test(name)).length, 2);
+      assert.equal((await eventFiles(firstVault)).length, 5);
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
@@ -554,7 +574,7 @@ try {
       assert.equal(await fsp.readFile(legacyPath, "utf8"), legacyBytes);
       assert.deepEqual(JSON.parse(await fsp.readFile(localPath, "utf8")), local);
       await fsp.writeFile(localPath, "<<<<<<< conflict");
-      await assert.rejects(log.backupPastDays(new Date(2026, 8, 29, 12)), /活动日志不是合法 JSON/);
+      assert.deepEqual(await log.backupPastDays(new Date(2026, 8, 29, 12)), { created: 0, existing: 1 });
       assert.deepEqual(await fsp.readFile(secondPath), before);
       assert.equal(await fsp.readFile(localPath, "utf8"), "<<<<<<< conflict");
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
@@ -601,7 +621,7 @@ try {
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
-  await test("damaged writer history fails without overwriting it and can recover", async () => {
+  await test("damaged legacy history remains untouched while new activity continues", async () => {
     const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-damaged-"));
     try {
       const data = path.join(root, "vault", "agentNote", "data");
@@ -609,15 +629,151 @@ try {
       const log = new ActivityLog(data, { deviceIdFile: path.join(root, "local", "device-id") });
       const file = await log.filePath();
       await fsp.writeFile(file, "broken JSON");
-      await assert.rejects(log.append({ type: "local-read" }));
-      assert.equal(await fsp.readFile(file, "utf8"), "broken JSON");
-      await fsp.writeFile(file, "[]");
       await log.append({ type: "local-read" });
+      assert.equal(await fsp.readFile(file, "utf8"), "broken JSON");
+      assert.equal((await log.readReport()).issues.length, 1);
       assert.equal((await log.read()).length, 1);
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
-  await test("damaged shared indexes stop affected writes and remain recoverable", async () => {
+  await test("immutable events receive cold backups without rewriting the source", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-immutable-backup-"));
+    try {
+      const data = path.join(root, "agentNote", "data");
+      const log = new ActivityLog(data, { deviceIdFile: path.join(root, "device-id") });
+      await fsp.mkdir(data, { recursive: true });
+      await log.append({ type: "local-read", title: "备份资料" });
+      const event = (await log.read())[0];
+      const source = path.join(data, "events", event.at.slice(0, 7), `${event.eventId}.json`);
+      const before = await fsp.readFile(source);
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+      assert.deepEqual(await log.backupPastDays(tomorrow), { created: 1, existing: 0 });
+      assert.deepEqual(await log.backupPastDays(tomorrow), { created: 0, existing: 1 });
+      assert.deepEqual(await fsp.readFile(path.join(data, "cold-backups", "immutable", `${event.eventId}.json`)), before);
+      assert.deepEqual(await fsp.readFile(source), before);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+  await test("legacy reference baselines stay untouched and first local observation creates no activity", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-reference-baseline-"));
+    try {
+      const data = path.join(root, "agentNote", "data");
+      await fsp.mkdir(data, { recursive: true });
+      const old = JSON.stringify({ "index.md": ["earlier.md"] });
+      await fsp.writeFile(path.join(data, "references.json"), old);
+      const isolated = new VaultStore(root, ".obsidian", { deviceIdFile: path.join(root, "local", "device-id"), referencesFile: path.join(root, "local", "references.json") });
+      await isolated.init();
+      await isolated.recordDocumentReferences("index.md", ["earlier.md", "new.md"]);
+      assert.equal((await isolated.listActivity()).length, 0);
+      assert.equal(await fsp.readFile(path.join(data, "references.json"), "utf8"), old);
+      assert.deepEqual(JSON.parse(await fsp.readFile(path.join(root, "local", "references.json"), "utf8")), { "index.md": ["earlier.md", "new.md"] });
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+  await test("damaged local reference state does not block a moved share", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-reference-failure-"));
+    try {
+      const referencesFile = path.join(root, "local", "references.json");
+      const isolated = new VaultStore(root, ".obsidian", { deviceIdFile: path.join(root, "local", "device-id"), referencesFile });
+      await isolated.init();
+      await fsp.writeFile(path.join(root, "before.md"), "内容");
+      const share = await isolated.createPathShare("before.md");
+      await fsp.mkdir(path.dirname(referencesFile), { recursive: true });
+      await fsp.writeFile(referencesFile, "<<<<<<< HEAD");
+      await fsp.rename(path.join(root, "before.md"), path.join(root, "after.md"));
+      await isolated.recordLocalActivity("local-moved", "after.md", "before.md");
+      assert.equal((await isolated.resolveShare(share.id)).content, "内容");
+      assert.equal((await isolated.listShares()).find((item) => item.id === share.id).target.path, "after.md");
+      assert.equal((await isolated.getDashboardInsights()).health.complete, false);
+      assert.equal(await fsp.readFile(referencesFile, "utf8"), "<<<<<<< HEAD");
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+  await test("opposing protection choices pause archive suggestions until explicitly resolved", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-protection-conflict-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      await isolated.recordLocalActivity("local-created", "conflicted.md");
+      const documentId = (await isolated.listActivity())[0].documentId;
+      await isolated.protectDocument(documentId, true);
+      const eventId = "22222222-2222-4222-8222-222222222222";
+      const at = new Date().toISOString();
+      const month = at.slice(0, 7);
+      const directory = path.join(root, "agentNote", "data", "events", month);
+      await fsp.mkdir(directory, { recursive: true });
+      await fsp.writeFile(path.join(directory, `${eventId}.json`), JSON.stringify({ at, eventId, deviceId: "another-device", type: "document-protection", documentId, path: "conflicted.md", protected: false, stateOnly: true, storageVersion: 2 }));
+      const uncertain = await isolated.getDashboardInsights();
+      assert.equal(uncertain.health.complete, false);
+      assert.equal(uncertain.protectedDocuments.some((document) => document.id === documentId), true);
+      assert.deepEqual(uncertain.archiveCandidates, []);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await isolated.protectDocument(documentId, false);
+      const settled = await isolated.getDashboardInsights();
+      assert.equal(settled.health.complete, true);
+      assert.equal(settled.protectedDocuments.some((document) => document.id === documentId), false);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("node archive keeps one document identity across a restart", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-archive-identity-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      const node = await isolated.createNode({ title: "可归档资料" });
+      const created = (await isolated.listActivity()).find((event) => event.type === "node-created" && event.nodeId === node.id);
+      await isolated.archiveNode(node.id, true);
+      const archived = (await isolated.listActivity()).find((event) => event.type === "node-archived" && event.nodeId === node.id);
+      assert.equal(archived.documentId, created.documentId);
+      const restarted = new VaultStore(root);
+      await restarted.init();
+      const document = (await restarted.getDashboardInsights()).documents.find((entry) => entry.document.id === created.documentId);
+      assert.equal(document?.document.path.includes("归档"), true);
+      assert.equal(document?.score, 7);
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("damaged independent events and duplicate IDs show partial history without guessing", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-partial-history-"));
+    try {
+      const data = path.join(root, "agentNote", "data");
+      const log = new ActivityLog(data, { deviceIdFile: path.join(root, "local", "device-id") });
+      await fsp.mkdir(data, { recursive: true });
+      await log.append({ type: "local-read", title: "可用记录" });
+      const month = new Date().toISOString().slice(0, 7);
+      const damaged = path.join(data, "events", month, "11111111-1111-4111-8111-111111111111.json");
+      await fsp.writeFile(damaged, "<<<<<<< HEAD");
+      const duplicate = { eventId: "duplicate", at: new Date().toISOString(), type: "local-read", title: "甲" };
+      await fsp.writeFile(path.join(data, "events.legacy-a.json"), JSON.stringify([duplicate]));
+      await fsp.writeFile(path.join(data, "events.legacy-b.json"), JSON.stringify([{ ...duplicate, title: "乙" }]));
+      const report = await log.readReport();
+      assert.deepEqual(report.events.map((event) => event.title), ["可用记录"]);
+      assert.equal(report.issues.length, 2);
+      assert.equal(await fsp.readFile(damaged, "utf8"), "<<<<<<< HEAD");
+      await fsp.writeFile(damaged, JSON.stringify({ eventId: "11111111-1111-4111-8111-111111111111", at: new Date().toISOString(), type: "local-read", title: "已恢复记录" }));
+      await fsp.rm(path.join(data, "events.legacy-a.json"));
+      await fsp.rm(path.join(data, "events.legacy-b.json"));
+      const recovered = await log.readReport();
+      assert.equal(recovered.issues.length, 0);
+      assert.deepEqual(new Set(recovered.events.map((event) => event.title)), new Set(["可用记录", "已恢复记录"]));
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("activity storage failure never blocks sharing and is visible in dashboard health", async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-history-write-failure-"));
+    try {
+      const isolated = new VaultStore(root);
+      await isolated.init();
+      await fsp.rm(path.join(root, "agentNote", "data", "events"), { recursive: true, force: true });
+      await fsp.writeFile(path.join(root, "agentNote", "data", "events"), "not a directory");
+      const node = await isolated.createNode({ title: "仍可分享", content: "原文保留" });
+      const share = await isolated.createShare(node.id);
+      assert.equal((await isolated.resolveShare(share.id)).content, "原文保留");
+      const dashboard = await isolated.getDashboardInsights();
+      assert.equal(dashboard.health.complete, false);
+      assert.ok(dashboard.health.issues.some((issue) => issue.includes("events")));
+      assert.equal(await fsp.readFile(path.join(root, "agentNote", "data", "events"), "utf8"), "not a directory");
+    } finally { await fsp.rm(root, { recursive: true, force: true }); }
+  });
+
+  await test("damaged optional indexes preserve sharing and activity while keyed writes fail safely", async () => {
     const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-shared-damaged-"));
     try {
       const isolated = new VaultStore(root);
@@ -625,15 +781,14 @@ try {
       const node = await isolated.createNode({ title: "保留的笔记" });
       const data = path.join(root, "agentNote", "data");
       for (const [name, operation] of [
-        ["documents.json", () => isolated.recordLocalActivity("local-edited", "note.md")],
-        ["references.json", () => isolated.recordDocumentReferences("note.md", ["target.md"])],
         ["agents.json", () => isolated.registerAgent({ id: "codex", name: "Codex" })],
         ["idempotency.json", () => isolated.createNode({ title: "不应创建" }, "key-1")],
       ]) {
         const file = path.join(data, name);
         const original = await fsp.readFile(file, "utf8").catch(() => null);
         await fsp.writeFile(file, "<<<<<<< HEAD\n[]\n=======\n{}\n>>>>>>> branch\n");
-        await assert.rejects(operation(), (error) => error.statusCode === 409 && error.message.includes(name));
+        if (name === "agents.json") await operation();
+        else await assert.rejects(operation(), (error) => error.statusCode === 409 && error.message.includes(name));
         assert.match(await fsp.readFile(file, "utf8"), /^<<<<<<< HEAD/);
         if (original === null) await fsp.rm(file); else await fsp.writeFile(file, original);
       }
@@ -643,7 +798,8 @@ try {
       assert.equal((await isolated.listShares()).length, 1);
       const documents = path.join(data, "documents.json");
       await fsp.writeFile(documents, '[{"id":"partial"}]');
-      await assert.rejects(isolated.recordLocalActivity("local-edited", "note.md"), (error) => error.statusCode === 409);
+      await isolated.recordLocalActivity("local-edited", "note.md");
+      assert.equal((await isolated.getDashboardInsights()).health.documentsAvailable, false);
       assert.equal(await fsp.readFile(documents, "utf8"), '[{"id":"partial"}]');
       await fsp.writeFile(path.join(root, "note.md"), "before");
       const fileShare = await isolated.createPathShare("note.md");

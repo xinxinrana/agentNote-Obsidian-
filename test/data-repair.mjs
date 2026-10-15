@@ -9,12 +9,12 @@ const data = path.join(root, 'agentNote/data');
 const doc = { id: 'd-one', path: 'note.md', title: 'Note', created: '2026-10-01T00:00:00Z', updated: '2026-10-02T00:00:00Z' };
 const conflict = (a, b, base) => ['<<<<<<< HEAD', JSON.stringify(a), ...(base ? ['||||||| base', JSON.stringify(base)] : []), '=======', JSON.stringify(b), '>>>>>>> origin/main'].join('\n');
 try {
-  assert.equal((await inspectData(data)).length, 2);
+  assert.equal((await inspectData(data)).length, 0);
   let result = await repairData(data);
-  assert.equal(result.repaired.length, 2);
+  assert.equal(result.repaired.length, 0);
   assert.equal(result.backups.length, 0);
   assert.deepEqual(result.remaining, []);
-  console.log('PASS missing required files are created; absent optional logs stay absent');
+  console.log('PASS optional legacy indexes are not created when absent');
   const later = { ...doc, updated: '2026-10-03T00:00:00Z' };
   const extra = { ...doc, id: 'd-two', path: 'other.md' };
   const raw = conflict([doc], [later, extra], [doc]);
@@ -45,6 +45,19 @@ try {
   assert.equal(await fs.readFile(path.join(data, 'events.test-device.json'), 'utf8'), '{ broken');
   assert.equal(await fs.readFile(path.join(data, 'documents.json'), 'utf8'), '{ broken');
   console.log('PASS malformed JSON and logs remain untouched and visible as manual issues');
+  const independent = path.join(data, 'events', '2026-10', '11111111-1111-4111-8111-111111111111.json');
+  await fs.mkdir(path.dirname(independent), { recursive: true });
+  await fs.writeFile(independent, '<<<<<<< HEAD');
+  assert.equal((await inspectData(data)).some(issue => issue.file.endsWith('11111111-1111-4111-8111-111111111111.json')), true);
+  assert.equal((await repairData(data)).repaired.length, 0);
+  assert.equal(await fs.readFile(independent, 'utf8'), '<<<<<<< HEAD');
+  await fs.rm(independent);
+  await fs.rm(path.join(data, 'events'), { recursive: true });
+  await fs.writeFile(path.join(data, 'events'), 'not a directory');
+  assert.equal((await inspectData(data)).some(issue => issue.file === 'agentNote/data/events'), true);
+  assert.equal((await repairData(data)).repaired.length, 0);
+  assert.equal(await fs.readFile(path.join(data, 'events'), 'utf8'), 'not a directory');
+  await fs.rm(path.join(data, 'events'));
   if (process.env.AGENTNOTE_DAMAGED_DOCUMENTS) {
     const actual = await fs.readFile(process.env.AGENTNOTE_DAMAGED_DOCUMENTS, 'utf8');
     const expected = mergeDocumentConflicts(actual);

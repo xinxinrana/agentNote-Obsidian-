@@ -2,6 +2,8 @@
 
 > 中文主文档：[Git 活动记录同步](Git活动记录同步.md)
 
+For the role and sync boundary of every JSON file, see [Data Files and Sync Boundaries](Data%20Files%20and%20Sync%20Boundaries.md).
+
 Activity logs are stored per device, and new share records are stored per link. Notes, document indexes, and references still require normal synchronization. The plugin does not automatically merge the whole vault.
 
 ## Per-device logs

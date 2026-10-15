@@ -54,7 +54,7 @@ try {
   globalThis.window = { setTimeout: () => 0, requestAnimationFrame: () => 0 };
   setLanguage('zh');
   const vault = path.join(dir, 'vault');
-  const store = new VaultStore(vault, '.obsidian', { deviceIdFile: path.join(dir, 'device-id') });
+  const store = new VaultStore(vault, '.obsidian', { deviceIdFile: path.join(dir, 'device-id'), referencesFile: path.join(dir, 'references.json') });
   const realInsights = store.getDashboardInsights.bind(store);
   await store.init();
   const snapshot = await realInsights();
@@ -152,11 +152,20 @@ try {
   // The actual dashboard renderer involves animation; this test checks its loading boundary.
   view.renderDashboard = (_insights, parent) => parent.createEl('h4', { text: 'Loaded dashboard' });
   await view.onOpen();
-  assert.match(view.contentEl.textContent, /看板暂时无法加载/);
-  assert.match(view.contentEl.textContent, /documents.json/);
+  assert.match(view.contentEl.textContent, /Loaded dashboard/);
+  assert.equal((await store.getDashboardInsights()).health.documentsAvailable, false);
   assert.match(view.contentEl.textContent, /服务正在运行/);
   assert.match(view.contentEl.textContent, /Claude Code/);
   assert.match(view.contentEl.textContent, /Codex/);
+  plugin.server = null;
+  plugin.serverPortInUse = true;
+  await view.refresh();
+  assert.match(view.contentEl.textContent, /端口已被占用/);
+  assert.match(view.contentEl.textContent, /另一个仓库/);
+  assert.match(view.contentEl.textContent, /重试启动/);
+  plugin.server = { port: 27182 };
+  plugin.serverPortInUse = false;
+  await view.refresh();
   const shareButton = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find((element) => element.tag === 'button' && element.text === '分享当前笔记');
   await shareButton.onclick();
   assert.equal(sharedPath, 'Current note.md');
@@ -168,7 +177,7 @@ try {
   onFileOpen();
   assert.match(view.contentEl.textContent, /分享当前笔记/);
   assert.equal(await fs.readFile(file, 'utf8'), damaged);
-  console.log('PASS corrupt documents show an error, preserve bytes, and keep service/Agent controls');
+  console.log('PASS corrupt documents preserve the dashboard, service, Agent controls, and source bytes');
   await fs.writeFile(file, '[]');
   await view.refresh();
   assert.match(view.contentEl.textContent, /Loaded dashboard/);
@@ -204,7 +213,7 @@ try {
   assert.doesNotMatch(await fs.readFile(file, 'utf8'), /^<<<<<<< /m);
   console.log('PASS repair modal click backs up data and restores the panel without a restart');
   const activities = Array.from({ length: 10 }, (_, index) => ({ type: 'share-created', title: `Note ${index}`, at: new Date(Date.now() - index * 60_000).toISOString() }));
-  const insights = { summary: { weekActivityCount: 0, weekResolves: 0, weekActivityScore: 0, weekUpdated: 0 }, weeklyTrend: [], activities };
+  const insights = { health: { complete: true, issues: [], documentsAvailable: true }, summary: { weekActivityCount: 0, weekResolves: 0, weekActivityScore: 0, weekUpdated: 0 }, weeklyTrend: [], activities };
   view.contentEl.empty();
   delete view.renderDashboard;
   view.renderDashboard(insights, view.contentEl);

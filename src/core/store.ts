@@ -2,7 +2,8 @@ import { t } from "../i18n";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
-import { randomBytes } from "crypto";
+import * as os from "os";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { isNodeFile, parseNode, serializeNode } from "./nodeFile";
 import { AgentNode, NodeSource, NodeType, Share, ShareTarget, normalizeTags, qualityWarnings, shareTarget } from "./types";
 import { ActivityLog, ActivityLogOptions } from "./activityLog";
@@ -36,7 +37,7 @@ export interface UpdateNodeInput {
   pinned?: boolean;
 }
 
-export type InsightEventType = "node-created" | "node-updated" | "node-archived" | "node-restored" | "share-created" | "share-resolved" | "local-created" | "local-edited" | "local-read" | "local-moved" | "local-deleted" | "document-linked";
+export type InsightEventType = "node-created" | "node-updated" | "node-archived" | "node-restored" | "share-created" | "share-resolved" | "local-created" | "local-edited" | "local-read" | "local-moved" | "local-deleted" | "document-linked" | "document-protection";
 export interface ActivityActor { name: string; sessionTitle?: string; id?: string }
 export interface ActivityContext { actor?: ActivityActor }
 interface RegisteredAgent { id: string; name: string }
@@ -52,6 +53,11 @@ export interface VaultDocument {
 export interface InsightEvent {
   eventId?: string;
   deviceId?: string;
+  storageVersion?: number;
+  stateOnly?: boolean;
+  previousPath?: string;
+  protected?: boolean;
+  resolvesProtectionConflict?: boolean;
   at: string;
   type: InsightEventType;
   origin?: "local" | "agent" | "link";
@@ -85,6 +91,7 @@ export interface ArchiveCandidate {
   lastUsed?: string;
 }
 export interface DashboardInsights {
+  health: { complete: boolean; issues: string[]; documentsAvailable: boolean };
   summary: {
     weekActivityScore: number;
     allTimeActivityScore: number;
@@ -156,6 +163,7 @@ export class VaultStore {
   readonly root: string;
   readonly dataDir: string;
   private readonly configDir: string;
+  private readonly referencesFile: string;
   private cache = new Map<string, { mtimeMs: number; node: AgentNode }>();
   private idToPath = new Map<string, string>();
   private idempotentCreates = new Map<string, Promise<{ node: AgentNode; created: boolean }>>();
@@ -164,12 +172,17 @@ export class VaultStore {
   private referenceWriteQueue: Promise<void> = Promise.resolve();
   private suppressedLocalPaths = new Map<string, number>();
   private reportedShareErrors = new Set<string>();
+  private documentIds = new Map<string, string>();
+  private documentIdsLoaded = false;
+  private historyWriteIssue: string | null = null;
+  private referenceIssue: string | null = null;
 
   constructor(vaultRoot: string, configDir: string, activityOptions: ActivityLogOptions = {}) {
     this.root = path.resolve(vaultRoot);
     this.dataDir = path.join(this.root, "agentNote");
     this.configDir = this.normalizeVaultPath(configDir);
     this.activityLog = new ActivityLog(this.p("data"), activityOptions);
+    this.referencesFile = activityOptions.referencesFile ?? path.join(os.homedir(), ".agentnote", `references.${createHash("sha256").update(this.root).digest("hex").slice(0, 16)}.json`);
   }
   private p(...parts: string[]): string { return path.join(this.dataDir, ...parts); }
   private isConfigPath(filePath: string): boolean {
@@ -180,10 +193,6 @@ export class VaultStore {
   async init(): Promise<void> {
     await Promise.all([fsp.mkdir(this.p("nodes"), { recursive: true }), fsp.mkdir(this.p("data", "shares"), { recursive: true })]);
     await this.activityLog.init();
-    const documents = this.p("data", "documents.json");
-    if (!fs.existsSync(documents)) await fsp.writeFile(documents, "[]", "utf8");
-    const references = this.p("data", "references.json");
-    if (!fs.existsSync(references)) await fsp.writeFile(references, "{}", "utf8");
   }
 
   async backupPastDays(now = new Date()): Promise<{ created: number; existing: number }> {
@@ -218,65 +227,70 @@ export class VaultStore {
     throw new StoreError(409, t("{0} 内容损坏，请检查并解决 Git 冲突后重试", name));
   }
   private async readDocuments(): Promise<VaultDocument[]> {
-    return this.readDataFile("documents.json", validDocuments);
+    return this.readDataFile("documents.json", validDocuments, []);
   }
-  private async writeDocuments(documents: VaultDocument[]): Promise<void> {
-    await fsp.writeFile(this.p("data", "documents.json"), JSON.stringify(documents, null, 2), "utf8");
-  }
-  private async updateDocuments<T>(update: (documents: VaultDocument[]) => Promise<T> | T): Promise<T> {
-    let result!: T;
-    const task = this.documentWriteQueue.then(async () => {
-      const documents = await this.readDocuments();
-      result = await update(documents);
-      await this.writeDocuments(documents);
-    });
-    this.documentWriteQueue = task.catch(() => undefined);
-    await task;
-    return result;
-  }
-  private async ensureDocument(filePath: string, touch = true): Promise<VaultDocument> {
-    const normalized = this.normalizeVaultPath(filePath);
-    const now = new Date().toISOString();
-    return this.updateDocuments((documents) => {
-      const existing = documents.find((document) => document.path === normalized);
-      if (existing) {
-        existing.title = this.documentTitle(normalized); if (touch) existing.updated = now; delete existing.deletedAt;
-        return existing;
+  private async documentView(events: InsightEvent[], nodes: AgentNode[] = []): Promise<{ documents: VaultDocument[]; issue?: string; protectionConflicts: Set<string> }> {
+    let legacy: VaultDocument[] = [];
+    let issue: string | undefined;
+    try { legacy = await this.readDocuments(); }
+    catch (error) { issue = error instanceof Error ? error.message : String(error); }
+    const legacyIds = new Set(legacy.map((document) => document.id));
+    const documents = new Map(legacy.map((document) => [document.id, { ...document }]));
+    const idsByPath = new Map(legacy.map((document) => [document.path, document.id]));
+    const protectionChoices = new Map<string, { value: boolean; deviceId?: string }>();
+    const protectionConflicts = new Set<string>();
+    const nodePaths = new Map(nodes.flatMap((node) => {
+      const absolute = this.idToPath.get(node.id);
+      return absolute ? [[node.id, path.relative(this.root, absolute).split(path.sep).join("/")] as const] : [];
+    }));
+    for (const event of events) {
+      const eventPath = event.path ?? (event.nodeId ? nodePaths.get(event.nodeId) : undefined);
+      if (!eventPath) continue;
+      const documentId = event.documentId ?? (event.previousPath ? idsByPath.get(event.previousPath) : undefined) ?? idsByPath.get(eventPath);
+      if (!documentId) continue;
+      const previous = documents.get(documentId);
+      if (!previous) documents.set(documentId, { id: documentId, path: eventPath, title: event.title ?? this.documentTitle(eventPath), created: event.at, updated: event.at });
+      const document = documents.get(documentId)!;
+      if (legacyIds.has(documentId) && event.storageVersion !== 2) continue;
+      if (event.type === "local-moved" && event.previousPath) idsByPath.delete(event.previousPath);
+      if (["local-moved", "local-created", "local-edited", "local-read", "node-created", "node-updated", "node-archived", "node-restored"].includes(event.type)) {
+        if (document.path !== eventPath) idsByPath.delete(document.path);
+        document.path = eventPath;
+        document.title = event.title ?? this.documentTitle(eventPath);
+        delete document.deletedAt;
       }
-      const document: VaultDocument = { id: newId("d"), path: normalized, title: this.documentTitle(normalized), created: now, updated: now };
-      documents.push(document); return document;
-    });
-  }
-  private async moveDocument(filePath: string, oldPath: string): Promise<VaultDocument> {
-    const normalized = this.normalizeVaultPath(filePath);
-    const oldNormalized = this.normalizeVaultPath(oldPath);
-    const now = new Date().toISOString();
-    return this.updateDocuments((documents) => {
-      const existing = documents.find((document) => document.path === oldNormalized) ?? documents.find((document) => document.path === normalized);
-      if (existing) {
-        existing.path = normalized; existing.title = this.documentTitle(normalized); existing.updated = now; delete existing.deletedAt;
-        return existing;
+      if (event.type === "local-deleted") document.deletedAt = event.at;
+      if (event.type === "document-protection" && event.protected !== undefined) {
+        const previousChoice = protectionChoices.get(documentId);
+        if (event.resolvesProtectionConflict) protectionConflicts.delete(documentId);
+        else if (previousChoice && previousChoice.value !== event.protected && previousChoice.deviceId !== event.deviceId) protectionConflicts.add(documentId);
+        protectionChoices.set(documentId, { value: event.protected, deviceId: event.deviceId });
+        document.protected = protectionConflicts.has(documentId) || event.protected;
       }
-      const document: VaultDocument = { id: newId("d"), path: normalized, title: this.documentTitle(normalized), created: now, updated: now };
-      documents.push(document); return document;
-    });
+      if (["local-created", "local-edited", "local-moved", "local-deleted", "node-created", "node-updated", "node-archived", "node-restored"].includes(event.type)) document.updated = event.at;
+      idsByPath.set(document.path, documentId);
+    }
+    this.documentIds = idsByPath;
+    this.documentIdsLoaded = true;
+    if (protectionConflicts.size) issue = [issue, t("{0} 份资料的保护状态存在跨设备分歧，整理建议已暂停", protectionConflicts.size)].filter(Boolean).join("；");
+    return { documents: [...documents.values()], issue, protectionConflicts };
   }
-  private async deleteDocument(filePath: string): Promise<VaultDocument> {
+  private async documentIdForPath(filePath: string): Promise<string> {
     const normalized = this.normalizeVaultPath(filePath);
-    const now = new Date().toISOString();
-    return this.updateDocuments((documents) => {
-      const existing = documents.find((document) => document.path === normalized);
-      if (existing) { existing.updated = now; existing.deletedAt = now; return existing; }
-      const document: VaultDocument = { id: newId("d"), path: normalized, title: this.documentTitle(normalized), created: now, updated: now, deletedAt: now };
-      documents.push(document); return document;
-    });
+    let documentId = this.documentIds.get(normalized);
+    if (!documentId && !this.documentIdsLoaded) {
+      await this.documentView(await this.readStoredEvents());
+      documentId = this.documentIds.get(normalized);
+    }
+    if (!documentId) documentId = `d-${createHash("sha256").update(normalized).digest("hex").slice(0, 12)}`;
+    this.documentIds.set(normalized, documentId);
+    return documentId;
   }
   async protectDocument(documentId: string, protectedValue: boolean): Promise<void> {
-    await this.updateDocuments((documents) => {
-      const document = documents.find((candidate) => candidate.id === documentId && !candidate.deletedAt);
-      if (!document) throw new StoreError(404, t("文档不存在"));
-      document.protected = protectedValue;
-    });
+    const { documents, protectionConflicts } = await this.documentView(await this.readStoredEvents());
+    const document = documents.find((candidate) => candidate.id === documentId && !candidate.deletedAt);
+    if (!document) throw new StoreError(404, t("文档不存在"));
+    await this.recordEvent({ type: "document-protection", documentId, path: document.path, title: document.title, protected: protectedValue, resolvesProtectionConflict: protectionConflicts.has(documentId), stateOnly: true, storageVersion: 2 });
   }
   private suppressLocalActivity(filePath: string): void { this.suppressedLocalPaths.set(this.normalizeVaultPath(filePath), Date.now() + 30_000); }
   private consumeSuppressedLocalActivity(filePath: string): boolean {
@@ -290,10 +304,13 @@ export class VaultStore {
   async recordLocalActivity(type: Extract<InsightEventType, `local-${string}`>, filePath: string, oldPath?: string, recordHistory = true): Promise<boolean> {
     if (!filePath.toLowerCase().endsWith(".md") || this.isConfigPath(filePath)) return false;
     if (type !== "local-moved" && this.consumeSuppressedLocalActivity(filePath)) return false;
-    const document = type === "local-deleted" ? await this.deleteDocument(filePath) : type === "local-moved" && oldPath ? await this.moveDocument(filePath, oldPath) : await this.ensureDocument(filePath);
-    if (recordHistory) await this.recordEvent({ type, documentId: document.id, path: document.path, title: document.title, origin: "local" });
+    const normalized = this.normalizeVaultPath(filePath);
+    const previousPath = oldPath ? this.normalizeVaultPath(oldPath) : undefined;
+    const documentId = await this.documentIdForPath(previousPath ?? normalized);
+    if (recordHistory || type === "local-moved") await this.recordEvent({ type, documentId, path: normalized, previousPath, title: this.documentTitle(normalized), origin: "local", stateOnly: !recordHistory, storageVersion: 2 });
+    if (previousPath) { this.documentIds.delete(previousPath); this.documentIds.set(normalized, documentId); }
     if (type === "local-moved" && oldPath) {
-      await this.moveReferenceSource(oldPath, filePath);
+      await this.moveReferenceSource(oldPath, filePath).catch((error) => { this.referenceIssue = error instanceof Error ? error.message : String(error); });
       await this.moveShareTargets(oldPath, filePath);
     }
     return true;
@@ -308,7 +325,23 @@ export class VaultStore {
     }
   }
   private async readReferences(): Promise<Record<string, string[]>> {
-    return this.readDataFile("references.json", (value): value is Record<string, string[]> => isRecord(value) && Object.values(value).every((targets) => Array.isArray(targets) && targets.every((target) => typeof target === "string")));
+    let raw: string;
+    try { raw = await fsp.readFile(this.referencesFile, "utf8"); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return {};
+    }
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value) || !Object.values(value).every((targets) => Array.isArray(targets) && targets.every((target) => typeof target === "string"))) throw new Error(t("本机引用索引格式无效"));
+    return value as Record<string, string[]>;
+  }
+  private async writeReferences(references: Record<string, string[]>): Promise<void> {
+    await fsp.mkdir(path.dirname(this.referencesFile), { recursive: true });
+    const temporary = `${this.referencesFile}.${randomUUID()}.tmp`;
+    try {
+      await fsp.writeFile(temporary, JSON.stringify(references, null, 2), { flag: "wx" });
+      await fsp.rename(temporary, this.referencesFile);
+    } finally { await fsp.rm(temporary, { force: true }); }
   }
   async recordDocumentReferences(sourcePath: string, targetPaths: string[], recordAdditions = true): Promise<void> {
     const source = this.normalizeVaultPath(sourcePath);
@@ -317,16 +350,17 @@ export class VaultStore {
       const references = await this.readReferences();
       const hasBaseline = Object.hasOwn(references, source);
       const previous = new Set(references[source] ?? []);
+      if (hasBaseline && targets.length === previous.size && targets.every((target) => previous.has(target))) return;
       references[source] = targets;
-      await fsp.writeFile(this.p("data", "references.json"), JSON.stringify(references, null, 2), "utf8");
+      await this.writeReferences(references);
       if (!recordAdditions || !hasBaseline) return;
       for (const target of targets.filter((candidate) => !previous.has(candidate))) {
-        const document = await this.ensureDocument(target, false);
-        await this.recordEvent({ type: "document-linked", documentId: document.id, path: document.path, sourcePath: source, title: document.title, origin: "local" });
+        await this.recordEvent({ type: "document-linked", documentId: await this.documentIdForPath(target), path: target, sourcePath: source, title: this.documentTitle(target), origin: "local", storageVersion: 2 });
       }
     });
-    this.referenceWriteQueue = task.catch(() => undefined);
+    this.referenceWriteQueue = task.catch((error) => { this.referenceIssue = error instanceof Error ? error.message : String(error); });
     await task;
+    this.referenceIssue = null;
   }
   private async moveReferenceSource(oldPath: string, newPath: string): Promise<void> {
     const oldSource = this.normalizeVaultPath(oldPath);
@@ -340,10 +374,11 @@ export class VaultStore {
         references[source] = [...new Set(targets.map((target) => target === oldSource ? newSource : target))].sort();
         changed = true;
       }
-      if (changed) await fsp.writeFile(this.p("data", "references.json"), JSON.stringify(references, null, 2), "utf8");
+      if (changed) await this.writeReferences(references);
     });
-    this.referenceWriteQueue = task.catch(() => undefined);
+    this.referenceWriteQueue = task.catch((error) => { this.referenceIssue = error instanceof Error ? error.message : String(error); });
     await task;
+    this.referenceIssue = null;
   }
 
   private async markdownFiles(dir: string): Promise<string[]> {
@@ -428,33 +463,69 @@ export class VaultStore {
     await this.scanNodes();
     const destination = await this.nodePath(node.title, node.id, node.archived);
     const previous = this.idToPath.get(node.id);
+    const previousRelative = previous ? path.relative(this.root, previous).split(path.sep).join("/") : undefined;
+    const previousDocumentId = previous && previous !== destination ? await this.documentIdForPath(previousRelative!) : undefined;
     this.suppressLocalActivity(destination);
     if (previous && previous !== destination) this.suppressLocalActivity(previous);
     await fsp.writeFile(destination, serializeNode(node), "utf8");
     if (previous && previous !== destination) {
       await fsp.rm(previous, { force: true });
-      await this.moveDocument(path.relative(this.root, destination), path.relative(this.root, previous));
       await this.moveReferenceSource(path.relative(this.root, previous), path.relative(this.root, destination));
     }
     const stat = await fsp.stat(destination);
     this.cache.set(destination, { mtimeMs: stat.mtimeMs, node: { ...node, updated: stat.mtime.toISOString() } });
     this.idToPath.set(node.id, destination);
+    if (previousRelative && previousDocumentId && previous !== destination) {
+      this.documentIds.delete(previousRelative);
+      this.documentIds.set(path.relative(this.root, destination).split(path.sep).join("/"), previousDocumentId);
+    }
   }
   private async documentIdForNode(nodeId: string): Promise<string | undefined> {
-    try { return (await this.ensureDocument(await this.nodeFilePath(nodeId), false)).id; }
+    try { return await this.documentIdForPath(await this.nodeFilePath(nodeId)); }
     catch { return undefined; }
   }
   private async documentIdForTarget(target: ShareTarget): Promise<string | undefined> {
     if (target.kind === "node") return this.documentIdForNode(target.nodeId);
-    if (target.kind === "file" && target.path.toLowerCase().endsWith(".md")) return (await this.ensureDocument(target.path, false)).id;
+    if (target.kind === "file" && target.path.toLowerCase().endsWith(".md")) return this.documentIdForPath(target.path);
     return undefined;
+  }
+  private async documentPathForTarget(target: ShareTarget): Promise<string | undefined> {
+    if (target.kind === "node") return this.nodeFilePath(target.nodeId).catch(() => undefined);
+    return target.kind === "file" && target.path.toLowerCase().endsWith(".md") ? this.normalizeVaultPath(target.path) : undefined;
   }
 
   private async readIdempotencyKeys(): Promise<Record<string, string>> {
     return this.readDataFile("idempotency.json", (value): value is Record<string, string> => isRecord(value) && Object.values(value).every((item) => typeof item === "string"), {});
   }
-  private async writeIdempotencyKeys(keys: Record<string, string>): Promise<void> {
-    await fsp.writeFile(this.p("data", "idempotency.json"), JSON.stringify(keys, null, 2), "utf8");
+  private idempotencyFile(key: string): string {
+    return this.p("data", "idempotency", `${createHash("sha256").update(key).digest("hex")}.json`);
+  }
+  private async readIdempotencyKey(key: string): Promise<string | undefined> {
+    const file = this.idempotencyFile(key);
+    let raw: string;
+    try { raw = await fsp.readFile(file, "utf8"); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return (await this.readIdempotencyKeys())[key];
+    }
+    let value: unknown;
+    try { value = JSON.parse(raw); }
+    catch { throw new StoreError(409, t("幂等记录内容损坏，请检查并解决 Git 冲突后重试")); }
+    if (isRecord(value) && value.key === key && typeof value.nodeId === "string") return value.nodeId;
+    throw new StoreError(409, t("幂等记录内容损坏，请检查并解决 Git 冲突后重试"));
+  }
+  private async writeIdempotencyKey(key: string, nodeId: string): Promise<void> {
+    const file = this.idempotencyFile(key);
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    try {
+      await fsp.writeFile(temporary, JSON.stringify({ key, nodeId }, null, 2), { flag: "wx" });
+      try { await fsp.link(temporary, file); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (await this.readIdempotencyKey(key) !== nodeId) throw new StoreError(409, t("幂等键已关联另一份笔记"));
+      }
+    } finally { await fsp.rm(temporary, { force: true }); }
   }
 
   async createNode(input: CreateNodeInput, idempotencyKey?: string, context: ActivityContext = {}): Promise<AgentNode> {
@@ -474,11 +545,10 @@ export class VaultStore {
   }
   private async createNodeWithKey(input: CreateNodeInput, idempotencyKey?: string, context: ActivityContext = {}): Promise<{ node: AgentNode; created: boolean }> {
     if (idempotencyKey) {
-      const keys = await this.readIdempotencyKeys();
-      const existingId = keys[idempotencyKey];
+      const existingId = await this.readIdempotencyKey(idempotencyKey);
       if (existingId) {
         try { return { node: await this.getNode(existingId), created: false }; }
-        catch (error) { if (!(error instanceof StoreError) || error.statusCode !== 404) throw error; delete keys[idempotencyKey]; await this.writeIdempotencyKeys(keys); }
+        catch (error) { if (!(error instanceof StoreError) || error.statusCode !== 404) throw error; throw new StoreError(409, t("幂等记录关联的笔记不存在，请检查后重试")); }
       }
     }
     const type = input.type ?? "snippet";
@@ -486,12 +556,8 @@ export class VaultStore {
     const now = new Date().toISOString();
     const node: AgentNode = { id: newId("n"), type, title: input.title.trim(), content: input.content ?? "", background: input.background?.trim() ?? "", tags: normalizeTags(input.tags), source: input.source ?? "agent", path: input.path?.trim() || undefined, created: now, updated: now, archived: false, pinned: false };
     await this.writeNode(node);
-    if (idempotencyKey) {
-      const keys = await this.readIdempotencyKeys();
-      keys[idempotencyKey] = node.id;
-      await this.writeIdempotencyKeys(keys);
-    }
-    await this.recordEvent({ type: "node-created", nodeId: node.id, documentId: await this.documentIdForNode(node.id), title: node.title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
+    if (idempotencyKey) await this.writeIdempotencyKey(idempotencyKey, node.id);
+    await this.recordEvent({ type: "node-created", nodeId: node.id, documentId: await this.documentIdForNode(node.id), path: await this.nodeFilePath(node.id), title: node.title, actor: context.actor, origin: context.actor ? "agent" : "local", storageVersion: 2 }).catch(() => undefined);
     return { node, created: true };
   }
   async updateNode(id: string, patch: UpdateNodeInput, context: ActivityContext = {}): Promise<AgentNode> {
@@ -507,14 +573,14 @@ export class VaultStore {
     if (patch.pinned !== undefined) node.pinned = patch.pinned;
     node.updated = new Date().toISOString();
     await this.writeNode(node);
-    await this.recordEvent({ type: archivedChanged ? (node.archived ? "node-archived" : "node-restored") : "node-updated", nodeId: node.id, documentId: await this.documentIdForNode(node.id), title: node.title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
+    await this.recordEvent({ type: archivedChanged ? (node.archived ? "node-archived" : "node-restored") : "node-updated", nodeId: node.id, documentId: await this.documentIdForNode(node.id), path: await this.nodeFilePath(node.id), title: node.title, actor: context.actor, origin: context.actor ? "agent" : "local", storageVersion: 2 }).catch(() => undefined);
     return node;
   }
   async archiveNode(id: string, archived: boolean, context: ActivityContext = {}): Promise<AgentNode> {
     const node = await this.getNode(id);
     node.archived = archived;
     await this.writeNode(node);
-    await this.recordEvent({ type: archived ? "node-archived" : "node-restored", nodeId: node.id, documentId: await this.documentIdForNode(node.id), title: node.title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
+    await this.recordEvent({ type: archived ? "node-archived" : "node-restored", nodeId: node.id, documentId: await this.documentIdForNode(node.id), path: await this.nodeFilePath(node.id), title: node.title, actor: context.actor, origin: context.actor ? "agent" : "local", storageVersion: 2 }).catch(() => undefined);
     return node;
   }
   async archiveNodes(ids: string[], archived: boolean): Promise<AgentNode[]> {
@@ -541,16 +607,16 @@ export class VaultStore {
     const share = await this.readDataFile<Share | null>(`shares/${id}.json`, (value): value is Share | null => this.validShare(value) && value.id === id, null);
     return share ? { ...share, target: shareTarget(share) } : null;
   }
-  private reportShareError(error: unknown): void {
+  private reportDataError(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     if (this.reportedShareErrors.has(message)) return;
     this.reportedShareErrors.add(message);
-    console.warn(t("agentNote: {0}；原文件已保留，其他分享仍可使用。", message));
+    console.warn(t("agentNote: {0}；原文件已保留，其他完好功能仍可使用。", message));
   }
   private async readShares(): Promise<Share[]> {
     let legacy: Share[];
     try { legacy = await this.readLegacyShares(); }
-    catch (error) { this.reportShareError(error); legacy = []; }
+    catch (error) { this.reportDataError(error); legacy = []; }
     const shares = new Map<string, Share>();
     const names = await fsp.readdir(this.p("data", "shares"));
     const shareFiles = names.filter((file) => /^s-x-[a-zA-Z0-9-]{1,120}\.json$/.test(file)).sort();
@@ -559,7 +625,7 @@ export class VaultStore {
       try {
         const share = await this.readShareFile(name.slice(0, -5));
         if (share) shares.set(share.id, share);
-      } catch (error) { this.reportShareError(error); }
+      } catch (error) { this.reportDataError(error); }
     }
     for (const share of legacy) if (!independentIds.has(share.id)) shares.set(share.id, share);
     return [...shares.values()].sort((first, second) => first.created.localeCompare(second.created) || first.id.localeCompare(second.id));
@@ -605,8 +671,8 @@ export class VaultStore {
   async activityFilePath(activity: Pick<InsightEvent, "nodeId" | "documentId" | "shareId" | "path">): Promise<string | null> {
     if (activity.nodeId) return this.nodeFilePath(activity.nodeId).catch(() => null);
     if (activity.documentId) {
-      const document = (await this.readDocuments()).find((candidate) => candidate.id === activity.documentId && !candidate.deletedAt);
-      return document?.path ?? null;
+      const document = (await this.documentView(await this.readStoredEvents())).documents.find((candidate) => candidate.id === activity.documentId);
+      return document ? (document.deletedAt ? null : document.path) : activity.path ?? null;
     }
     if (activity.shareId) {
       const share = (await this.readShares()).find((candidate) => candidate.id === activity.shareId);
@@ -617,29 +683,47 @@ export class VaultStore {
     return activity.path ?? null;
   }
   private async readRegisteredAgents(): Promise<RegisteredAgent[]> {
-    return this.readDataFile("agents.json", (value): value is RegisteredAgent[] => Array.isArray(value) && value.every((agent) => isRecord(agent) && typeof agent.id === "string" && typeof agent.name === "string" && !!agent.id.trim() && !!agent.name.trim()), []);
+    let legacy: RegisteredAgent[] = [];
+    try { legacy = await this.readDataFile("agents.json", (value): value is RegisteredAgent[] => Array.isArray(value) && value.every((agent) => isRecord(agent) && typeof agent.id === "string" && typeof agent.name === "string" && !!agent.id.trim() && !!agent.name.trim()), []); }
+    catch (error) { this.reportDataError(error); }
+    const agents = new Map(legacy.map((agent) => [agent.id, agent]));
+    const directory = this.p("data", "agents");
+    const files = await fsp.readdir(directory).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return []; throw error; });
+    for (const name of files.filter((file) => /^[a-f0-9]{64}\.json$/.test(file))) {
+      try {
+        const value: unknown = JSON.parse(await fsp.readFile(path.join(directory, name), "utf8"));
+        if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" || createHash("sha256").update(value.id).digest("hex") !== name.slice(0, -5)) throw new Error(t("Agent 身份记录格式无效"));
+        agents.set(value.id, { id: value.id, name: value.name });
+      } catch (error) { this.reportDataError(error); }
+    }
+    return [...agents.values()];
   }
   async registerAgent(agent: RegisteredAgent): Promise<void> {
     const id = agent.id.trim().toLowerCase().slice(0, 80);
     const name = agent.name.trim().slice(0, 80);
     if (!id || !name) throw new StoreError(400, t("agent 身份不完整"));
-    const agents = await this.readRegisteredAgents();
-    const index = agents.findIndex((item) => item.id === id);
-    if (index === -1) agents.push({ id, name }); else agents[index] = { id, name };
-    await fsp.writeFile(this.p("data", "agents.json"), JSON.stringify(agents, null, 2), "utf8");
+    const file = this.p("data", "agents", `${createHash("sha256").update(id).digest("hex")}.json`);
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    try {
+      await fsp.writeFile(temporary, JSON.stringify({ id, name }, null, 2), { flag: "wx" });
+      await fsp.rename(temporary, file);
+    } finally { await fsp.rm(temporary, { force: true }); }
   }
   async resolveActivityContext(context: ActivityContext): Promise<ActivityContext> {
     const actor = context.actor;
     const id = actor?.id?.trim().toLowerCase();
     if (!actor || !id) return context;
-    const registered = (await this.readRegisteredAgents()).find((agent) => agent.id === id);
+    let registered: RegisteredAgent | undefined;
+    try { registered = (await this.readRegisteredAgents()).find((agent) => agent.id === id); }
+    catch { return context; }
     return registered ? { actor: { id: registered.id, name: registered.name, sessionTitle: actor.sessionTitle } } : context;
   }
   private async appendShare(target: ShareTarget, selection?: string, background?: string, context: ActivityContext = {}, title?: string): Promise<Share> {
     const share: Share = { id: newId("s-x"), target, selection, background: background?.trim() || undefined, created: new Date().toISOString() };
     await this.writeShare(share, true);
     const documentId = await this.documentIdForTarget(target).catch(() => undefined);
-    await this.recordEvent({ type: "share-created", shareId: share.id, nodeId: target.kind === "node" ? target.nodeId : undefined, documentId, targetKind: target.kind, title, actor: context.actor, origin: context.actor ? "agent" : "local" }).catch(() => undefined);
+    await this.recordEvent({ type: "share-created", shareId: share.id, nodeId: target.kind === "node" ? target.nodeId : undefined, documentId, path: await this.documentPathForTarget(target), targetKind: target.kind, title, actor: context.actor, origin: context.actor ? "agent" : "local", storageVersion: 2 }).catch(() => undefined);
     return share;
   }
   async createShare(nodeId: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
@@ -680,7 +764,7 @@ export class VaultStore {
       result = target.kind === "file" ? await this.resolveFileShare(share, rel, abs) : await this.resolveFolderShare(share, rel, abs);
     }
     const documentId = await this.documentIdForTarget(share.target).catch(() => undefined);
-    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId, targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link" }).catch(() => undefined);
+    await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId, path: await this.documentPathForTarget(share.target), targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link", storageVersion: 2 }).catch(() => undefined);
     return result;
   }
 
@@ -729,8 +813,9 @@ export class VaultStore {
     return this.activityLog.read();
   }
   private async readEvents(): Promise<InsightEvent[]> {
-    const events = await this.readStoredEvents();
-    const shares = new Map((await this.readShares()).map((share) => [share.id, share]));
+    const events = (await this.readStoredEvents()).filter((event) => !event.stateOnly);
+    if (!events.some((event) => !event.title && event.shareId)) return events;
+    const shares = new Map((await this.readShares().catch(() => [] as Share[])).map((share) => [share.id, share]));
     return Promise.all(events.map(async (event) => {
         if (event.title || !event.shareId) return event;
         const share = shares.get(event.shareId);
@@ -741,10 +826,18 @@ export class VaultStore {
       }));
   }
   private async recordEvent(event: Omit<InsightEvent, "at">): Promise<void> {
-    await this.activityLog.append(event);
+    try { await this.activityLog.append(event); this.historyWriteIssue = null; }
+    catch (error) {
+      this.historyWriteIssue = error instanceof Error ? error.message : String(error);
+      console.warn(t("agentNote: 本次活动未记录：{0}", this.historyWriteIssue));
+      throw error;
+    }
   }
   async getDashboardInsights(now = new Date()): Promise<DashboardInsights> {
-    const [nodes, documents, activityEvents] = await Promise.all([this.listNodes(), this.readDocuments(), this.readStoredEvents()]);
+    const [nodes, activityReport] = await Promise.all([this.listNodes(), this.activityLog.readReport()]);
+    const documentReport = await this.documentView(activityReport.events, nodes);
+    const documents = documentReport.documents;
+    const activityEvents = activityReport.events.filter((event) => !event.stateOnly);
     const eventsByDocument = new Map<string, InsightEvent[]>();
     const eventsByNode = new Map<string, InsightEvent[]>();
     for (const event of activityEvents) {
@@ -829,7 +922,7 @@ export class VaultStore {
       const candidate = archiveCandidate(document, undefined, eventsByDocument.get(document.id) ?? []);
       return candidate ? [candidate] : [];
     });
-    const archiveCandidates = [...nodeCandidates, ...localCandidates].sort((first, second) => first.uses - second.uses || first.document.updated.localeCompare(second.document.updated));
+    const archiveCandidates = activityReport.issues.length || documentReport.issue ? [] : [...nodeCandidates, ...localCandidates].sort((first, second) => first.uses - second.uses || first.document.updated.localeCompare(second.document.updated));
     const dailyScores = new Map<string, number>();
     for (const event of activityEvents) {
       const date = new Date(event.at);
@@ -848,6 +941,7 @@ export class VaultStore {
     const contributionDays = 39 * 7 + now.getDay() + 1;
     const monthDays = Math.max(1, Math.ceil((now.getTime() - monthStart.getTime()) / 86_400_000) + 1);
     return {
+      health: { complete: activityReport.issues.length === 0 && !documentReport.issue && !this.historyWriteIssue && !this.referenceIssue, issues: [...activityReport.issues.map((issue) => `${issue.file}: ${issue.message}`), ...(documentReport.issue ? [documentReport.issue] : []), ...(this.historyWriteIssue ? [t("本次活动未记录：{0}", this.historyWriteIssue)] : []), ...(this.referenceIssue ? [t("本机引用索引暂时不可用：{0}", this.referenceIssue)] : [])], documentsAvailable: !documentReport.issue },
       summary: {
         weekActivityScore: activityScore(activityEvents.filter((event) => inRange(event.at, weekStart))),
         allTimeActivityScore: activityScore(activityEvents),
