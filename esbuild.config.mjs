@@ -33,7 +33,7 @@ const pluginConfig = {
   sourcemap: prod ? false : "inline",
   minify: prod,
   treeShaking: true,
-  loader: { ".svg": "dataurl", ".png": "dataurl" },
+  loader: { ".svg": "dataurl", ".png": "dataurl", ".ico": "dataurl" },
   outfile: "main.js",
 };
 
@@ -52,7 +52,7 @@ const coreConfig = {
   sourcemap: false,
   minify: false,
   treeShaking: true,
-  loader: { ".svg": "dataurl" },
+  loader: { ".svg": "dataurl", ".png": "dataurl", ".ico": "dataurl" },
   outfile: "test/core-bundle.cjs",
 };
 

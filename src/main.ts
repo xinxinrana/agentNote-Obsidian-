@@ -338,21 +338,30 @@ export default class AgentNotePlugin extends Plugin {
     const selection = editor.getSelection();
     if (!selection) return;
     try {
+      const selectionStart = editor.posToOffset(editor.getCursor("from"));
       this.shareServicePort();
       const nodeId = await this.currentNodeId();
-      if (nodeId) { const share = await this.store.createShare(nodeId, selection); await this.copyShareLink(share.id, (await this.store.getNode(nodeId)).title); return; }
+      if (nodeId) {
+        const node = await this.store.getNode(nodeId);
+        const raw = editor.getValue();
+        const frontmatterEnd = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(raw)?.[0].length ?? 0;
+        const bodyStart = raw.indexOf(node.content, frontmatterEnd);
+        const start = bodyStart >= 0 && selectionStart >= bodyStart ? selectionStart - bodyStart : undefined;
+        const share = await this.store.createShare(nodeId, selection, {}, start);
+        await this.copyShareLink(share.id, node.title); return;
+      }
       const file = this.app.workspace.getActiveFile();
-      if (file) await this.sharePath(file.path, selection);
+      if (file) await this.shareFileFromPanel(file.path, selection, selectionStart);
     } catch (error) { new Notice(t("分享失败：{0}", (error as Error).message)); }
   }
   private async shareCurrentFile(): Promise<void> { const file = this.app.workspace.getActiveFile(); if (file) await this.sharePath(file.path); }
   private async sharePath(relPath: string, selection?: string): Promise<void> {
     await this.shareFileFromPanel(relPath, selection);
   }
-  async shareFileFromPanel(relPath: string, selection?: string): Promise<boolean> {
+  async shareFileFromPanel(relPath: string, selection?: string, selectionStart?: number): Promise<boolean> {
     try {
       this.shareServicePort();
-      const share = await this.store.createPathShare(relPath, undefined, selection);
+      const share = await this.store.createPathShare(relPath, undefined, selection, {}, selectionStart);
       await this.copyShareLink(share.id, path.basename(relPath));
       return true;
     } catch (error) {

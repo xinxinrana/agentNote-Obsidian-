@@ -1,3 +1,4 @@
+import { selectionMetadata, type SelectionMetadata } from "./selection";
 import { t } from "../i18n";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
@@ -75,6 +76,9 @@ export interface InsightTrendPoint { label: string; count: number }
 export type ContributionCategory = "construction" | "reuse" | "connection" | "organization";
 export interface DocumentContribution {
   document: VaultDocument;
+  activityCount: number;
+  recentActivityCount: number;
+  /** Deprecated API aliases; these now contain unweighted counts. */
   score: number;
   recentScore: number;
   construction: number;
@@ -93,9 +97,11 @@ export interface ArchiveCandidate {
 export interface DashboardInsights {
   health: { complete: boolean; issues: string[]; documentsAvailable: boolean };
   summary: {
+    /** Deprecated API aliases; these now contain unweighted counts. */
     weekActivityScore: number;
     allTimeActivityScore: number;
     weekActivityCount: number;
+    allTimeActivityCount: number;
     weekCreated: number;
     weekUpdated: number;
     weekSharesCreated: number;
@@ -121,27 +127,18 @@ export interface DashboardInsights {
 export interface AgentInsight { name: string; uses: number; created: number; updated: number; lastActive: string }
 export interface DocumentInsight { nodeId?: string; title: string; uses: number; agents: string[]; lastUsed: string }
 
-export type ShareResult =
+export type ShareResult = (
   | { shareId: string; kind: "text"; title: string; background: string; content: string; updated: string; filePath: string; hint: string }
   | { shareId: string; kind: "file"; title: string; background: string; address: string; content: string; updated: string; filePath: string; hint: string }
-  | { shareId: string; kind: "folder"; title: string; background: string; address: string; entries: string[]; updated: string; filePath: string; hint: string };
+  | { shareId: string; kind: "folder"; title: string; background: string; address: string; entries: string[]; updated: string; filePath: string; hint: string }) & { selection?: SelectionMetadata };
 
 /** Tells the receiving agent how to update the explicitly shared content. */
 const SHARE_HINT = "优先通过本链接读取。更新已分享内容时，PATCH /api/shares/<shareId>，请求体为 { content: 更新后的完整内容 }。";
-export const ACTIVITY_WEIGHTS: Partial<Record<InsightEventType, number>> = {
-  "node-created": 4,
-  "node-updated": 3,
-  "node-archived": 3,
-  "node-restored": 2,
-  "share-created": 2,
-  "share-resolved": 3,
-  "local-created": 6,
-  "local-edited": 6,
-  "local-read": 4,
-  "local-moved": 4,
-  "local-deleted": 4,
-  "document-linked": 5,
-};
+/** Each recorded action counts once. State-only sync events are excluded separately. */
+const COUNTED_ACTIVITIES = new Set<InsightEventType>([
+  "node-created", "node-updated", "node-archived", "node-restored", "share-created", "share-resolved",
+  "local-created", "local-edited", "local-read", "local-moved", "local-deleted", "document-linked", "document-protection",
+]);
 
 export function contributionCategory(event: InsightEvent): ContributionCategory {
   if (["node-created", "node-updated", "local-created", "local-edited"].includes(event.type)) return "construction";
@@ -651,7 +648,7 @@ export class VaultStore {
   async listShares(): Promise<Share[]> { return this.readShares(); }
   async shareSourcePath(id: string): Promise<string> {
     const share = await this.getShare(id);
-    if (share.selection) throw new StoreError(400, t("选段分享暂不支持查询双链"));
+    if (share.selection !== undefined) throw new StoreError(400, t("选段分享暂不支持查询双链"));
     if (share.target.kind === "folder") throw new StoreError(400, t("文件夹分享不能查询双链"));
     let sourcePath: string;
     if (share.target.kind === "file") sourcePath = this.vaultPath(share.target.path).rel;
@@ -719,23 +716,24 @@ export class VaultStore {
     catch { return context; }
     return registered ? { actor: { id: registered.id, name: registered.name, sessionTitle: actor.sessionTitle } } : context;
   }
-  private async appendShare(target: ShareTarget, selection?: string, background?: string, context: ActivityContext = {}, title?: string): Promise<Share> {
-    const share: Share = { id: newId("s-x"), target, selection, background: background?.trim() || undefined, created: new Date().toISOString() };
+  private async appendShare(target: ShareTarget, selection?: string, background?: string, context: ActivityContext = {}, title?: string, selectionStart?: number, selectionSource?: string): Promise<Share> {
+    const share: Share = { id: newId("s-x"), target, selection, selectionStart, selectionSourceHash: selection && selectionSource !== undefined ? this.sourceHash(selectionSource) : undefined, background: background?.trim() || undefined, created: new Date().toISOString() };
     await this.writeShare(share, true);
     const documentId = await this.documentIdForTarget(target).catch(() => undefined);
     await this.recordEvent({ type: "share-created", shareId: share.id, nodeId: target.kind === "node" ? target.nodeId : undefined, documentId, path: await this.documentPathForTarget(target), targetKind: target.kind, title, actor: context.actor, origin: context.actor ? "agent" : "local", storageVersion: 2 }).catch(() => undefined);
     return share;
   }
-  async createShare(nodeId: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
+  async createShare(nodeId: string, selection?: string, context: ActivityContext = {}, selectionStart?: number): Promise<Share> {
+    selection = selection || undefined;
     const node = await this.getNode(nodeId);
     if (selection && node.type !== "snippet") throw new StoreError(400, t("只有文本笔记能分享选段"));
     if (selection && !node.content.includes(selection)) throw new StoreError(400, t("选段已不在当前正文中"));
-    return this.appendShare({ kind: "node", nodeId }, selection, undefined, context, node.title);
+    return this.appendShare({ kind: "node", nodeId }, selection, undefined, context, node.title, selectionStart, node.content);
   }
   /** Every written node gets a whole-note share link; reuse the existing one
    *  so the link returned at write time stays the canonical address. */
   async ensureShareForNode(nodeId: string, context: ActivityContext = {}): Promise<Share> {
-    const existing = (await this.readShares()).find((share) => share.target.kind === "node" && share.target.nodeId === nodeId && !share.selection);
+    const existing = (await this.readShares()).find((share) => share.target.kind === "node" && share.target.nodeId === nodeId && share.selection === undefined);
     return existing ?? this.createShare(nodeId, undefined, context);
   }
   private vaultPath(relPath: string): { rel: string; abs: string } {
@@ -743,14 +741,16 @@ export class VaultStore {
     if (!rel || rel.split("/").includes("..")) throw new StoreError(400, t("必须提供 vault 内相对路径"));
     return { rel, abs: path.join(this.root, ...rel.split("/")) };
   }
-  async createPathShare(relPath: string, background?: string, selection?: string, context: ActivityContext = {}): Promise<Share> {
+  async createPathShare(relPath: string, background?: string, selection?: string, context: ActivityContext = {}, selectionStart?: number): Promise<Share> {
+    selection = selection || undefined;
     const { rel, abs } = this.vaultPath(relPath);
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat) throw new StoreError(404, t("找不到内容: {0}", rel));
     const title = path.basename(rel).replace(/\.md$/i, "");
     if (stat.isDirectory()) { if (selection) throw new StoreError(400, t("文件夹不能分享选段")); return this.appendShare({ kind: "folder", path: rel }, undefined, background, context, title); }
-    if (selection && !(await fsp.readFile(abs, "utf8")).includes(selection)) throw new StoreError(400, t("选段已不在当前文件中"));
-    return this.appendShare({ kind: "file", path: rel }, selection, background, context, title);
+    const source = selection ? await fsp.readFile(abs, "utf8") : undefined;
+    if (selection && !source!.includes(selection)) throw new StoreError(400, t("选段已不在当前文件中"));
+    return this.appendShare({ kind: "file", path: rel }, selection, background, context, title, selectionStart, source);
   }
 
   async resolveShare(id: string, context: ActivityContext = {}): Promise<ShareResult> {
@@ -775,8 +775,8 @@ export class VaultStore {
     if (share.target.kind === "node") {
       const node = await this.getNode(share.target.nodeId);
       if (node.type === "snippet") {
-        const nextContent = share.selection ? this.replaceSelection(node.content, share.selection, content) : content;
-        if (share.selection) { share.selection = content; await this.replaceShare(share); }
+        const nextContent = share.selection !== undefined ? this.replaceSelection(node.content, share, content) : content;
+        if (share.selection !== undefined) { share.selection = content; await this.replaceShare(share); }
         return this.resolveNodeShare(share, await this.updateNode(node.id, { content: nextContent }, context));
       }
       if (!node.path) throw new StoreError(410, t("笔记缺少文件地址"));
@@ -787,9 +787,15 @@ export class VaultStore {
     return this.updateSharedFile(share, rel, abs, content, context);
   }
 
-  private replaceSelection(current: string, selection: string, replacement: string): string {
+  private replaceSelection(current: string, share: Share, replacement: string): string {
+    const selection = share.selection!;
     if (!current.includes(selection)) throw new StoreError(410, t("分享选段已不在当前文件中"));
-    return current.replace(selection, replacement);
+    const position = selectionMetadata(current, selection, this.selectionOffset(share, current)).position;
+    if (position.status !== "exact") throw new StoreError(409, t("选段存在多处匹配，请重新选择并分享后再修改"));
+    share.selectionStart = position.startOffset;
+    const next = current.slice(0, position.startOffset) + replacement + current.slice(position.endOffset);
+    share.selectionSourceHash = this.sourceHash(next);
+    return next;
   }
 
   private async replaceShare(share: Share): Promise<void> {
@@ -800,8 +806,8 @@ export class VaultStore {
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat?.isFile()) throw new StoreError(400, t("只有文本文件分享支持通过接口直接修改"));
     const current = await fsp.readFile(abs, "utf8");
-    const nextContent = share.selection ? this.replaceSelection(current, share.selection, content) : content;
-    if (share.selection) { share.selection = content; await this.replaceShare(share); }
+    const nextContent = share.selection !== undefined ? this.replaceSelection(current, share, content) : content;
+    if (share.selection !== undefined) { share.selection = content; await this.replaceShare(share); }
     this.suppressLocalActivity(abs);
     await fsp.writeFile(abs, nextContent, "utf8");
     const documentId = await this.documentIdForTarget(share.target).catch(() => undefined);
@@ -853,24 +859,26 @@ export class VaultStore {
     const deletionVisibleAfter = new Date(now); deletionVisibleAfter.setDate(deletionVisibleAfter.getDate() - 30);
     const inRange = (at: string, start: Date) => new Date(at) >= start && new Date(at) <= now;
     const resolveEvents = activityEvents.filter((event) => event.type === "share-resolved");
-    const activityScore = (items: InsightEvent[]): number => items.reduce((total, event) => total + (ACTIVITY_WEIGHTS[event.type] ?? 0), 0);
+    const activityCount = (items: InsightEvent[]): number => items.filter((event) => COUNTED_ACTIVITIES.has(event.type)).length;
     const documentIdForEvent = (event: InsightEvent): string | undefined => event.documentId;
     const recentStart = new Date(now); recentStart.setDate(recentStart.getDate() - 30);
     const buildDocumentContributions = (start?: Date): DocumentContribution[] => documents.filter((document) => !document.deletedAt).map((document) => {
       const documentEvents = (eventsByDocument.get(document.id) ?? []).filter((event) => !start || inRange(event.at, start));
       const categories: Record<ContributionCategory, number> = { construction: 0, reuse: 0, connection: 0, organization: 0 };
-      for (const event of documentEvents) categories[contributionCategory(event)] += ACTIVITY_WEIGHTS[event.type] ?? 0;
+      for (const event of documentEvents) if (COUNTED_ACTIVITIES.has(event.type)) categories[contributionCategory(event)]++;
       return {
         document,
-        score: activityScore(documentEvents),
-        recentScore: activityScore(documentEvents.filter((event) => inRange(event.at, recentStart))),
+        activityCount: activityCount(documentEvents),
+        recentActivityCount: activityCount(documentEvents.filter((event) => inRange(event.at, recentStart))),
+        score: activityCount(documentEvents),
+        recentScore: activityCount(documentEvents.filter((event) => inRange(event.at, recentStart))),
         construction: categories.construction,
         reuse: categories.reuse,
         connection: categories.connection,
         organization: categories.organization,
         lastActive: documentEvents.map((event) => event.at).sort().at(-1),
       };
-    }).filter((document) => document.score > 0).sort((a, b) => b.score - a.score || (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
+    }).filter((document) => document.activityCount > 0).sort((a, b) => b.activityCount - a.activityCount || (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
     const documentContributions = buildDocumentContributions();
     const buildRanking = (start: Date, period: "week" | "month" | "all"): InsightNote[] => {
       const usage = new Map<string, InsightEvent[]>();
@@ -883,7 +891,7 @@ export class VaultStore {
           const date = new Date(event.at); const monday = new Date(date); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); return monday.toISOString().slice(0, 10);
         })).size;
         const updated = inRange(node.updated, start);
-        const score = period === "week" ? reads.length * 10 + (updated ? 1 : 0) : distinctWeeks * 1000 + reads.length * 10 + (updated ? 1 : 0);
+        const score = reads.length;
         const lastRead = reads.map((event) => event.at).sort().at(-1);
         const reason = period === "week" ? t("本周被读取 {0} 次{1}", reads.length, updated ? t("，并在本周更新") : "") : period === "month" ? t("本月被读取 {0} 次，跨 {1} 周复用", reads.length, distinctWeeks) : t("累计被读取 {0} 次，跨 {1} 周复用", reads.length, distinctWeeks);
         return { node, reads: reads.length, lastRead, score, reason };
@@ -923,16 +931,16 @@ export class VaultStore {
       return candidate ? [candidate] : [];
     });
     const archiveCandidates = activityReport.issues.length || documentReport.issue ? [] : [...nodeCandidates, ...localCandidates].sort((first, second) => first.uses - second.uses || first.document.updated.localeCompare(second.document.updated));
-    const dailyScores = new Map<string, number>();
+    const dailyCounts = new Map<string, number>();
     for (const event of activityEvents) {
       const date = new Date(event.at);
       if (Number.isNaN(date.getTime())) continue;
       const key = dateKey(date);
-      dailyScores.set(key, (dailyScores.get(key) ?? 0) + (ACTIVITY_WEIGHTS[event.type] ?? 0));
+      dailyCounts.set(key, (dailyCounts.get(key) ?? 0) + (COUNTED_ACTIVITIES.has(event.type) ? 1 : 0));
     }
     const trend = (start: Date, days: number, label: (date: Date) => string): InsightTrendPoint[] => Array.from({ length: days }, (_, index) => {
       const from = new Date(start); from.setDate(from.getDate() + index);
-      return { label: label(from), count: dailyScores.get(dateKey(from)) ?? 0 };
+      return { label: label(from), count: dailyCounts.get(dateKey(from)) ?? 0 };
     });
     const recordedAt = [...activityEvents.map((event) => event.at), ...documents.map((document) => document.created)].map((at) => new Date(at).getTime()).filter(Number.isFinite);
     const startedAt = new Date(recordedAt.length ? Math.min(...recordedAt) : now.getTime());
@@ -943,9 +951,10 @@ export class VaultStore {
     return {
       health: { complete: activityReport.issues.length === 0 && !documentReport.issue && !this.historyWriteIssue && !this.referenceIssue, issues: [...activityReport.issues.map((issue) => `${issue.file}: ${issue.message}`), ...(documentReport.issue ? [documentReport.issue] : []), ...(this.historyWriteIssue ? [t("本次活动未记录：{0}", this.historyWriteIssue)] : []), ...(this.referenceIssue ? [t("本机引用索引暂时不可用：{0}", this.referenceIssue)] : [])], documentsAvailable: !documentReport.issue },
       summary: {
-        weekActivityScore: activityScore(activityEvents.filter((event) => inRange(event.at, weekStart))),
-        allTimeActivityScore: activityScore(activityEvents),
-        weekActivityCount: activityEvents.filter((event) => inRange(event.at, weekStart) && ACTIVITY_WEIGHTS[event.type] !== undefined).length,
+        weekActivityScore: activityCount(activityEvents.filter((event) => inRange(event.at, weekStart))),
+        allTimeActivityScore: activityCount(activityEvents),
+        allTimeActivityCount: activityCount(activityEvents),
+        weekActivityCount: activityEvents.filter((event) => inRange(event.at, weekStart) && COUNTED_ACTIVITIES.has(event.type)).length,
         weekCreated: activityEvents.filter((event) => ["node-created", "local-created"].includes(event.type) && inRange(event.at, weekStart)).length,
         weekUpdated: activityEvents.filter((event) => ["node-updated", "local-edited", "local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) && inRange(event.at, weekStart)).length,
         weekSharesCreated: activityEvents.filter((event) => event.type === "share-created" && inRange(event.at, weekStart)).length,
@@ -999,11 +1008,19 @@ export class VaultStore {
     }
     return [...grouped.values()].sort((a, b) => b.uses - a.uses || b.lastUsed.localeCompare(a.lastUsed));
   }
+  private sourceHash(source: string): string { return createHash("sha256").update(source).digest("hex"); }
+  private selectionOffset(share: Share, source: string): number | undefined {
+    return share.selectionSourceHash === this.sourceHash(source) ? share.selectionStart : undefined;
+  }
+  private selectionDetails(share: Share, source: string): { hint: string; selection?: SelectionMetadata } {
+    if (share.selection === undefined) return { hint: t(SHARE_HINT) };
+    return { selection: selectionMetadata(source, share.selection, this.selectionOffset(share, source)), hint: t("这是用户选中的节选，不应将其视为原文全文或据此推断完整观点。位置与占比基于当前正文；行号从 1 开始，偏移从 0 开始、结束位置不包含在内。重复文本无法确定位置时标记为 ambiguous。PATCH 只替换该节选，保留其余正文。") };
+  }
   private async resolveNodeShare(share: Share, node: AgentNode): Promise<ShareResult> {
     if (node.type === "snippet") {
       const content = share.selection ?? node.content;
-      if (share.selection && !node.content.includes(share.selection)) throw new StoreError(410, t("分享选段已不在当前正文中"));
-      return { shareId: share.id, kind: "text", title: node.title, background: node.background, content, updated: node.updated, filePath: await this.nodeFileAbsPath(node.id), hint: t(SHARE_HINT) };
+      if (share.selection !== undefined && !node.content.includes(share.selection)) throw new StoreError(410, t("分享选段已不在当前正文中"));
+      return { shareId: share.id, kind: "text", title: node.title, background: node.background, content, updated: node.updated, filePath: await this.nodeFileAbsPath(node.id), ...this.selectionDetails(share, node.content) };
     }
     if (!node.path) throw new StoreError(410, t("笔记缺少文件地址"));
     const stat = await fsp.stat(node.path).catch(() => null);
@@ -1015,8 +1032,8 @@ export class VaultStore {
     if (!stat?.isFile()) throw new StoreError(410, t("分享文件已不存在: {0}", address));
     const body = await fsp.readFile(abs, "utf8");
     const content = share.selection ?? body;
-    if (share.selection && !body.includes(share.selection)) throw new StoreError(410, t("分享选段已不在当前文件中"));
-    return { shareId: share.id, kind: "file", title, background, address, content, updated: stat.mtime.toISOString(), filePath: abs, hint: t(SHARE_HINT) };
+    if (share.selection !== undefined && !body.includes(share.selection)) throw new StoreError(410, t("分享选段已不在当前文件中"));
+    return { shareId: share.id, kind: "file", title, background, address, content, updated: stat.mtime.toISOString(), filePath: abs, ...this.selectionDetails(share, body) };
   }
   private async resolveFolderShare(share: Share, address: string, abs: string, background = share.background ?? "", title = path.basename(address)): Promise<ShareResult> {
     const stat = await fsp.stat(abs).catch(() => null);

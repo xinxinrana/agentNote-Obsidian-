@@ -41,7 +41,9 @@ Return share links as \`[document title](full URL)\`; use the original URL for A
 - \`kind: file\`: file address, background, and current file content.
 - \`kind: folder\`: folder address, background, and first-level file names.
 
-Append \`?raw=1\` to get only the content text. Do not ask the user to copy the original file or paste its content again.
+If the response includes \`selection\`, it is a user-selected excerpt. Check its position, coverage, and completeness; do not treat it as the full document or infer the author’s complete views.
+
+Append \`?raw=1\` to get text (selection shares retain their excerpt notice and metadata). Do not ask the user to copy the original file or paste its content again.
 
 Read wikilink targets when needed: GET \`{{baseUrl}}/api/shares/<id>/links\` for \`targetPath\`, then POST \`{{baseUrl}}/api/shares\` with \`{"path":"<targetPath>"}\` and GET the returned \`/resolve\` URL.
 
@@ -98,6 +100,6 @@ export const ENGLISH_INSTALL_PROMPT = `Please install the agentNote Skill. It is
 2. Create agentnote.identity.json in the same directory with your fixed id and name, for example {"id":"your-agent-id","name":"Your Agent Name"}. Use this identity as described in the Skill.
 3. After installation, POST {{baseUrl}}/api/agents/register with {"name":"Your Agent Name","skillPath":"<absolute path to SKILL.md>"}. Use the same name as in the identity file so Obsidian can manage this Skill. The optional iconPath reports this Agent's own icon, not the agentNote icon. Prefer an official PNG, ICO, or SVG icon from this Agent's own website; if unavailable, use an official icon from its local installation. Copy the confirmed icon into the same Skill directory and include "iconPath":"<absolute path to that icon>". If you cannot confirm or obtain one, omit iconPath and the panel will show a default icon.
 
-If your agent supports Skill icons, you may use {{baseUrl}}/api/skill-icon.svg for the agentNote Skill itself. This is the agentNote product icon, not your agent's logo; never report it as iconPath. Otherwise, skip it.
+If your agent supports Skill icons, you may use {{baseUrl}}/api/skill-icon.ico for the agentNote Skill itself. This is the agentNote product icon, not your agent's logo; never report it as iconPath. For Codex, save it as assets/icon.ico and set both interface.icon_small and interface.icon_large in agents/openai.yaml to ./assets/icon.ico. Otherwise, skip it.
 
 Finally, briefly confirm that a new conversation can use the Skill. If the local URL is unavailable, ask the user to start the agentNote service in Obsidian.`;

@@ -86,20 +86,20 @@ In **Recent activity**, click a row with a source file to open it in Obsidian. T
 
 ### Knowledge contribution records
 
-agentNote records local actions that put knowledge to work: user-created files, completed edit sessions, reading for more than 20 seconds, agent use, adding a new note link, moving, renaming, archiving, and deleting. Existing genuine collaboration records remain available; the plugin starts listening only after initialization, so it does not treat pre-existing files as newly created. It does not rate people or upload activity. A day's knowledge activity value is simply the combined value of those actions.
+agentNote records local actions that put knowledge to work: user-created files, completed edit sessions, reading for more than 20 seconds, agent use, adding a new note link, moving, renaming, archiving, and deleting. Existing genuine collaboration records remain available; the plugin starts listening only after initialization, so it does not treat pre-existing files as newly created. It does not rate people or upload activity. Each recorded activity counts once, without weights. Counts do not measure time spent, content quality, or the size of an achievement.
 
 When more than three local actions of the same kind, or more than ten local actions of any kind, occur within one second, the plugin asks whether to count the batch. Ignoring a batch still updates document records and moved share targets. The choice can be remembered or set in agentNote settings.
 
 Each document has a reviewable contribution breakdown: construction, reuse, connection, and organization. Deletion records remain in the local ledger, while the timeline displays only the most recent 30 days so recent cleanup remains visible without making the history endless.
 
-Local creation, editing, reading, and organization reflect the user's own work first; share access and agent updates also contribute to each document. Select **View activity records** on a document card to open the timeline filtered by that document’s title.
+Local and agent actions use the same counting rule. Documents are ranked by activity count; construction, reuse, connection, and organization counts add up to the total. Select **View activity records** on a document card to open the timeline filtered by that document’s title.
 
 Material titles appear as text links in the knowledge profile. Click one to open its original file in a new Obsidian tab and close the insights window. In **Privacy view**, titles are anonymized and the open-file action is hidden.
 
 Each successful share-link request counts as one use. If the request has no agent identity, the timeline shows an unidentified visitor rather than a local action. Local reading is recorded only after a file remains open in Obsidian for more than 20 seconds. Existing records are preserved.
 
 - **Profile**: this calendar week’s results, daily rhythm, reused material, and document contributions including local work. Select a date for related activity on the same page, or **View activity records** to open the timeline filtered by a document’s title.
-- **All time**: totals and note rankings retain the full history. The contribution grid shows a rolling 40 weeks, opens at the latest dates, and keeps breathing room on the right; deeper color represents more knowledge work that day.
+- **All time**: totals and note rankings retain the full history; document cards also show the last 30 days of activity. The contribution grid shows a rolling 40 weeks, opens at the latest dates, and keeps breathing room on the right; deeper color represents more recorded activities that day.
 - **Agent and timeline**: open an agent’s activity records, search document titles, and filter by collaborator or construction, reuse, connection, and organization. Records are grouped by date. Click an existing file's timeline entry to open it in a new Obsidian tab; deleted files and folders are not linked.
 - **Cleanup**: low-use notes that may be archived; protected notes never appear here.
 
@@ -132,3 +132,15 @@ This is not a full-vault backup. It does not cover note contents, shared configu
 ### Interface language
 
 In Obsidian **Settings → agentNote → Interface language**, choose Auto, Simplified Chinese, or English. A manual choice takes priority. Auto follows Obsidian's language: Chinese locales use Chinese, and all others use English. Settings and the connection panel update immediately; restart Obsidian to update command and menu names. Switching languages does not translate or rewrite notes, history, or existing custom Skills.
+
+### Selection shares
+
+A selection share returns only the excerpt as its content, with `selection` metadata describing source length, selected length, coverage (0–1), whether it covers the entire document, and its current line range and offsets. Lines are 1-based. Offsets are 0-based with an exclusive end; lengths and offsets use UTF-16 code units. For agentNote text nodes, the source is the body, excluding management frontmatter.
+
+The editor supplies the selected occurrence. If the source changes, a unique match is relocated. Multiple matches without a reliable position are marked `ambiguous`, and writes are refused rather than changing an arbitrary occurrence. Missing excerpts return an expired-share error. `?raw=1` retains the excerpt notice and metadata; whole-document responses are unchanged.
+
+### Skill icons
+
+Installation tasks offer `/api/skill-icon.ico`, a transparent ICO product icon with padding and sizes from 16 to 256px. For Codex, save it as `assets/icon.ico` inside the Skill directory and reference `./assets/icon.ico` from both `interface.icon_small` and `interface.icon_large` in `agents/openai.yaml`. Existing installations can copy a new installation task to update the icon configuration without deleting their identity file. The PNG and SVG endpoints remain available.
+
+Activity API consumers should use `summary.weekActivityCount`, `summary.allTimeActivityCount`, and document `activityCount` / `recentActivityCount`. The legacy score fields remain compatibility aliases for the same unweighted counts. Historical event files are unchanged.

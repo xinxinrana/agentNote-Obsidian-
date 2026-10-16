@@ -269,7 +269,7 @@ export class AgentNoteView extends ItemView {
     heroHeading.createEl("button", { cls: "agentnote-profile-link", text: t("完整档案") }).onclick = () => new InsightsModal(this.app, this.plugin).open();
     overview.createEl("p", { text: insights.summary.weekActivityCount ? t("本周 {0} 次知识活动，{1} 次资料使用。", insights.summary.weekActivityCount, insights.summary.weekResolves) : t("创建、维护、使用或整理资料后，这里会留下完整的知识活动。") });
     const stats = overview.createDiv({ cls: "agentnote-metric-strip" });
-    for (const [value, label] of [[insights.summary.weekActivityScore, t("知识活跃分")], [insights.summary.weekUpdated, t("本周更新")], [insights.summary.weekResolves, t("本周复用")]] as const) {
+    for (const [value, label] of [[insights.summary.weekActivityCount, t("本周活动次数")], [insights.summary.weekUpdated, t("本周更新")], [insights.summary.weekResolves, t("本周复用")]] as const) {
       const stat = stats.createEl("button", { cls: "agentnote-metric" }); stat.createEl("strong", { text: String(value) }); stat.createSpan({ text: label });
       stat.onclick = () => new InsightsModal(this.app, this.plugin, label === t("本周复用") ? "month" : "overview").open();
     }
@@ -280,7 +280,7 @@ export class AgentNoteView extends ItemView {
       const bar = day.createSpan({ cls: point.count ? "is-active" : "" });
       if (point.count) bar.setCssProps({ "--agentnote-week-opacity": String(0.3 + point.count / max * 0.7) });
       day.createSpan({ text: point.label });
-      day.createSpan({ cls: "agentnote-visually-hidden", text: t("{0}：{1} 知识活跃分", point.label, point.count) });
+      day.createSpan({ cls: "agentnote-visually-hidden", text: t("{0}：{1} 次活动", point.label, point.count) });
     }
     const activity = activityParent.createDiv({ cls: "agentnote-home-activity" });
     this.recentActivityContainer = activity;
@@ -503,7 +503,7 @@ class InsightsModal extends Modal {
       this.renderDocumentContributions(body, insights.weeklyDocuments, t("本周文档贡献"));
     }
     if (this.tab === "month") {
-      this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: t("开始以来的知识贡献"), description: t("从 {0} 的第一条记录开始。总值保留全部历史，记录墙展示最近 40 周。", this.dateText(insights.startedAt)), trendTitle: t("最近 40 周知识贡献"), rankingTitle: t("开始以来协作资料") }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, t("近 40 周活跃天数")], [insights.summary.allTimeActivityScore, t("累计知识活动值")], [insights.documents.reduce((total, entry) => total + entry.reuse, 0), t("累计使用")], [insights.documents.length, t("参与资料")]], insights.allTime, insights.allTimeTrend);
+      this.renderPeriod(body, { eyebrow: "ALL-TIME CONTRIBUTIONS", title: t("开始以来的知识贡献"), description: t("从 {0} 的第一条记录开始。次数保留全部历史，记录墙展示最近 40 周。", this.dateText(insights.startedAt)), trendTitle: t("最近 40 周知识贡献"), rankingTitle: t("开始以来协作资料") }, [[insights.allTimeTrend.filter((point) => point.count > 0).length, t("近 40 周活跃天数")], [insights.summary.allTimeActivityCount, t("累计活动次数")], [insights.documents.reduce((total, entry) => total + entry.reuse, 0), t("累计分享与使用")], [insights.documents.length, t("参与资料")]], insights.allTime, insights.allTimeTrend);
       this.renderDocumentContributions(body, insights.documents, t("文档贡献档案"));
     }
     if (this.tab === "agents") this.renderAgents(body, agents);
@@ -524,10 +524,10 @@ class InsightsModal extends Modal {
     summary.createSpan({ cls: "agentnote-profile-label", text: t("本周成果") });
     const mascot = summary.createEl("img", { cls: "agentnote-profile-mascot", attr: { src: xiaojiWave, alt: "" } });
     mascot.setAttribute("aria-hidden", "true");
-    summary.createEl("strong", { text: t("{0} 知识活动值", insights.summary.weekActivityScore) });
+    summary.createEl("strong", { text: t("{0} 次知识活动", insights.summary.weekActivityCount) });
     summary.createEl("p", { text: insights.summary.weekActivityCount ? t("建设 {0} · 维护整理 {1} · 分享 {2} · 使用 {3}", insights.summary.weekCreated, insights.summary.weekUpdated, insights.summary.weekSharesCreated, insights.summary.weekResolves) : t("开始建设、使用或整理资料后，这里会记录完整的知识工作成果。") });
     const metrics = profile.createDiv({ cls: "agentnote-profile-metrics" });
-    for (const [value, label] of [[insights.summary.weekActivityCount, t("有效操作")], [activeDays, t("活跃天数")], [agents.length, t("协作 agent")]] as const) {
+    for (const [value, label] of [[insights.summary.weekUsedNotes, t("本周使用资料")], [activeDays, t("活跃天数")], [agents.length, t("协作 agent")]] as const) {
       const metric = metrics.createDiv(); metric.createEl("strong", { text: String(value) }); metric.createSpan({ text: label });
     }
 
@@ -540,7 +540,7 @@ class InsightsModal extends Modal {
     const max = Math.max(1, ...insights.weeklyTrend.map((point) => point.count));
     for (const point of insights.weeklyTrend) {
       const key = this.weekDayKey(insights.weeklyTrend.indexOf(point));
-      const day = days.createEl("button", { cls: `agentnote-profile-day${point.count ? " is-active" : ""}`, attr: { title: t("{0}：{1} 知识活跃分", point.label, point.count), "aria-pressed": String(this.selectedDay === key) } });
+      const day = days.createEl("button", { cls: `agentnote-profile-day${point.count ? " is-active" : ""}`, attr: { title: t("{0}：{1} 次活动", point.label, point.count), "aria-pressed": String(this.selectedDay === key) } });
       day.onclick = () => { this.selectedDay = this.selectedDay === key ? null : key; void this.render(); };
       if (point.count) day.setCssProps({ "--agentnote-activity-strength": `${Math.round((0.22 + point.count / max * 0.5) * 100)}%` });
       day.createEl("strong", { text: point.label }); day.createSpan({ text: String(point.count) });
@@ -621,14 +621,14 @@ class InsightsModal extends Modal {
   }
   private renderDocumentContributions(parent: HTMLElement, documents: DashboardInsights["documents"], title: string): void {
     const section = parent.createDiv({ cls: "agentnote-detail-section agentnote-period-ranking" });
-    const heading = section.createDiv({ cls: "agentnote-section-heading" }); heading.createEl("h3", { text: title }); heading.createSpan({ text: t("包含本地创建、阅读、编辑、引用与 agent 使用") });
+    const heading = section.createDiv({ cls: "agentnote-section-heading" }); heading.createEl("h3", { text: title }); heading.createSpan({ text: t("每条活动计 1 次，可查看明细；次数不代表内容质量。") });
     if (!documents.length) { section.createEl("p", { cls: "agentnote-empty-copy", text: t("开始创建、使用或整理资料后，这里会形成可追溯的文档贡献档案。") }); return; }
     for (const [index, entry] of documents.slice(0, 8).entries()) {
       const card = section.createDiv({ cls: "agentnote-value-card" });
       card.createSpan({ cls: "agentnote-value-rank", text: String(index + 1).padStart(2, "0") });
-      const row = card.createDiv({ cls: "agentnote-value-title" }); this.fileTitle(row, entry.document.title, async () => entry.document.path); row.createSpan({ cls: "agentnote-profile-use-count", text: `${entry.score}` });
-      card.createEl("p", { text: t("内容建设 {0} · 协作复用 {1} · 知识连接 {2} · 知识整理 {3}", entry.construction, entry.reuse, entry.connection, entry.organization) });
-      if (entry.lastActive) card.createEl("small", { text: t("最近活动：{0}{1}", this.timeText(entry.lastActive), title === t("文档贡献档案") ? t(" · 近 30 天活动值 {0}", entry.recentScore) : "") });
+      const row = card.createDiv({ cls: "agentnote-value-title" }); this.fileTitle(row, entry.document.title, async () => entry.document.path); row.createSpan({ cls: "agentnote-profile-use-count", text: t("{0} 次活动", entry.activityCount) });
+      card.createEl("p", { text: t("内容建设 {0} 次 · 分享与使用 {1} 次 · 知识连接 {2} 次 · 知识整理 {3} 次", entry.construction, entry.reuse, entry.connection, entry.organization) });
+      if (entry.lastActive) card.createEl("small", { text: t("最近活动：{0}{1}", this.timeText(entry.lastActive), title === t("文档贡献档案") ? t(" · 近 30 天 {0} 次活动", entry.recentActivityCount) : "") });
       card.createEl("button", { text: t("查看活动记录") }).onclick = () => {
         this.timelineQuery = entry.document.title;
         this.timelineAgent = "";
@@ -670,7 +670,7 @@ class InsightsModal extends Modal {
         label.setCssProps({ "--agentnote-month-offset": `${column * 17}px` });
         lastMonthColumn = column;
       }
-      const cell = grid.createEl("button", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": t("{0}：{1} 知识活跃分", point.label, point.count) } });
+      const cell = grid.createEl("button", { cls: `agentnote-contribution-cell${point.count ? " is-active" : ""}`, attr: { "aria-label": t("{0}：{1} 次活动", point.label, point.count) } });
       cell.setAttribute("aria-pressed", String(this.selectedDay === point.label));
       cell.onclick = () => { this.selectedDay = this.selectedDay === point.label ? null : point.label; void this.render(); };
       if (point.count) cell.setCssProps({ ...contributionShade(point.count, min, max), "--agentnote-reveal-delay": `${Math.round(Math.pow((column - firstActiveColumn) / activeColumnSpan, 0.72) * 425 + date.getDay() * 2)}ms` });
@@ -791,7 +791,7 @@ class InsightShareModal extends Modal {
     parent.createEl("h2", { text: t("开始以来的知识贡献") });
     parent.createEl("p", { cls: "agentnote-share-subtitle", text: t("从 {0} 的第一条记录开始，持续积累可复用的本地资料。", start) });
     const metrics = parent.createDiv({ cls: "agentnote-share-metrics" });
-    for (const [value, label] of [[this.insights.summary.allTimeActivityScore, t("累计知识活动值")], [this.insights.documents.length, t("参与资料")], [activeDays, t("近 40 周活跃天数")]] as const) {
+    for (const [value, label] of [[this.insights.summary.allTimeActivityCount, t("累计活动次数")], [this.insights.documents.length, t("参与资料")], [activeDays, t("近 40 周活跃天数")]] as const) {
       const metric = metrics.createDiv(); metric.createEl("strong", { text: String(value) }); metric.createSpan({ text: label });
     }
     const contributions = parent.createDiv({ cls: "agentnote-share-contributions" });
@@ -814,13 +814,13 @@ class InsightShareModal extends Modal {
         months.createSpan({ text: date.toLocaleDateString(locale(), { month: "short" }) }).setCssProps({ "--agentnote-share-month-offset": `${column * 14}px` });
         lastMonthColumn = column;
       }
-      const cell = grid.createSpan({ cls: `agentnote-share-contribution-cell${point.count ? " is-active" : ""}`, attr: { title: t("{0}：{1} 知识活跃分", point.label, point.count) } });
+      const cell = grid.createSpan({ cls: `agentnote-share-contribution-cell${point.count ? " is-active" : ""}`, attr: { title: t("{0}：{1} 次活动", point.label, point.count) } });
       if (point.count) cell.setCssProps(contributionShade(point.count, min, max));
     }
     const top = parent.createDiv({ cls: "agentnote-share-top-note" });
     top.createSpan({ text: t("开始以来的协作资料") });
     top.createEl("strong", { text: this.titleForShare() });
-    top.createEl("small", { text: this.insights.allTime[0] ? t("累计被读取 {0} 次", this.insights.allTime[0].reads) : this.insights.documents[0] ? t("累计知识活动值 {0}", this.insights.documents[0].score) : t("从一次分享开始建立可复用上下文") });
+    top.createEl("small", { text: this.insights.allTime[0] ? t("累计被读取 {0} 次", this.insights.allTime[0].reads) : this.insights.documents[0] ? t("累计 {0} 次活动", this.insights.documents[0].activityCount) : t("从一次分享开始建立可复用上下文") });
     parent.createEl("small", { cls: "agentnote-share-footer", text: t("由 agentNote 在本地生成 · 内容不离开你的 vault") });
   }
   private async render(): Promise<void> {

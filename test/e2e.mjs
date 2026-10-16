@@ -129,7 +129,7 @@ try {
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.name, "Codex");
     assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.actor?.sessionTitle, "发布流程验证");
   });
-  await test("dashboard counts creation, updates, sharing, and reuse with transparent weights", async () => {
+  await test("dashboard counts each creation, update, share, and read once", async () => {
     const scoringVault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-score-"));
     const scoringStore = new VaultStore(scoringVault);
     try {
@@ -139,21 +139,28 @@ try {
       const share = await scoringStore.createShare(node.id);
       await scoringStore.resolveShare(share.id);
       const insights = await scoringStore.getDashboardInsights();
-      assert.equal(insights.summary.weekActivityScore, 12);
-      assert.equal(insights.summary.allTimeActivityScore, 12);
+      assert.equal(insights.summary.weekActivityScore, 4);
+      assert.equal(insights.summary.allTimeActivityScore, 4);
       assert.equal(insights.summary.weekActivityCount, 4);
+      assert.equal(insights.summary.allTimeActivityCount, 4);
+      const document = insights.documents.find((entry) => entry.document.title === "统计样本");
+      assert.equal(document.activityCount, 4);
+      assert.equal(document.recentActivityCount, 4);
+      assert.equal(document.construction, 2);
+      assert.equal(document.reuse, 2);
+      assert.equal(document.construction + document.reuse + document.connection + document.organization, document.activityCount);
       assert.equal(insights.summary.weekCreated, 1);
       assert.equal(insights.summary.weekUpdated, 1);
       assert.equal(insights.summary.weekSharesCreated, 1);
       assert.equal(insights.summary.weekResolves, 1);
       assert.equal(insights.timeline.find((event) => event.type === "share-resolved")?.origin, "link");
       assert.ok(insights.timeline.some((event) => event.type === "share-created" && event.title === "统计样本"));
-      assert.equal(insights.weeklyTrend.reduce((total, point) => total + point.count, 0), 12);
+      assert.equal(insights.weeklyTrend.reduce((total, point) => total + point.count, 0), 4);
       const later = await scoringStore.getDashboardInsights(new Date("2027-01-02T12:00:00"));
       assert.equal(later.allTimeTrend.length, 280);
       assert.equal(later.allTimeTrend[0].label, "2026-03-29");
       assert.equal(later.allTimeTrend.at(-1).label, "2027-01-02");
-      assert.equal(later.summary.allTimeActivityScore, 12);
+      assert.equal(later.summary.allTimeActivityScore, 4);
     } finally {
       await fsp.rm(scoringVault, { recursive: true, force: true });
     }
@@ -404,7 +411,7 @@ try {
     assert.equal(new Set(localEvents.map((event) => event.documentId)).size, 1);
     const insights = await store.getDashboardInsights();
     assert.equal(insights.documents.some((document) => document.document.path === movedPath), false);
-    assert.ok(insights.summary.weekActivityScore >= 15);
+    assert.ok(insights.summary.weekActivityCount >= 5);
   });
   await test("bulk detection uses a one-second window and ignored events preserve document state", async () => {
     const events = (types, times) => types.map((type, index) => ({ type, at: times[index] }));
@@ -438,8 +445,8 @@ try {
     await store.recordDocumentReferences(sourcePath, [targetPath]);
     const insights = await store.getDashboardInsights();
     const target = insights.documents.find((document) => document.document.path === targetPath);
-    assert.equal(target?.connection, 5);
-    assert.equal(insights.weeklyDocuments.find((document) => document.document.path === targetPath)?.connection, 5);
+    assert.equal(target?.connection, 1);
+    assert.equal(insights.weeklyDocuments.find((document) => document.document.path === targetPath)?.connection, 1);
     assert.ok(insights.weeklyDocuments.some((document) => document.document.path === sourcePath));
     const activity = await api("GET", `/api/insights/activity?documentId=${target.document.id}`);
     assert.equal(activity.status, 200);
@@ -460,13 +467,13 @@ try {
       const historicStore = new VaultStore(historicVault);
       await historicStore.init();
       const before = await historicStore.getDashboardInsights();
-      assert.equal(before.summary.allTimeActivityScore, 6);
+      assert.equal(before.summary.allTimeActivityCount, 1);
       assert.equal(before.documents.length, 1);
       assert.equal(before.timeline.length, 1);
       assert.equal(before.activities[0]?.title, "旧资料", "recent activity includes records from before this week");
       await historicStore.recordLocalActivity("local-created", "新资料.md");
       const after = await historicStore.getDashboardInsights();
-      assert.equal(after.summary.allTimeActivityScore, 12);
+      assert.equal(after.summary.allTimeActivityCount, 2);
       assert.equal(after.documents.length, 2);
     } finally {
       await fsp.rm(historicVault, { recursive: true, force: true });
@@ -500,9 +507,9 @@ try {
       for (const current of [first, second]) {
         assert.equal((await current.listActivity()).length, 4);
         const insights = await current.getDashboardInsights();
-        assert.equal(insights.summary.allTimeActivityScore, 12);
+        assert.equal(insights.summary.allTimeActivityScore, 4);
         assert.equal(insights.activities.filter((event) => event.type === "share-resolved").length, 2, "recent activity merges both devices");
-        assert.equal(insights.documents.find((row) => row.document.title === "跨设备资料")?.score, 12);
+        assert.equal(insights.documents.find((row) => row.document.title === "跨设备资料")?.activityCount, 4);
         assert.equal((await current.getDocumentInsights()).find((row) => row.nodeId === note.id)?.uses, 2);
         assert.deepEqual((await current.getAgentInsights()).map((row) => [row.name, row.uses]).sort(), [["Claude Code", 1], ["Codex", 1]]);
       }
@@ -726,7 +733,7 @@ try {
       await restarted.init();
       const document = (await restarted.getDashboardInsights()).documents.find((entry) => entry.document.id === created.documentId);
       assert.equal(document?.document.path.includes("归档"), true);
-      assert.equal(document?.score, 7);
+      assert.equal(document?.activityCount, 2);
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
@@ -837,6 +844,66 @@ try {
     } finally { await fsp.rm(root, { recursive: true, force: true }); }
   });
 
+  await test("selection metadata describes current range and never adds unshared surrounding text", async () => {
+    const text = "# 标题\n背景😀\n只分享这段\n未分享的结尾";
+    await fsp.writeFile(path.join(vault, "excerpt.md"), text);
+    const share = await api("POST", "/api/shares", { path: "excerpt.md", selection: "只分享这段", selectionStart: text.indexOf("只分享") });
+    const url = `/api/shares/${share.data.id}/resolve`;
+    const result = (await api("GET", url)).data;
+    assert.equal(result.content, "只分享这段");
+    assert.equal(result.selection.scope, "selection");
+    assert.equal(result.selection.isCompleteDocument, false);
+    assert.equal(result.selection.sourceLength, text.length);
+    assert.equal(result.selection.selectedLength, 5);
+    assert.equal(result.selection.coverage, 5 / text.length);
+    assert.deepEqual(result.selection.position, { status: "exact", startOffset: text.indexOf("只分享"), endOffset: text.indexOf("只分享") + 5, startLine: 3, endLine: 3 });
+    const raw = await (await fetch(base + url + "?raw=1")).text();
+    assert.match(raw, /agentNote selection/);
+    assert.match(raw, /只分享这段/);
+    assert.doesNotMatch(raw, /未分享的结尾|背景😀/);
+    await fsp.writeFile(path.join(vault, "excerpt.md"), "前面新增一行\n" + text);
+    assert.equal((await api("GET", url)).data.selection.position.startLine, 4);
+    await fsp.writeFile(path.join(vault, "excerpt.md"), "选段已删除");
+    assert.equal((await api("GET", url)).status, 410);
+  });
+  await test("repeated selections use the chosen occurrence and refuse ambiguous writes", async () => {
+    const text = "重复\n中间\n重复";
+    await fsp.writeFile(path.join(vault, "repeated.md"), text);
+    const share = await api("POST", "/api/shares", { path: "repeated.md", selection: "重复", selectionStart: text.lastIndexOf("重复") });
+    const url = `/api/shares/${share.data.id}`;
+    assert.equal((await api("GET", url + "/resolve")).data.selection.position.startLine, 3);
+    // The original saved offset still contains the same text after this edit,
+    // but no longer identifies the original occurrence. Never trust it blindly.
+    await fsp.writeFile(path.join(vault, "repeated.md"), text + "\n重复");
+    assert.equal((await api("GET", url + "/resolve")).data.selection.position.status, "ambiguous");
+    await fsp.writeFile(path.join(vault, "repeated.md"), text);
+    await api("PATCH", url, { content: "第二处" });
+    assert.equal(await fsp.readFile(path.join(vault, "repeated.md"), "utf8"), "重复\n中间\n第二处");
+    const ambiguous = await api("POST", "/api/shares", { path: "repeated.md", selection: "重复" });
+    await fsp.writeFile(path.join(vault, "repeated.md"), "重复\n重复");
+    assert.equal((await api("GET", `/api/shares/${ambiguous.data.id}/resolve`)).data.selection.position.status, "ambiguous");
+    assert.equal((await api("PATCH", `/api/shares/${ambiguous.data.id}`, { content: "不能误改" })).status, 409);
+    assert.equal(await fsp.readFile(path.join(vault, "repeated.md"), "utf8"), "重复\n重复");
+  });
+  await test("node selections describe body offsets and whole-note responses stay unchanged", async () => {
+    const { data: node } = await api("POST", "/api/nodes", { title: "节选元数据", content: "开头\n正文\n结尾" });
+    const share = await api("POST", "/api/shares", { nodeId: node.id, selection: "正文" });
+    const selected = (await api("GET", `/api/shares/${share.data.id}/resolve`)).data;
+    assert.equal(selected.selection.position.startLine, 2);
+    assert.equal(selected.selection.sourceLength, node.content.length);
+    const whole = await api("GET", new URL(node.link).pathname);
+    assert.equal(whole.data.selection, undefined);
+    assert.equal(await (await fetch(node.link + "?raw=1")).text(), node.content);
+    await api("PATCH", `/api/shares/${share.data.id}`, { content: "" });
+    const removed = (await api("GET", `/api/shares/${share.data.id}/resolve`)).data;
+    assert.equal(removed.content, "");
+    assert.equal(removed.selection.selectedLength, 0);
+    assert.equal(removed.selection.isCompleteDocument, false);
+    const all = await api("POST", "/api/shares", { nodeId: node.id, selection: (await store.getNode(node.id)).content });
+    const allResult = (await api("GET", `/api/shares/${all.data.id}/resolve`)).data;
+    assert.equal(allResult.selection.isCompleteDocument, true);
+    assert.equal(allResult.selection.coverage, 1);
+  });
   await test("editing a legacy selection creates an independent record without rewriting history", async () => {
     const root = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-legacy-share-edit-"));
     try {
@@ -944,6 +1011,30 @@ try {
     assert.equal(response.headers.get("content-type"), "image/svg+xml; charset=utf-8");
     assert.equal(await response.text(), await fsp.readFile("assets/brand/xiaoji-mark.svg", "utf8"));
   });
+  await test("ICO Skill icon serves every required size without conversion", async () => {
+    const response = await fetch(`${base}/api/skill-icon.ico`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/x-icon");
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.deepEqual(bytes, await fsp.readFile("assets/brand/skill-icon.ico"));
+    assert.equal(bytes.readUInt16LE(0), 0);
+    assert.equal(bytes.readUInt16LE(2), 1);
+    assert.equal(bytes.readUInt16LE(4), 7);
+    const sizes = Array.from({ length: 7 }, (_, i) => bytes[6 + i * 16] || 256);
+    assert.deepEqual(sizes, [16, 24, 32, 48, 64, 128, 256]);
+  });
+  await test("PNG Skill icon has the exact bundled pixels and a transparent 256px canvas", async () => {
+    const response = await fetch(`${base}/api/skill-icon.png`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/png");
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.deepEqual(bytes, await fsp.readFile("assets/brand/skill-icon.png"));
+    assert.equal(bytes.subarray(1, 4).toString(), "PNG");
+    assert.equal(bytes.readUInt32BE(16), 256);
+    assert.equal(bytes.readUInt32BE(20), 256);
+    assert.equal(bytes[25], 6); // RGBA, including transparency.
+    assert.match(renderManualInstallPrompt({ port }), /interface.icon_small 和 interface.icon_large.*assets\/icon.ico/);
+  });
   await test("built-in agents remain visible regardless of local installation", async () => {
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-agents-"));
     try {
@@ -967,7 +1058,7 @@ try {
     assert.match(prompt, /\/api\/skill\.md/); assert.match(prompt, /SKILL\.md/); assert.match(prompt, /agentnote\.identity\.json/); assert.match(prompt, /\/api\/agents\/register/); assert.match(prompt, /skillPath/); assert.match(prompt, /最后简单确认/);
     assert.match(prompt, /iconPath 是上报当前 Agent 自身 ico，不是 agentNote 的图标/);
     assert.match(prompt, /优先从当前 Agent 的官方网站获取其官方 PNG、ICO 或 SVG 图标/);
-    assert.match(prompt, /\/api\/skill-icon\.svg.*不要作为 iconPath 上报/);
+    assert.match(prompt, /\/api\/skill-icon\.ico.*不要作为 iconPath 上报/);
     assert.doesNotMatch(prompt, /\/api\/health/);
   });
   await test("first Agent report stores a local path and matches names case-insensitively", async () => {
@@ -1089,7 +1180,7 @@ try {
       assert.deepEqual(endpoints(english), endpoints(chinese));
       const install = renderManualInstallPrompt({ port });
       assert.doesNotMatch(install, /\p{Script=Han}/u);
-      for (const route of ["/api/skill.md", "/api/agents/register", "/api/skill-icon.svg"]) assert.ok(install.includes(`${base}${route}`));
+      for (const route of ["/api/skill.md", "/api/agents/register", "/api/skill-icon.ico"]) assert.ok(install.includes(`${base}${route}`));
       assert.match(install, /agentnote.identity.json/);
       assert.match(install, /skillPath/);
     } finally { setLanguage(null); }

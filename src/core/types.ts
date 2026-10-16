@@ -48,6 +48,10 @@ export interface Share {
   target: ShareTarget;
   /** Exact text span of the target's content (live-checked at resolve time). */
   selection?: string;
+  /** Editor offset in the shared source, when available. */
+  selectionStart?: number;
+  /** Only trust the saved offset while the source remains unchanged. */
+  selectionSourceHash?: string;
   /** Context supplied for a direct file/folder share. Node shares use the node background. */
   background?: string;
   created: string;

@@ -73,7 +73,9 @@ POST {{baseUrl}}/api/nodes
 - \`kind: file\`：文件地址、背景和当前文件内容。
 - \`kind: folder\`：文件夹地址、背景和第一层文件名称。
 
-追加 \`?raw=1\` 只获取内容文本。不要要求用户复制原文件或重新粘贴正文。
+响应含 \`selection\` 时是用户选中的节选；先看其位置、占比和完整性，不要当作全文或据此推断完整观点。
+
+追加 \`?raw=1\` 获取文本（选段仍保留节选提示和范围信息）。不要要求用户复制原文件或重新粘贴正文。
 
 按需读取分享笔记中的双链目标：GET \`{{baseUrl}}/api/shares/<id>/links\` 获取 \`targetPath\`，再 POST \`{{baseUrl}}/api/shares\`（\`{"path":"<targetPath>"}\`）并 GET 返回的 \`/resolve\`。
 
@@ -205,7 +207,7 @@ export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "po
 2. 在同一目录创建 agentnote.identity.json，填写你固定的 id 和 name，例如 {"id":"your-agent-id","name":"Your Agent Name"}。之后按 Skill 说明使用这份身份。
 3. 安装后 POST ${base}/api/agents/register，上报 {"name":"你的 Agent 名称","skillPath":"SKILL.md 的绝对路径"}。上报名称与身份文件中的 name 保持一致，供 Obsidian 管理这份 Skill。可选的 iconPath 是上报当前 Agent 自身 ico，不是 agentNote 的图标。优先从当前 Agent 的官方网站获取其官方 PNG、ICO 或 SVG 图标；官网没有时可用本地安装资源中的官方图标。将确认属于当前 Agent 的图标复制到同一 Skill 目录，并附带 "iconPath":"该图标的绝对路径"；无法确认或获取时就省略，接入台会显示默认图标。
 
-如当前 Agent 支持为 Skill 设置图标，可从 ${base}/api/skill-icon.svg 下载 agentNote 的产品图标，仅用于 agentNote Skill 自身；它不是当前 Agent 的 Logo，不要作为 iconPath 上报。不支持 Skill 图标则跳过。
+如当前 Agent 支持为 Skill 设置图标，可从 ${base}/api/skill-icon.ico 下载 agentNote 的产品图标，仅用于 agentNote Skill 自身；它不是当前 Agent 的 Logo，不要作为 iconPath 上报。Codex 请将图标保存为 assets/icon.ico，在 agents/openai.yaml 的 interface.icon_small 和 interface.icon_large 中都引用 ./assets/icon.ico。不支持 Skill 图标则跳过。
 
 最后简单确认新会话能够使用该 Skill。如果本地链接无法访问，提醒用户打开 Obsidian 的 agentNote 服务。`;
 }

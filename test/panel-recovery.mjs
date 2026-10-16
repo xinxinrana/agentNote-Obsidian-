@@ -97,12 +97,15 @@ try {
   assert.ok(graphCells.length > 0);
   assert.ok(graphCells.every(element => element.attrs['aria-label'] && !element.attrs.title));
   console.log('PASS contribution cells expose one accessible tooltip without a native title');
-  const contribution = { document: { id: 'd-launch', title: 'Launch plan', path: 'Launch plan.md' }, score: 3, construction: 3, reuse: 0, connection: 0, organization: 0 };
+  const contribution = { document: { id: 'd-launch', title: 'Launch plan', path: 'Launch plan.md' }, activityCount: 3, recentActivityCount: 3, score: 3, construction: 3, reuse: 0, connection: 0, organization: 0 };
   snapshot.documents = [contribution];
   snapshot.weeklyDocuments = [contribution];
   for (const sourceTab of ['overview', 'month']) {
     profile.tab = sourceTab; profile.timelineAgent = 'Claude Code'; profile.timelineDay = '2000-01-01'; profile.timelineFilter = 'organization';
     await profile.render();
+    assert.match(profile.contentEl.textContent, /3 次活动/);
+    assert.match(profile.contentEl.textContent, /内容建设 3 次/);
+    assert.doesNotMatch(profile.contentEl.textContent, /活动值|活跃分/);
     if (sourceTab === 'overview') assert.match(profile.contentEl.textContent, /本周文档贡献/);
     const recordButton = profile.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find(element => element.tag === 'button' && element.text === '查看活动记录');
     recordButton.onclick();

@@ -2,6 +2,8 @@
 
 小记是一张会陪伴资料流转的折角笔记。以下 SVG 是可编辑的主文件；静态形象在 `png/` 中提供同名透明背景位图，适合不支持 SVG 的场合。
 
+[Skill 安装图标](skill-icon.ico)为含 16、24、32、48、64、128、256px 的透明 ICO，图形按画布的 82% 缩放并居中，适合 Skill 列表使用；另提供 [PNG](skill-icon.png)。
+
 [视觉识别规范（VI）](VI.md)包含标志、色彩、字体、留白和应用规则。
 
 [小记动态角色规范](MOTION.md)定义角色动作、触发条件与验收标准。动态角色直接使用 [xiaoji-pet.svg](xiaoji-pet.svg)，可运行 `npm run preview:pet` 并打开 `test/pet-preview.html` 检查。

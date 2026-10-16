@@ -4,6 +4,8 @@ import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateN
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
 import { renderSharedSkillMd } from "./skill";
 import type { AgentConnection } from "./agentConnections";
+import skillIcoUrl from "../../assets/brand/skill-icon.ico";
+import skillIconUrl from "../../assets/brand/skill-icon.png";
 import xiaojiMarkUrl from "../../assets/brand/xiaoji-mark.svg";
 
 export type AgentOperation = "read" | "created" | "updated" | "archived";
@@ -56,6 +58,13 @@ export class AgentServer {
       res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-store" });
       return void res.end(body);
     }
+    if (["/api/skill-icon.ico", "/api/skill-icon.png"].includes(url.pathname) && method === "GET") {
+      const ico = url.pathname.endsWith(".ico");
+      const source = ico ? skillIcoUrl : skillIconUrl;
+      const body = Buffer.from(source.slice(source.indexOf(",") + 1), "base64");
+      res.writeHead(200, { "content-type": ico ? "image/x-icon" : "image/png", "content-length": body.length, "cache-control": "no-store" });
+      return void res.end(body);
+    }
     if (url.pathname === "/api/skill-icon.svg" && method === "GET") {
       const body = decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1));
       res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "content-length": Buffer.byteLength(body), "cache-control": "no-store" });
@@ -100,9 +109,9 @@ export class AgentServer {
       return send(res, 200, { ok: true, data: nodeView(node) });
     }
     if (parts[1] === "shares" && parts.length === 2 && method === "POST") {
-      const body = await readBody(req) as { nodeId?: string; path?: string; background?: string; selection?: string };
-      if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context) });
-      if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context) });
+      const body = await readBody(req) as { nodeId?: string; path?: string; background?: string; selection?: string; selectionStart?: number };
+      if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context, body.selectionStart) });
+      if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context, body.selectionStart) });
       throw new StoreError(400, t("nodeId 或 path 至少提供一个"));
     }
     if (parts[1] === "shares" && parts.length === 3 && (method === "PUT" || method === "PATCH")) {
@@ -121,7 +130,8 @@ export class AgentServer {
       const data = await this.store.resolveShare(parts[2], context);
       this.notifyActivity({ operation: "read", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "text" ? "node" : "file", actor: context.actor });
       if (url.searchParams.get("raw") === "1") {
-        const text = data.kind === "folder" ? data.entries.join("\n") : data.content;
+        const content = data.kind === "folder" ? data.entries.join("\n") : data.content;
+        const text = data.selection ? `[agentNote selection]\n${data.hint}\n${JSON.stringify(data.selection)}\n[/agentNote selection]\n\n${content}` : content;
         res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "content-length": Buffer.byteLength(text) });
         return void res.end(text);
       }
