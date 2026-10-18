@@ -1804,10 +1804,10 @@ span.agentnote-agent-icon svg {
 .agentnote-panel button.agentnote-profile-link:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; }
 .agentnote-dashboard-hero p { margin: 8px 0 17px; color: var(--text-muted); font-size: 12px; }
 .agentnote-metric-strip { gap: 0; }
-.agentnote-metric { min-width: 0; padding: 0 8px; border-radius: 0; background: transparent; }
+.agentnote-metric { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 0 8px; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
 .agentnote-metric:first-child { padding-left: 0; }
 .agentnote-metric strong { color: var(--interactive-accent); font-size: 23px; line-height: 1.2; }
-.agentnote-metric span { margin-top: 4px; font-size: 11px; line-height: 1.35; }
+.agentnote-metric span { max-width: 100%; margin-top: 4px; font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
 .agentnote-panel-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-top: 17px; }
 .agentnote-panel-week-day { min-width: 0; text-align: center; }
 .agentnote-panel-week-day > span:first-child { display: block; height: 5px; border-radius: 5px; background: var(--background-modifier-border); }
