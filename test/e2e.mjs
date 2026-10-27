@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, localConnectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion, languageFor, languageForPreference, setLanguage, locale, t } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, connectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion, languageFor, languageForPreference, setLanguage, locale, t } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -22,7 +22,7 @@ async function eventFiles(root) {
   return (await Promise.all(months.map(async (month) => (await fsp.readdir(path.join(directory, month))).map((name) => path.join(month, name))))).flat().sort();
 }
 const store = new VaultStore(vault);
-const connections = new AgentConnections(localConnectionsFile(identityRoot, vault));
+const connections = new AgentConnections(connectionsFile(identityRoot));
 let activityNotifications = 0;
 const liveActivities = [];
 const server = new AgentServer(store, { port: 0, onActivity: (activity) => { activityNotifications++; liveActivities.push(activity); }, listLinks: async (sourcePath) => sourcePath === "linked-source.md" ? [{ original: "[[linked-target|目标]]", link: "linked-target", displayText: "目标", targetPath: "linked-target.md", subpath: null, status: "resolved" }] : [], registerAgent: (name, skillPath, iconPath) => connections.register(name, skillPath, iconPath) });
@@ -1114,6 +1114,39 @@ try {
       assert.equal(fs.existsSync(skillPath), false);
       assert.ok((await fsp.readdir(skillDir)).filter((name) => name.startsWith("SKILL.md.agentnote-backup-")).length >= 2);
     } finally { await fsp.rm(directory, { recursive: true, force: true }); }
+  });
+  await test("Agent connections live in one machine-wide file and migrate the old per-vault files", async () => {
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-connections-"));
+    const state = path.join(home, ".agentnote");
+    const skills = path.join(home, "skills");
+    await fsp.mkdir(state); await fsp.mkdir(skills);
+    const skillPath = path.join(skills, "SKILL.md");
+    await fsp.writeFile(skillPath, renderSharedSkillMd(port));
+    await fsp.writeFile(path.join(skills, "agentnote.identity.json"), JSON.stringify({ id: "codex", name: "Codex" }));
+    const file = connectionsFile(home);
+    const record = (name, path, at) => ({ name, skillPath: path, connectedAt: at });
+    const vaultA = path.join(state, "connections.aaaaaaaaaaaaaaaa.json");
+    const vaultB = path.join(state, "connections.bbbbbbbbbbbbbbbb.json");
+    try {
+      assert.equal(file, path.join(state, "connections.json"));
+      await fsp.writeFile(vaultA, JSON.stringify([record("Codex", skillPath, "2026-10-19T09:46:33.995Z"), record("Stale", path.join(home, "gone", "SKILL.md"), "2026-10-01T00:00:00Z")]));
+      await fsp.writeFile(vaultB, JSON.stringify([record("CODEX", skillPath, "2026-10-21T00:00:00Z")]));
+      const migration = new AgentConnections(file);
+      const migrated = await migration.list();
+      assert.deepEqual(migrated.map((item) => [item.name, item.connectedAt]), [["CODEX", "2026-10-21T00:00:00Z"]]);
+      assert.deepEqual(JSON.parse(await fsp.readFile(file, "utf8")).map((item) => item.name), ["CODEX"]);
+      assert.equal(JSON.parse(await fsp.readFile(vaultA, "utf8")).length, 2, "legacy files stay untouched");
+      await migration.register("Codex", skillPath);
+      const after = await migration.list();
+      assert.equal(after.length, 1);
+      assert.ok(after[0].connectedAt > "2026-10-21T00:00:00Z");
+      assert.deepEqual((await fsp.readdir(state)).sort(), ["connections.aaaaaaaaaaaaaaaa.json", "connections.bbbbbbbbbbbbbbbb.json", "connections.json"]);
+      const fresh = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-connections-fresh-"));
+      try {
+        assert.deepEqual(await new AgentConnections(connectionsFile(fresh)).list(), []);
+        assert.equal(fs.existsSync(path.join(fresh, ".agentnote", "connections.json")), false);
+      } finally { await fsp.rm(fresh, { recursive: true, force: true }); }
+    } finally { await fsp.rm(home, { recursive: true, force: true }); }
   });
   await test("additional instructions update the preview without duplicating earlier additions", async () => {
     const baseSkill = renderSharedSkillMd(port);
