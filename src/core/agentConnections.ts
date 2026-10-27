@@ -1,7 +1,7 @@
 import { t } from "../i18n";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { constants } from "fs";
 import { parse } from "yaml";
 import xiaojiMarkUrl from "../../assets/brand/xiaoji-mark.svg";
@@ -10,6 +10,9 @@ export interface AgentConnection { name: string; skillPath: string; connectedAt:
 
 const productIcon = `data:image/svg+xml;base64,${Buffer.from(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1))).toString("base64")}`;
 function isProductIcon(icon?: string): boolean { return icon === productIcon; }
+function withoutProductIcon(connection: AgentConnection): AgentConnection {
+  return isProductIcon(connection.icon) ? { ...connection, icon: undefined } : connection;
+}
 
 function isAgentConnection(value: unknown): value is AgentConnection {
   return !!value && typeof value === "object"
@@ -33,10 +36,12 @@ export function withSkillInstructions(base: string, additional: string): string 
 
 export function agentNameKey(name: string): string { return name.trim().toLowerCase(); }
 
-export function localConnectionsFile(home: string, vaultRoot: string): string {
-  const vaultId = createHash("sha256").update(path.resolve(vaultRoot)).digest("hex").slice(0, 16);
-  return path.join(home, ".agentnote", `connections.${vaultId}.json`);
+/** Agent 接入是本机事实（Skill 装在用户目录下），因此记录按电脑全局存放一份。 */
+export function connectionsFile(home: string): string {
+  return path.join(home, ".agentnote", "connections.json");
 }
+
+const LEGACY_CONNECTIONS = /^connections\.[^.].*\.json$/;
 
 function validSkill(content: string): boolean {
   const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
@@ -61,10 +66,43 @@ export class AgentConnections {
   async list(): Promise<AgentConnection[]> {
     let raw: string;
     try { raw = await fs.readFile(this.file, "utf8"); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return this.migrateLegacy();
+    }
     const value: unknown = JSON.parse(raw);
     if (!Array.isArray(value) || !value.every(isAgentConnection)) throw new Error(t("本机 Agent 接入记录格式无效"));
-    return value.map((connection) => isProductIcon(connection.icon) ? { ...connection, icon: undefined } : connection);
+    return value.map(withoutProductIcon);
+  }
+
+  /** 旧版本按 vault 路径分文件存放；升级后合并成一份，技能文件已不在的记录直接丢弃。 */
+  private async migrateLegacy(): Promise<AgentConnection[]> {
+    const directory = path.dirname(this.file);
+    let names: string[];
+    try { names = await fs.readdir(directory); }
+    catch { return []; }
+    const latest = new Map<string, AgentConnection>();
+    for (const name of names) {
+      if (!LEGACY_CONNECTIONS.test(name)) continue;
+      let value: unknown;
+      try { value = JSON.parse(await fs.readFile(path.join(directory, name), "utf8")); }
+      catch { continue; }
+      if (!Array.isArray(value)) continue;
+      for (const connection of value) {
+        if (!isAgentConnection(connection)) continue;
+        const key = agentNameKey(connection.name);
+        const previous = latest.get(key);
+        if (!previous || previous.connectedAt < connection.connectedAt) latest.set(key, connection);
+      }
+    }
+    const connections: AgentConnection[] = [];
+    for (const connection of latest.values()) {
+      try { if ((await fs.stat(connection.skillPath)).isFile()) connections.push(connection); }
+      catch { /* 技能文件已不存在，视为未接入 */ }
+    }
+    connections.sort((a, b) => a.connectedAt.localeCompare(b.connectedAt));
+    if (connections.length) { try { await this.save(connections); } catch { /* 迁移写入失败时仍返回记录 */ } }
+    return connections.map(withoutProductIcon);
   }
 
   private async save(connections: AgentConnection[]): Promise<void> {

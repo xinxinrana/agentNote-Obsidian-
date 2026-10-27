@@ -5,7 +5,7 @@ import * as path from "path";
 import { App, Editor, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, addIcon, getLanguage, parseLinktext, removeIcon } from "obsidian";
 import { AgentServer } from "./core/server";
 import type { AgentActivity, ShareLinkInfo } from "./core/server";
-import { AgentConnections, localConnectionsFile } from "./core/agentConnections";
+import { AgentConnections, connectionsFile } from "./core/agentConnections";
 import type { AgentConnection } from "./core/agentConnections";
 import { isNewerVersion } from "./core/version";
 import { StoreError, VaultStore } from "./core/store";
@@ -58,7 +58,7 @@ export default class AgentNotePlugin extends Plugin {
     this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
     try { await this.store.init(); }
     catch (error) { new Notice(t("数据初始化失败，仍可打开接入台检查：{0}", (error as Error).message), 10000); }
-    this.connections = new AgentConnections(localConnectionsFile(os.homedir(), adapter.getBasePath()));
+    this.connections = new AgentConnections(connectionsFile(os.homedir()));
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
     const mark = new DOMParser().parseFromString(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1)), "image/svg+xml").documentElement;

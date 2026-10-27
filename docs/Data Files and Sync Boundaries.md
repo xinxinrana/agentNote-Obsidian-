@@ -28,7 +28,7 @@ Paths below are relative to the vault root.
 | --- | --- |
 | `.agentnote/device-id` in the user's home directory | Local writer identity, not synced with the vault. Sharing a device ID does not make new activities write the same file. |
 | `.agentnote/references.<vaultHash>.json` in the user's home directory | Local link-comparison baseline per vault path. First observation establishes the baseline without counting new links; unchanged observations do not write. A standalone Git-synced link change cannot always be distinguished from a local edit. |
-| `.agentnote/connections.<vaultHash>.json` in the user's home directory | Locally connected Agents and Skill paths; absolute paths are generally not useful on another device. |
+| `.agentnote/connections.json` in the user's home directory | Locally connected Agents and Skill paths, one file per machine instead of per vault path; absolute paths are generally not useful on another device. Legacy `.agentnote/connections.<vaultHash>.json` files are merged on first read and left in place. |
 | `agentNote/data/cold-backups/` | Write-once backups of activity older than today. They do not contribute to live statistics and are not a full vault backup. |
 | `agentNote/data/repair-backups/*.bak` | Exact original bytes saved before an automatic repair; excluded from live statistics. |
 | `data.json` in the Obsidian plugin directory | Language, port, startup, and other preferences. The actual plugin directory follows the vault's `configDir`. |
