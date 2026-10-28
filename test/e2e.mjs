@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, connectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion, languageFor, languageForPreference, setLanguage, locale, t } = require("./core-bundle.cjs");
+const { VaultStore: CoreVaultStore, ActivityLog, isLocalActivityBurst, AgentServer, AgentConnections, agentNameKey, connectionsFile, splitSkillInstructions, withSkillInstructions, detectAgents, installSkill, skillInstallConflict, skillStatus, renderSkillMd, renderSharedSkillMd, renderManualInstallPrompt, isNewerVersion, selectionSnippet, languageFor, languageForPreference, setLanguage, locale, t } = require("./core-bundle.cjs");
 
 const vault = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-e2e-"));
 const identityRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-identities-"));
@@ -865,6 +865,26 @@ try {
     assert.equal((await api("GET", url)).data.selection.position.startLine, 4);
     await fsp.writeFile(path.join(vault, "excerpt.md"), "选段已删除");
     assert.equal((await api("GET", url)).status, 410);
+  });
+  await test("table selections share the Markdown source instead of the rendered text", async () => {
+    const source = "| 名称 | 数量 |\n| --- | --- |\n| 苹果 | 3 |\n\n结尾";
+    const start = source.indexOf("| 名称");
+    const end = source.indexOf("\n\n结尾");
+    // Live Preview renders a table without its pipes, so the selected text never matches the file.
+    const rendered = "名称 数量\n苹果 3";
+    assert.equal(selectionSnippet(source, rendered, start, end), source.slice(start, end));
+    // Verbatim selections stay untouched so no surrounding blank lines leak into the share.
+    assert.equal(selectionSnippet(source, "苹果", start, end), "苹果");
+    // Without usable offsets the old behaviour is kept and the share API reports the mismatch.
+    assert.equal(selectionSnippet(source, rendered), rendered);
+    assert.equal(selectionSnippet(source, rendered, 999, 12), rendered);
+    await fsp.writeFile(path.join(vault, "table.md"), source);
+    const share = await api("POST", "/api/shares", { path: "table.md", selection: selectionSnippet(source, rendered, start, end), selectionStart: start });
+    assert.equal(share.status, 201);
+    const resolved = (await api("GET", `/api/shares/${share.data.id}/resolve`)).data;
+    assert.equal(resolved.content, source.slice(start, end));
+    assert.equal(resolved.selection.position.startLine, 1);
+    assert.equal(resolved.selection.position.endLine, 3);
   });
   await test("repeated selections use the chosen occurrence and refuse ambiguous writes", async () => {
     const text = "重复\n中间\n重复";
