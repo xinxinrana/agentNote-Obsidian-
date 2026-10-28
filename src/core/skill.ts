@@ -204,7 +204,7 @@ export function renderManualInstallPrompt({ port }: Pick<AgentPromptOptions, "po
   if (language() === "en") return ENGLISH_INSTALL_PROMPT.replaceAll(TEMPLATE_TOKENS.baseUrl, base);
   return `请安装 agentNote Skill。它是用户的 Obsidian 本地笔记和文件中转工具，用于读取分享、查找和写入笔记。
 
-1. 从 ${base}/api/skill.md 下载 Skill 文件，保存为你实际使用的技能目录中的 agentnote/SKILL.md，并完成当前 Agent 所需的技能配置。
+1. 从 ${base}/api/skill.md 下载 Skill 文件，保存到**你自己这个 Agent 的用户级技能目录**下的 agentnote/SKILL.md（即运行时真正加载的那一份），并完成当前 Agent 所需的技能配置。每个 Agent 各装一份：不要装进 ~/.agents/skills 这类多个 Agent 共用的目录——身份会串台，接入记录也会指到别人的 Skill 上。常见位置：Claude Code 用 ~/.claude/skills/agentnote，Codex 用 ~/.codex/skills/agentnote，WorkBuddy 用 ~/.workbuddy/skills/agentnote，Pi 用 ~/.pi/agent/skills/agentnote。不确定自己的目录时，先告诉用户你准备装到哪里，不要猜。
 2. 在同一目录创建 agentnote.identity.json，填写你固定的 id 和 name，例如 {"id":"your-agent-id","name":"Your Agent Name"}。之后按 Skill 说明使用这份身份。
 3. 安装后 POST ${base}/api/agents/register，上报 {"name":"你的 Agent 名称","skillPath":"SKILL.md 的绝对路径"}。上报名称与身份文件中的 name 保持一致，供 Obsidian 管理这份 Skill。可选的 iconPath 是上报当前 Agent 自身 ico，不是 agentNote 的图标。优先从当前 Agent 的官方网站获取其官方 PNG、ICO 或 SVG 图标；官网没有时可用本地安装资源中的官方图标。将确认属于当前 Agent 的图标复制到同一 Skill 目录，并附带 "iconPath":"该图标的绝对路径"；无法确认或获取时就省略，接入台会显示默认图标。
 

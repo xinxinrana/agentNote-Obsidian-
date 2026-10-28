@@ -1,15 +1,42 @@
 import { t } from "../i18n";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { constants } from "fs";
 import { parse } from "yaml";
 import xiaojiMarkUrl from "../../assets/brand/xiaoji-mark.svg";
+import skillIconIcoUrl from "../../assets/brand/skill-icon.ico";
+import skillIconPngUrl from "../../assets/brand/skill-icon.png";
 
 export interface AgentConnection { name: string; skillPath: string; connectedAt: string; icon?: string }
 
-const productIcon = `data:image/svg+xml;base64,${Buffer.from(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1))).toString("base64")}`;
-function isProductIcon(icon?: string): boolean { return icon === productIcon; }
+function dataUrlBytes(url: string): Buffer {
+  const comma = url.indexOf(",");
+  return url.slice(0, comma).includes(";base64") ? Buffer.from(url.slice(comma + 1), "base64") : Buffer.from(decodeURIComponent(url.slice(comma + 1)), "binary");
+}
+const productSvg = decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1));
+const productIcon = `data:image/svg+xml;base64,${Buffer.from(productSvg).toString("base64")}`;
+/** Every encoding the plugin itself serves for its product mark. */
+const PRODUCT_ICONS = new Set([productIcon, `data:image/x-icon;base64,${dataUrlBytes(skillIconIcoUrl).toString("base64")}`, `data:image/png;base64,${dataUrlBytes(skillIconPngUrl).toString("base64")}`]);
+const PRODUCT_ICO_BYTES = dataUrlBytes(skillIconIcoUrl);
+const PRODUCT_PNG_BYTES = dataUrlBytes(skillIconPngUrl);
+/** Reformatting or re-encoding the product SVG keeps its path data, so compare on that. */
+function svgMark(text: string): string {
+  const paths = [...text.matchAll(/\sd\s*=\s*"([^"]*)"/g)].map((match) => match[1].replace(/\s+/g, " ").trim()).sort();
+  return paths.length ? createHash("sha256").update(paths.join("\u0000")).digest("hex") : "";
+}
+const PRODUCT_MARK = svgMark(productSvg);
+const PRODUCT_ICON_FILENAME = /^(skill[-_ ]?icon|agentnote)([-_. ].*)?\.(svg|png|ico)$/i;
+
+function isProductIcon(icon?: string): boolean {
+  if (!icon) return false;
+  if (PRODUCT_ICONS.has(icon)) return true;
+  const comma = icon.indexOf(",");
+  if (!icon.startsWith("data:image/") || comma === -1) return false;
+  const bytes = icon.slice(0, comma).includes(";base64") ? Buffer.from(icon.slice(comma + 1), "base64") : Buffer.from(decodeURIComponent(icon.slice(comma + 1)), "binary");
+  if (icon.startsWith("data:image/svg+xml")) { const mark = svgMark(bytes.toString("utf8")); return !!mark && mark === PRODUCT_MARK; }
+  return bytes.equals(PRODUCT_ICO_BYTES) || bytes.equals(PRODUCT_PNG_BYTES);
+}
 function withoutProductIcon(connection: AgentConnection): AgentConnection {
   return isProductIcon(connection.icon) ? { ...connection, icon: undefined } : connection;
 }
@@ -137,7 +164,8 @@ export class AgentConnections {
           : /<svg[\s>]/i.test(bytes.toString("utf8").slice(0, 1024));
       if (!valid) throw new Error(t("图标需要是小于 128 KB 的 PNG、ICO 或 SVG 文件"));
       const candidate = `data:${mime};base64,${bytes.toString("base64")}`;
-      if (!isProductIcon(candidate)) icon = candidate;
+      if (PRODUCT_ICON_FILENAME.test(path.basename(iconPath)) || isProductIcon(candidate)) throw new Error(t("这是 agentNote 自己的产品图标，请改用该 Agent 的官方图标；无法确认时省略 iconPath"));
+      icon = candidate;
     }
     return this.queued(async () => {
       const connections = await this.list();

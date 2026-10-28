@@ -1055,6 +1055,50 @@ try {
     assert.equal(bytes[25], 6); // RGBA, including transparency.
     assert.match(renderManualInstallPrompt({ port }), /interface.icon_small 和 interface.icon_large.*assets\/icon.ico/);
   });
+  await test("product icons are refused in every encoding, not only as the bundled SVG", async () => {
+    const directory = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-icon-guard-"));
+    const skillDir = path.join(directory, "agentnote");
+    await fsp.mkdir(skillDir);
+    const skillPath = path.join(skillDir, "SKILL.md");
+    const fetchIcon = async (name) => Buffer.from(await (await fetch(`${base}/api/${name}`)).arrayBuffer());
+    try {
+      await fsp.writeFile(skillPath, renderSharedSkillMd(port));
+      await fsp.writeFile(path.join(skillDir, "agentnote.identity.json"), JSON.stringify({ id: "icon-guard", name: "Icon Guard" }));
+      // All three encodings the plugin serves for its own mark: SVG, ICO and PNG.
+      for (const name of ["skill-icon.svg", "skill-icon.ico", "skill-icon.png"]) {
+        const iconPath = path.join(skillDir, `copied-${name}`);
+        await fsp.writeFile(iconPath, await fetchIcon(name));
+        const report = await api("POST", "/api/agents/register", { name: "Icon Guard", skillPath, iconPath });
+        assert.equal(report.status, 400);
+        assert.match(report.error, /产品图标/);
+      }
+      // Reformatting keeps the path data, so the mark is recognised without byte equality.
+      const original = await fsp.readFile("assets/brand/xiaoji-mark.svg", "utf8");
+      const reformatted = original.replace(/\n\s*/g, "\n").replace("</svg>", "<!-- recopied -->\n</svg>");
+      assert.notEqual(reformatted, original);
+      const reformattedPath = path.join(skillDir, "reformatted.svg");
+      await fsp.writeFile(reformattedPath, reformatted);
+      assert.equal((await api("POST", "/api/agents/register", { name: "Icon Guard", skillPath, iconPath: reformattedPath })).status, 400);
+      // A re-exported product icon keeps the served file name, which is refused by name.
+      const renamed = path.join(skillDir, "skill-icon.png");
+      await fsp.writeFile(renamed, Buffer.concat([await fetchIcon("skill-icon.png"), Buffer.from([0])]));
+      assert.equal((await api("POST", "/api/agents/register", { name: "Icon Guard", skillPath, iconPath: renamed })).status, 400);
+      // The agent's own icon still registers, and a stored product icon is dropped on read.
+      const ownIcon = path.join(skillDir, "agent.svg");
+      await fsp.writeFile(ownIcon, '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>');
+      const accepted = await api("POST", "/api/agents/register", { name: "Icon Guard", skillPath, iconPath: ownIcon });
+      assert.equal(accepted.status, 200);
+      assert.match(accepted.data.icon, /^data:image\/svg\+xml;base64,/);
+      const staleFile = path.join(directory, "stale-connections.json");
+      const staleContent = JSON.stringify([{ name: "Old Agent", skillPath, connectedAt: new Date().toISOString(), icon: `data:image/x-icon;base64,${(await fetchIcon("skill-icon.ico")).toString("base64")}` }]);
+      await fsp.writeFile(staleFile, staleContent);
+      assert.equal((await new AgentConnections(staleFile).list())[0].icon, undefined);
+      assert.equal(await fsp.readFile(staleFile, "utf8"), staleContent);
+    } finally {
+      await connections.remove("Icon Guard").catch(() => undefined);
+      await fsp.rm(directory, { recursive: true, force: true });
+    }
+  });
   await test("built-in agents remain visible regardless of local installation", async () => {
     const home = await fsp.mkdtemp(path.join(os.tmpdir(), "agentnote-agents-"));
     try {
@@ -1079,6 +1123,10 @@ try {
     assert.match(prompt, /iconPath 是上报当前 Agent 自身 ico，不是 agentNote 的图标/);
     assert.match(prompt, /优先从当前 Agent 的官方网站获取其官方 PNG、ICO 或 SVG 图标/);
     assert.match(prompt, /\/api\/skill-icon\.ico.*不要作为 iconPath 上报/);
+    assert.match(prompt, /你自己这个 Agent 的用户级技能目录/);
+    assert.match(prompt, /不要装进 ~\/\.agents\/skills/);
+    assert.match(prompt, /~\/\.claude\/skills\/agentnote/);
+    assert.match(prompt, /~\/\.pi\/agent\/skills\/agentnote/);
     assert.doesNotMatch(prompt, /\/api\/health/);
   });
   await test("first Agent report stores a local path and matches names case-insensitively", async () => {
@@ -1097,8 +1145,8 @@ try {
       const productIconPath = path.join(skillDir, "product.svg");
       await fsp.copyFile("assets/brand/xiaoji-mark.svg", productIconPath);
       const productIconReport = await api("POST", "/api/agents/register", { name: "Codex", skillPath, iconPath: productIconPath });
-      assert.equal(productIconReport.status, 200);
-      assert.equal(productIconReport.data.icon, undefined);
+      assert.equal(productIconReport.status, 400);
+      assert.match(productIconReport.error, /产品图标/);
       const iconPath = path.join(skillDir, "agent.svg");
       await fsp.writeFile(iconPath, '<svg xmlns="http://www.w3.org/2000/svg"/>');
       const withIcon = await api("POST", "/api/agents/register", { name: "Codex", skillPath, iconPath });
@@ -1233,6 +1281,8 @@ try {
       assert.deepEqual(endpoints(english), endpoints(chinese));
       const install = renderManualInstallPrompt({ port });
       assert.doesNotMatch(install, /\p{Script=Han}/u);
+      assert.match(install, /user-level skills directory/);
+      assert.match(install, /~\/\.agents\/skills/);
       for (const route of ["/api/skill.md", "/api/agents/register", "/api/skill-icon.ico"]) assert.ok(install.includes(`${base}${route}`));
       assert.match(install, /agentnote.identity.json/);
       assert.match(install, /skillPath/);

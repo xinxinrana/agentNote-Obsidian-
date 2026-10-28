@@ -43,7 +43,7 @@ try {
   await esbuild.build({
     stdin: { contents: 'export { AgentNoteView, DataRepairModal, FeedbackModal, InsightsModal } from "./src/ui/panel"; export { VaultStore } from "./src/core/store"; export { setLanguage } from "./src/i18n";', resolveDir: process.cwd(), loader: 'ts' },
     bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(dir, 'ui.cjs'),
-    loader: { '.png': 'dataurl', '.svg': 'dataurl' },
+    loader: { '.png': 'dataurl', '.svg': 'dataurl', '.ico': 'dataurl' },
     plugins: [{ name: 'test-host', setup(build) {
       build.onLoad({ filter: /[/\\]src[/\\]ui[/\\]panel\.ts$/ }, async args => ({ contents: (await fs.readFile(args.path, 'utf8')) + '\nexport { InsightsModal };', loader: 'ts' }));
       build.onResolve({ filter: /^obsidian$/ }, () => ({ path: 'obsidian', namespace: 'test' }));
