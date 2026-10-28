@@ -67,6 +67,7 @@ The share response's \`filePath\` is the actual local content path; \`hint\` exp
 
 - Prefer reading through the link to get current content and background.
 - Update shared content with PATCH \`/api/shares/<shareId>\` and \`{ "content": "updated full content" }\`.
+- \`kind\` tells you what you received: \`text\`/\`file\` are documents, \`folder\` lists only the first level of a directory, \`files\` lists several file paths without content, and a response with \`selection\` is a snippet rather than the whole document. Read the matching \`hint\` before deciding whether you need more context.
 
 ## Activity queries and summaries
 

@@ -372,25 +372,12 @@ export default class AgentNotePlugin extends Plugin {
   private async sharePaths(files: TAbstractFile[]): Promise<void> {
     try { this.shareServicePort(); }
     catch (error) { new Notice(t("分享失败：{0}", (error as Error).message)); return; }
-    const links: { id: string; title: string }[] = [];
-    const failures: string[] = [];
-    const seen = new Set<string>();
-    for (const file of files) {
-      const relPath = file.path;
-      if (seen.has(relPath)) continue;
-      seen.add(relPath);
-      try {
-        const share = await this.store.createPathShare(relPath);
-        links.push({ id: share.id, title: file.name });
-      } catch (error) { failures.push(`${relPath}：${(error as Error).message}`); }
-    }
-    if (links.length) {
-      try {
-        const rich = await this.writeShareLinks(links);
-        new Notice(rich ? t("已复制 {0} 个分享链接，直接发给 agent 即可。", links.length) : t("已复制 {0} 个纯文本分享链接。", links.length), 4000);
-      } catch (error) { new Notice(t("复制分享地址失败：{0}", (error as Error).message)); }
-    }
-    if (failures.length) new Notice(t("有 {0} 项分享失败：{1}", failures.length, failures.join("；")), 7000);
+    // One link for the whole selection, so the receiver knows it got a set of files instead of one document.
+    try {
+      const share = await this.store.createFilesShare(files.map((file) => file.path));
+      const rich = await this.writeShareLinks([{ id: share.id, title: t("{0} 个文件", files.length) }]);
+      new Notice(rich ? t("已复制 {0} 个文件的分享链接，直接发给 agent 即可。", files.length) : t("已复制 {0} 个文件的纯文本分享链接。", files.length), 4000);
+    } catch (error) { new Notice(t("分享失败：{0}", (error as Error).message), 7000); }
   }
   private shareServicePort(): number {
     const port = this.server?.port;

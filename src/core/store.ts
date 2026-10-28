@@ -130,10 +130,15 @@ export interface DocumentInsight { nodeId?: string; title: string; uses: number;
 export type ShareResult = (
   | { shareId: string; kind: "text"; title: string; background: string; content: string; updated: string; filePath: string; hint: string }
   | { shareId: string; kind: "file"; title: string; background: string; address: string; content: string; updated: string; filePath: string; hint: string }
-  | { shareId: string; kind: "folder"; title: string; background: string; address: string; entries: string[]; updated: string; filePath: string; hint: string }) & { selection?: SelectionMetadata };
+  | { shareId: string; kind: "folder"; title: string; background: string; address: string; entries: string[]; updated: string; filePath: string; hint: string }
+  | { shareId: string; kind: "files"; title: string; background: string; files: { title: string; address: string; filePath: string }[]; updated: string; hint: string }) & { selection?: SelectionMetadata };
 
 /** Tells the receiving agent how to update the explicitly shared content. */
 const SHARE_HINT = "优先通过本链接读取。更新已分享内容时，PATCH /api/shares/<shareId>，请求体为 { content: 更新后的完整内容 }。";
+/** Only non-document shares need a semantic note; a plain document explains itself. */
+const FOLDER_HINT = "这里分享给你的是一个文件夹，不是单个文件：entries 只是第一层的直接条目（子目录以 / 结尾）。需要具体内容时，按 address 或 filePath 读取其中的文件；需要更深的层级时继续列出子目录。直接修改其中内容请对具体文件新建分享链接，PATCH 不适用于文件夹。";
+const FILES_HINT = "这里分享给你的是多个文件，不是一篇文档：files 列出每个文件的 address 与 filePath，其中没有正文。先按清单判断需要哪一份，再按 address 或 filePath 读取对应内容；如需修改其中某个文件，请对那个文件单独新建分享链接。";
+const SELECTION_HINT = "这里分享给你的是用户从文档中选中的一段片段，不是全文：content 只是这一片段，不应据此推断整篇内容或完整观点。位置与占比见 selection（startLine / endLine 行号从 1 开始；offset 从 0 开始，结束位置不包含在内；ambiguous 表示重复文本无法定位）。需要上下文时，按 address 或 filePath 读取同一文档的完整内容；PATCH 只替换该片段，保留其余正文。";
 /** Each recorded action counts once. State-only sync events are excluded separately. */
 const COUNTED_ACTIVITIES = new Set<InsightEventType>([
   "node-created", "node-updated", "node-archived", "node-restored", "share-created", "share-resolved",
@@ -589,7 +594,7 @@ export class VaultStore {
   private validShare(value: unknown): value is Share {
     if (!isRecord(value) || typeof value.id !== "string" || typeof value.created !== "string") return false;
     const target = value.target ?? (typeof value.nodeId === "string" ? { kind: "node", nodeId: value.nodeId } : undefined);
-    return isRecord(target) && ((target.kind === "node" && typeof target.nodeId === "string") || ((target.kind === "file" || target.kind === "folder") && typeof target.path === "string")) && (value.selection === undefined || typeof value.selection === "string") && (value.background === undefined || typeof value.background === "string");
+    return isRecord(target) && ((target.kind === "node" && typeof target.nodeId === "string") || ((target.kind === "file" || target.kind === "folder") && typeof target.path === "string") || (target.kind === "files" && Array.isArray(target.paths) && target.paths.length > 0 && target.paths.every((item) => typeof item === "string"))) && (value.selection === undefined || typeof value.selection === "string") && (value.background === undefined || typeof value.background === "string");
   }
   private shareFile(id: string): string {
     if (!/^s-x-[a-zA-Z0-9-]{1,120}$/.test(id)) throw new StoreError(400, t("分享 ID 无效"));
@@ -649,7 +654,7 @@ export class VaultStore {
   async shareSourcePath(id: string): Promise<string> {
     const share = await this.getShare(id);
     if (share.selection !== undefined) throw new StoreError(400, t("选段分享暂不支持查询双链"));
-    if (share.target.kind === "folder") throw new StoreError(400, t("文件夹分享不能查询双链"));
+    if (share.target.kind === "folder" || share.target.kind === "files") throw new StoreError(400, t("文件夹分享不能查询双链"));
     let sourcePath: string;
     if (share.target.kind === "file") sourcePath = this.vaultPath(share.target.path).rel;
     else {
@@ -752,12 +757,29 @@ export class VaultStore {
     if (selection && !source!.includes(selection)) throw new StoreError(400, t("选段已不在当前文件中"));
     return this.appendShare({ kind: "file", path: rel }, selection, background, context, title, selectionStart, source);
   }
+  /** One link for several files: the receiver must know it got a set, not a document. */
+  async createFilesShare(relPaths: string[], background?: string, context: ActivityContext = {}): Promise<Share> {
+    const paths: string[] = [];
+    const seen = new Set<string>();
+    for (const relPath of relPaths) {
+      const { rel, abs } = this.vaultPath(relPath);
+      if (seen.has(rel)) continue;
+      const stat = await fsp.stat(abs).catch(() => null);
+      if (!stat?.isFile()) throw new StoreError(404, t("找不到内容: {0}", rel));
+      seen.add(rel);
+      paths.push(rel);
+    }
+    if (paths.length < 2) throw new StoreError(400, t("多文件分享至少需要两个文件"));
+    return this.appendShare({ kind: "files", paths }, undefined, background, context, t("{0} 个文件", paths.length));
+  }
 
   async resolveShare(id: string, context: ActivityContext = {}): Promise<ShareResult> {
     const share = await this.getShare(id);
     let result: ShareResult;
     if (share.target.kind === "node") {
       result = await this.resolveNodeShare(share, await this.getNode(share.target.nodeId));
+    } else if (share.target.kind === "files") {
+      result = await this.resolveFilesShare(share);
     } else {
       const target = share.target;
       const { rel, abs } = this.vaultPath(target.path);
@@ -770,7 +792,7 @@ export class VaultStore {
 
   async updateShareContent(id: string, content: string, context: ActivityContext = {}): Promise<ShareResult> {
     const share = await this.getShare(id);
-    if (share.target.kind === "folder") throw new StoreError(400, t("文件夹分享不支持通过接口直接修改"));
+    if (share.target.kind === "folder" || share.target.kind === "files") throw new StoreError(400, t("文件夹分享不支持通过接口直接修改"));
 
     if (share.target.kind === "node") {
       const node = await this.getNode(share.target.nodeId);
@@ -826,6 +848,7 @@ export class VaultStore {
         if (event.title || !event.shareId) return event;
         const share = shares.get(event.shareId);
         if (!share) return event;
+        if (share.target.kind === "files") return { ...event, title: t("{0} 个文件", share.target.paths.length) };
         if (share.target.kind !== "node") return { ...event, title: path.basename(share.target.path).replace(/\.md$/i, "") };
         try { return { ...event, title: (await this.getNode(share.target.nodeId)).title }; }
         catch { return event; }
@@ -1014,7 +1037,7 @@ export class VaultStore {
   }
   private selectionDetails(share: Share, source: string): { hint: string; selection?: SelectionMetadata } {
     if (share.selection === undefined) return { hint: t(SHARE_HINT) };
-    return { selection: selectionMetadata(source, share.selection, this.selectionOffset(share, source)), hint: t("这是用户选中的节选，不应将其视为原文全文或据此推断完整观点。位置与占比基于当前正文；行号从 1 开始，偏移从 0 开始、结束位置不包含在内。重复文本无法确定位置时标记为 ambiguous。PATCH 只替换该节选，保留其余正文。") };
+    return { selection: selectionMetadata(source, share.selection, this.selectionOffset(share, source)), hint: t(SELECTION_HINT) };
   }
   private async resolveNodeShare(share: Share, node: AgentNode): Promise<ShareResult> {
     if (node.type === "snippet") {
@@ -1039,7 +1062,19 @@ export class VaultStore {
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat?.isDirectory()) throw new StoreError(410, t("分享文件夹已不存在: {0}", address));
     const entries = (await fsp.readdir(abs, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)).map((item) => item.isDirectory() ? `${item.name}/` : item.name);
-    return { shareId: share.id, kind: "folder", title, background, address, entries, updated: stat.mtime.toISOString(), filePath: abs, hint: t(SHARE_HINT) };
+    return { shareId: share.id, kind: "folder", title, background, address, entries, updated: stat.mtime.toISOString(), filePath: abs, hint: t(FOLDER_HINT) };
+  }
+  private async resolveFilesShare(share: Share): Promise<ShareResult> {
+    const files: { title: string; address: string; filePath: string }[] = [];
+    let updated = 0;
+    for (const rel of share.target.kind === "files" ? share.target.paths : []) {
+      const { rel: address, abs } = this.vaultPath(rel);
+      const stat = await fsp.stat(abs).catch(() => null);
+      if (!stat?.isFile()) throw new StoreError(410, t("分享文件已不存在: {0}", address));
+      files.push({ title: path.basename(address).replace(/\.md$/i, ""), address, filePath: abs });
+      updated = Math.max(updated, stat.mtimeMs);
+    }
+    return { shareId: share.id, kind: "files", title: t("{0} 个文件", files.length), background: share.background ?? "", files, updated: new Date(updated).toISOString(), hint: t(FILES_HINT) };
   }
 
   warningsFor(node: AgentNode) { return qualityWarnings(node); }

@@ -41,7 +41,9 @@ export interface AgentNode {
 export type ShareTarget =
   | { kind: "node"; nodeId: string }
   | { kind: "file"; path: string }
-  | { kind: "folder"; path: string };
+  | { kind: "folder"; path: string }
+  /** One link covering several files, so receivers know they got a set, not a document. */
+  | { kind: "files"; paths: string[] };
 
 export interface Share {
   id: string; // "s-x-..."

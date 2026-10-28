@@ -45,6 +45,7 @@ Use the smallest useful piece of context:
 | --- | --- |
 | A file or folder | Right-click it and choose **agentNote: Share with agent**. |
 | Part of a note | Select the text, then run **agentNote: Share selected content**. |
+| Several files | Select them in the file explorer, then choose **agentNote: Share selected items with agent** to get one link for the whole set. |
 
 agentNote copies a link labeled with the file name. Rich-text chat fields can show a clickable name; plain-text fields receive a Markdown link such as `[Meeting notes.md](http://127.0.0.1:27182/api/shares/s-x-.../resolve)`. The URL remains accessible only on your computer.
 
