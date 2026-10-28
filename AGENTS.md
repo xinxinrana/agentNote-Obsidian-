@@ -14,6 +14,8 @@
 
 用户明确要求发布时，完成 GitHub Release 后，运行社区版本检查脚本。用户要求“帮我点社区检查”时也直接运行。
 
+发版完成后，还要用已登录的浏览器打开该插件的社区版本检查页：`https://community.obsidian.md/account/plugins/<plugin-id>/check-release`，例如 `agentnote`、`local-issues`。浏览器用本机已登录的 360 极速浏览器 Pro：`/usr/bin/open -b net.qihoo.360browser <url>`。用户说“先不要开始”时只记录、不打开。
+
 ## 社区商店发布
 
 脚本使用已登录的 360 极速浏览器 Pro，打开 agentNote 管理页及“Check for new releases”对应地址。用户主动提示帮我发布时触发
