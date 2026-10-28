@@ -1842,7 +1842,6 @@ span.agentnote-agent-icon svg {
 .agentnote-activity-icon svg { width: 15px; height: 15px; }
 .agentnote-agent-avatar { box-sizing: border-box; object-fit: contain; }
 .agentnote-activity-icon.agentnote-agent-avatar { padding: 3px; background: var(--background-primary); }
-.agentnote-timeline li > .agentnote-agent-avatar, .agentnote-day-record > .agentnote-agent-avatar { flex: 0 0 24px; width: 24px; height: 24px; padding: 2px; }
 .agentnote-day-record > .agentnote-file-link, .agentnote-day-record > strong { flex: 1 1 auto; min-width: 0; }
 .agentnote-activity-row time { align-self: center; font-size: 10px; }
 .agentnote-panel button.agentnote-activity-row:hover span.agentnote-activity-icon { color: var(--text-accent); }

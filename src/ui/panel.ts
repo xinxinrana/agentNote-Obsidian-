@@ -473,8 +473,6 @@ class InsightsModal extends Modal {
     if (!selected.length) section.createEl("p", { text: t("当日没有活动") });
     for (const event of selected) {
       const row = section.createDiv({ cls: "agentnote-day-record" });
-      const actor = event.actor?.name ?? event.actor?.id;
-      if (actor && !this.privateView) agentAvatar(row, this.agentConnections, actor, "file-text");
       if (event.type === "local-deleted" || event.targetKind === "folder" || event.targetKind === "files") row.createEl("strong", { text: this.activityText(event) });
       else this.fileTitle(row, this.activityText(event), () => this.plugin.store.activityFilePath(event));
       row.createEl("small", { text: this.timeText(event.at) });
@@ -742,8 +740,6 @@ class InsightsModal extends Modal {
       const day = this.dayKey(new Date(event.at));
       if (day !== previousDay) { list.createEl("li", { cls: "agentnote-timeline-date", text: this.dateText(event.at) }); previousDay = day; }
       const item = list.createEl("li");
-      const actor = event.actor?.name ?? event.actor?.id;
-      if (actor && !this.privateView) agentAvatar(item, this.agentConnections, actor, event.type === "share-resolved" ? "sparkles" : "file-text");
       const detail = item.createDiv();
       const chip = event.type === "document-linked" ? t("连接") : ["share-resolved", "local-read"].includes(event.type) ? t("使用") : event.type === "share-created" ? t("分享") : ["node-created", "local-created"].includes(event.type) ? t("创建") : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? t("整理") : t("维护");
       const title = detail.createDiv({ cls: "agentnote-timeline-title" });

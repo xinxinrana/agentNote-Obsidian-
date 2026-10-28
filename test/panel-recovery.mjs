@@ -249,15 +249,13 @@ try {
   const withIcons = new InsightsModal({}, iconPlugin);
   withIcons.tab = 'timeline';
   await withIcons.render();
-  const timelineAvatars = collectAll(withIcons.contentEl).filter(isAvatar);
-  // Codex comes from the bundled preset icons, Claude Code from the icon reported at connection time.
-  assert.equal(timelineAvatars.length, 2);
-  assert.ok(timelineAvatars.some((element) => element.attrs.src === agentIcon));
+  // History stays text-only; only the dashboard and the Agent cards carry avatars.
+  assert.equal(collectAll(withIcons.contentEl).filter(isAvatar).length, 0);
   withIcons.tab = 'agents';
   await withIcons.render();
   assert.equal(collectAll(withIcons.contentEl).filter(isAvatar).length, 1);
   withIcons.privateView = true;
   await withIcons.render();
   assert.equal(collectAll(withIcons.contentEl).filter(isAvatar).length, 0);
-  console.log('PASS profile timeline and agent cards reuse connected icons without leaking them in privacy view');
+  console.log('PASS dashboard and agent cards reuse connected icons; history stays text-only and privacy hides icons');
 } finally { await fs.rm(dir, { recursive: true, force: true }); }
