@@ -230,4 +230,34 @@ try {
   toggle.onclick();
   assert.equal(activityList.children.filter((item) => !item.hidden).length, 3);
   console.log('PASS recent activity expands ten historical items and collapses to three');
+  const agentIcon = 'data:image/svg+xml;base64,PHN2Zy8+';
+  const isAvatar = (element) => element.tag === 'img' && element.cls.includes('agentnote-agent-avatar');
+  const collectAll = (element) => [element, ...element.children.flatMap(collectAll)];
+  const connected = [{ name: 'Claude Code', skillPath: path.join(vault, 'SKILL.md'), connectedAt: new Date().toISOString(), icon: agentIcon }];
+  view.agentConnections = connected;
+  view.contentEl.empty();
+  view.renderDashboard({ ...insights, activities: [{ type: 'share-resolved', title: 'Research notes', at: new Date().toISOString(), actor: { name: 'Claude Code' }, origin: 'agent' }] }, view.contentEl);
+  const panelAvatars = collectAll(view.recentActivityList).filter(isAvatar);
+  assert.equal(panelAvatars.length, 1);
+  assert.equal(panelAvatars[0].attrs.src, agentIcon);
+  assert.equal(panelAvatars[0].attrs.alt, 'Claude Code 图标');
+  view.contentEl.empty();
+  view.renderDashboard({ ...insights, activities: [{ type: 'share-resolved', title: 'Research notes', at: new Date().toISOString(), actor: { name: 'Unknown Bot' }, origin: 'agent' }] }, view.contentEl);
+  assert.equal(collectAll(view.recentActivityList).filter(isAvatar).length, 0);
+  console.log('PASS dashboard reuses connected agent icons and falls back for unknown agents');
+  const iconPlugin = { store: { getDashboardInsights: async () => snapshot, getAgentInsights: async () => [{ name: 'Claude Code', uses: 1, created: 0, updated: 0, lastActive: eventDay.toISOString() }], listActivity: async () => events }, connectedAgents: async () => connected };
+  const withIcons = new InsightsModal({}, iconPlugin);
+  withIcons.tab = 'timeline';
+  await withIcons.render();
+  const timelineAvatars = collectAll(withIcons.contentEl).filter(isAvatar);
+  // Codex comes from the bundled preset icons, Claude Code from the icon reported at connection time.
+  assert.equal(timelineAvatars.length, 2);
+  assert.ok(timelineAvatars.some((element) => element.attrs.src === agentIcon));
+  withIcons.tab = 'agents';
+  await withIcons.render();
+  assert.equal(collectAll(withIcons.contentEl).filter(isAvatar).length, 1);
+  withIcons.privateView = true;
+  await withIcons.render();
+  assert.equal(collectAll(withIcons.contentEl).filter(isAvatar).length, 0);
+  console.log('PASS profile timeline and agent cards reuse connected icons without leaking them in privacy view');
 } finally { await fs.rm(dir, { recursive: true, force: true }); }
