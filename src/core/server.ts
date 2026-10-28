@@ -109,10 +109,14 @@ export class AgentServer {
       return send(res, 200, { ok: true, data: nodeView(node) });
     }
     if (parts[1] === "shares" && parts.length === 2 && method === "POST") {
-      const body = await readBody(req) as { nodeId?: string; path?: string; background?: string; selection?: string; selectionStart?: number };
+      const body = await readBody(req) as { nodeId?: string; path?: string; paths?: unknown; background?: string; selection?: string; selectionStart?: number };
+      if (body.paths !== undefined) {
+        if (!Array.isArray(body.paths) || !body.paths.every((item) => typeof item === "string")) throw new StoreError(400, t("paths 必须是字符串数组"));
+        return send(res, 201, { ok: true, data: await this.store.createFilesShare(body.paths as string[], body.background, context) });
+      }
       if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context, body.selectionStart) });
       if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context, body.selectionStart) });
-      throw new StoreError(400, t("nodeId 或 path 至少提供一个"));
+      throw new StoreError(400, t("nodeId、path 或 paths 至少提供一个"));
     }
     if (parts[1] === "shares" && parts.length === 3 && (method === "PUT" || method === "PATCH")) {
       const body = await readBody(req) as { content?: unknown };
@@ -128,10 +132,14 @@ export class AgentServer {
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
       const data = await this.store.resolveShare(parts[2], context);
-      this.notifyActivity({ operation: "read", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "text" ? "node" : "file", actor: context.actor });
+      this.notifyActivity({ operation: "read", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "files" ? "files" : data.kind === "text" ? "node" : "file", actor: context.actor });
       if (url.searchParams.get("raw") === "1") {
-        const content = data.kind === "folder" ? data.entries.join("\n") : data.content;
-        const text = data.selection ? `[agentNote selection]\n${data.hint}\n${JSON.stringify(data.selection)}\n[/agentNote selection]\n\n${content}` : content;
+        // Plain documents explain themselves; snippets, folders and file sets say what they are first.
+        const head = (tag: string, detail: string) => `[agentNote ${tag}]\n${data.hint}\n${detail}\n[/agentNote ${tag}]\n\n`;
+        const text = data.kind === "folder" ? head("folder", JSON.stringify({ address: data.address, entries: data.entries })) + data.entries.join("\n")
+          : data.kind === "files" ? head("files", JSON.stringify(data.files)) + data.files.map((file) => file.address).join("\n")
+          : data.selection ? head("selection", JSON.stringify(data.selection)) + data.content
+          : data.content;
         res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "content-length": Buffer.byteLength(text) });
         return void res.end(text);
       }

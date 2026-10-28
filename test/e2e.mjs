@@ -1270,6 +1270,52 @@ try {
     assert.equal(isNewerVersion("1.0.0", "v2.0.0"), false);
   });
 
+  await test("non-document shares say what they are before any content", async () => {
+    await fsp.mkdir(path.join(vault, "资料夹"), { recursive: true });
+    await fsp.writeFile(path.join(vault, "资料夹", "note.md"), "x");
+    await fsp.writeFile(path.join(vault, "plain.md"), "正文段落");
+    const folder = await api("POST", "/api/shares", { path: "资料夹" });
+    const folderResolved = (await api("GET", `/api/shares/${folder.data.id}/resolve`)).data;
+    assert.equal(folderResolved.kind, "folder");
+    assert.match(folderResolved.hint, /文件夹/);
+    assert.match(await (await fetch(base + `/api/shares/${folder.data.id}/resolve?raw=1`)).text(), /^\[agentNote folder\]/);
+    // A plain document explains itself: no semantic note, and the raw body stays untouched.
+    const plain = await api("POST", "/api/shares", { path: "plain.md" });
+    const plainResolved = (await api("GET", `/api/shares/${plain.data.id}/resolve`)).data;
+    assert.equal(plainResolved.kind, "file");
+    assert.doesNotMatch(plainResolved.hint, /片段|文件夹|多个文件/);
+    assert.equal(await (await fetch(base + `/api/shares/${plain.data.id}/resolve?raw=1`)).text(), "正文段落");
+    const snippet = await api("POST", "/api/shares", { path: "plain.md", selection: "正文段落" });
+    const snippetResolved = (await api("GET", `/api/shares/${snippet.data.id}/resolve`)).data;
+    assert.match(snippetResolved.hint, /片段/);
+    assert.match(await (await fetch(base + `/api/shares/${snippet.data.id}/resolve?raw=1`)).text(), /^\[agentNote selection\]/);
+  });
+  await test("multi-file shares arrive as one set of paths instead of a document", async () => {
+    await fsp.writeFile(path.join(vault, "set-a.md"), "# A");
+    await fsp.writeFile(path.join(vault, "set-b.md"), "# B");
+    const share = await api("POST", "/api/shares", { paths: ["set-a.md", "set-b.md"] });
+    assert.equal(share.status, 201);
+    const resolved = (await api("GET", `/api/shares/${share.data.id}/resolve`)).data;
+    assert.equal(resolved.kind, "files");
+    assert.deepEqual(resolved.files.map((file) => file.address), ["set-a.md", "set-b.md"]);
+    assert.ok(resolved.files.every((file) => path.isAbsolute(file.filePath)));
+    assert.match(resolved.hint, /多个文件/);
+    assert.equal(resolved.content, undefined);
+    const raw = await (await fetch(base + `/api/shares/${share.data.id}/resolve?raw=1`)).text();
+    assert.match(raw, /^\[agentNote files\]/);
+    assert.match(raw, /set-a\.md\nset-b\.md$/);
+    // A set needs at least two existing files, and only strings.
+    assert.equal((await api("POST", "/api/shares", { paths: ["set-a.md"] })).status, 400);
+    assert.equal((await api("POST", "/api/shares", { paths: ["set-a.md", "missing.md"] })).status, 404);
+    assert.equal((await api("POST", "/api/shares", { paths: "set-a.md" })).status, 400);
+    // File sets cannot be edited as one document, and have no single link target.
+    assert.equal((await api("PATCH", `/api/shares/${share.data.id}`, { content: "x" })).status, 400);
+    assert.equal((await api("GET", `/api/shares/${share.data.id}/links`)).status, 400);
+    // The file set round-trips through validation when the shares are read back from disk.
+    const stored = (await store.listShares()).find((item) => item.id === share.data.id);
+    assert.deepEqual(stored.target, { kind: "files", paths: ["set-a.md", "set-b.md"] });
+  });
+
   console.log(`\n${passed} passed`);
 } finally {
   await server.stop();

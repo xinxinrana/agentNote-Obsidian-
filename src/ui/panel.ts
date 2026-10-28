@@ -227,7 +227,7 @@ export class AgentNoteView extends ItemView {
     return target.path ? `path:${target.path}` : "";
   }
   private activitySurface(item: HTMLElement, target: ActivityLinkTarget, title: string): HTMLElement {
-    const canOpen = target.type !== "local-deleted" && target.targetKind !== "folder" && !!this.activityTargetKey(target);
+    const canOpen = target.type !== "local-deleted" && target.targetKind !== "folder" && target.targetKind !== "files" && !!this.activityTargetKey(target);
     if (!canOpen) return item.createDiv({ cls: "agentnote-activity-row" });
     const row = item.createEl("button", { cls: "agentnote-activity-row is-link", attr: { "aria-label": t("打开「{0}」", title) } });
     row.onclick = () => void this.openActivityTarget(target);
@@ -475,7 +475,7 @@ class InsightsModal extends Modal {
       const row = section.createDiv({ cls: "agentnote-day-record" });
       const actor = event.actor?.name ?? event.actor?.id;
       if (actor && !this.privateView) agentAvatar(row, this.agentConnections, actor, "file-text");
-      if (event.type === "local-deleted" || event.targetKind === "folder") row.createEl("strong", { text: this.activityText(event) });
+      if (event.type === "local-deleted" || event.targetKind === "folder" || event.targetKind === "files") row.createEl("strong", { text: this.activityText(event) });
       else this.fileTitle(row, this.activityText(event), () => this.plugin.store.activityFilePath(event));
       row.createEl("small", { text: this.timeText(event.at) });
     }
@@ -747,11 +747,11 @@ class InsightsModal extends Modal {
       const detail = item.createDiv();
       const chip = event.type === "document-linked" ? t("连接") : ["share-resolved", "local-read"].includes(event.type) ? t("使用") : event.type === "share-created" ? t("分享") : ["node-created", "local-created"].includes(event.type) ? t("创建") : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? t("整理") : t("维护");
       const title = detail.createDiv({ cls: "agentnote-timeline-title" });
-      const canOpen = !this.privateView && event.type !== "local-deleted" && event.targetKind !== "folder" && !!(event.nodeId || event.documentId || event.shareId || event.path);
+      const canOpen = !this.privateView && event.type !== "local-deleted" && event.targetKind !== "folder" && event.targetKind !== "files" && !!(event.nodeId || event.documentId || event.shareId || event.path);
       if (canOpen) this.fileTitle(title, this.activityText(event), () => this.plugin.store.activityFilePath(event));
       else title.createEl("strong", { text: this.activityText(event) });
       title.createSpan({ cls: `agentnote-event-chip is-${event.type}`, text: chip });
-      detail.createSpan({ text: [this.privateView && event.actor ? t("协作者") : event.actor?.name ?? event.actor?.id ?? (event.type === "share-resolved" ? t("访问方未识别") : event.origin === "local" ? t("本地操作") : t("未申报 agent")), this.privateView ? undefined : event.actor?.sessionTitle, event.targetKind === "folder" ? t("文件夹") : event.targetKind === "node" ? t("笔记") : event.targetKind === "file" ? t("文件") : undefined].filter(Boolean).join(" · ") });
+      detail.createSpan({ text: [this.privateView && event.actor ? t("协作者") : event.actor?.name ?? event.actor?.id ?? (event.type === "share-resolved" ? t("访问方未识别") : event.origin === "local" ? t("本地操作") : t("未申报 agent")), this.privateView ? undefined : event.actor?.sessionTitle, event.targetKind === "folder" ? t("文件夹") : event.targetKind === "files" ? t("多文件") : event.targetKind === "node" ? t("笔记") : event.targetKind === "file" ? t("文件") : undefined].filter(Boolean).join(" · ") });
       item.createEl("time", { text: this.timeText(event.at) });
     }
     if (visible.length > this.timelineLimit) parent.createEl("button", { text: t("再看 {0} 条", Math.min(100, visible.length - this.timelineLimit)) }).onclick = () => { this.timelineLimit += 100; void this.render(); };
