@@ -348,8 +348,7 @@ export class AgentNoteView extends ItemView {
         more.onclick = (event) => {
           const menu = new Menu();
           if (available) {
-            menu.addItem((item) => item.setTitle(t("管理提示词")).setIcon("file-text").onClick(() => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open()));
-            menu.addItem((item) => item.setTitle(t("修改")).setIcon("pencil").onClick(() => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh(), true).open()));
+            menu.addItem((item) => item.setTitle(t("修改提示词")).setIcon("file-text").onClick(() => new AgentPromptModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open()));
           } else menu.addItem((item) => item.setTitle(t("重新接入")).setIcon("plus").onClick(() => this.copyInstallTask()));
           menu.addSeparator();
           menu.addItem((item) => item.setTitle(t("删除")).setIcon("trash").setWarning(true).onClick(() => new RemoveAgentModal(this.app, this.plugin, agent.connection!, () => this.refresh()).open()));
@@ -960,7 +959,7 @@ class ManualInstallModal extends Modal {
 }
 
 class AgentPromptModal extends Modal {
-  constructor(app: App, private plugin: AgentNotePlugin, private agent: AgentConnection, private done: () => Promise<void>, private focusAdditional = false) { super(app); }
+  constructor(app: App, private plugin: AgentNotePlugin, private agent: AgentConnection, private done: () => Promise<void>) { super(app); }
   onOpen(): void { void this.load(); }
   private async load(): Promise<void> {
     let original: string;
@@ -976,7 +975,6 @@ class AgentPromptModal extends Modal {
     this.contentEl.createEl("h3", { text: t("附加要求"), cls: "agentnote-skill-editor-label" });
     const extra = this.contentEl.createEl("textarea", { cls: "agentnote-manual-prompt agentnote-additional-input", attr: { placeholder: t("写给这个 Agent 的额外要求；保存后会显示在上方完整预览中。") } });
     extra.value = additional;
-    if (this.focusAdditional) extra.focus();
     const actions = new Setting(this.contentEl);
     let warned = false;
     const saveAdditional = async () => {
