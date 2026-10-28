@@ -11,6 +11,7 @@ import { isNewerVersion } from "./core/version";
 import { StoreError, VaultStore } from "./core/store";
 import { isLocalActivityBurst } from "./core/activityLog";
 import { isNodeFile } from "./core/nodeFile";
+import { selectionSnippet } from "./core/selection";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
 import { AGENTNOTE_VIEW, AgentNoteView, BulkActivityModal, QuickStartModal } from "./ui/panel";
 import xiaojiMarkUrl from "../assets/brand/xiaoji-mark.svg";
@@ -335,17 +336,19 @@ export default class AgentNotePlugin extends Plugin {
     return null;
   }
   private async shareSelection(editor: Editor): Promise<void> {
-    const selection = editor.getSelection();
+    // Rendered tables and wiki links do not round-trip to their Markdown source, so trust the
+    // editor offsets when the selected text is not verbatim in the file.
+    const source = editor.getValue();
+    const selectionStart = editor.posToOffset(editor.getCursor("from"));
+    const selection = selectionSnippet(source, editor.getSelection(), selectionStart, editor.posToOffset(editor.getCursor("to")));
     if (!selection) return;
     try {
-      const selectionStart = editor.posToOffset(editor.getCursor("from"));
       this.shareServicePort();
       const nodeId = await this.currentNodeId();
       if (nodeId) {
         const node = await this.store.getNode(nodeId);
-        const raw = editor.getValue();
-        const frontmatterEnd = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(raw)?.[0].length ?? 0;
-        const bodyStart = raw.indexOf(node.content, frontmatterEnd);
+        const frontmatterEnd = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(source)?.[0].length ?? 0;
+        const bodyStart = source.indexOf(node.content, frontmatterEnd);
         const start = bodyStart >= 0 && selectionStart >= bodyStart ? selectionStart - bodyStart : undefined;
         const share = await this.store.createShare(nodeId, selection, {}, start);
         await this.copyShareLink(share.id, node.title); return;
