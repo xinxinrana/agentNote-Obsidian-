@@ -34,6 +34,25 @@ const AGENT_ICONS: Record<string, string> = {
   workbuddy: workbuddyIcon,
 };
 
+function presetAgentIcon(name: string): string | undefined {
+  const preset = KNOWN_AGENTS.find((agent) => agentNameKey(agent.name) === agentNameKey(name));
+  return preset ? AGENT_ICONS[preset.id] : undefined;
+}
+
+/** 接入时上报的图标优先，其次是内置官方图标；都没有时由调用方提供通用图标。 */
+function agentIconUrl(connections: readonly AgentConnection[], name: string): string | undefined {
+  const key = agentNameKey(name);
+  return connections.find((connection) => connection.icon && agentNameKey(connection.name) === key)?.icon ?? presetAgentIcon(name);
+}
+
+function agentAvatar(parent: HTMLElement, connections: readonly AgentConnection[], name: string, fallback: string, cls = "agentnote-activity-icon"): HTMLElement {
+  const src = agentIconUrl(connections, name);
+  if (!src) { const icon = parent.createSpan({ cls }); setIcon(icon, fallback); return icon; }
+  const image = parent.createEl("img", { cls: `${cls} agentnote-agent-avatar`, attr: { src, alt: t("{0} 图标", name) } });
+  image.decoding = "async";
+  return image;
+}
+
 function contributionShade(count: number, min: number, max: number): Record<string, string> {
   const low = Math.log1p(min);
   const high = Math.log1p(max);
@@ -53,6 +72,7 @@ export class AgentNoteView extends ItemView {
   private recentActivityToggle: HTMLButtonElement | null = null;
   private recentActivityExpanded = false;
   private pendingAgentActivity: { surface: HTMLElement; copy: HTMLElement; time: HTMLElement; agentName: string; title: string; targetKey: string; operations: LiveAgentActivity["operation"][]; receivedAt: number } | null = null;
+  private agentConnections: AgentConnection[] = [];
   constructor(leaf: WorkspaceLeaf, private plugin: AgentNotePlugin) { super(leaf); }
   getViewType(): string { return AGENTNOTE_VIEW; }
   getDisplayText(): string { return t("agentNote 接入台"); }
@@ -80,12 +100,14 @@ export class AgentNoteView extends ItemView {
     const agentSection = this.contentEl.createDiv();
     this.renderAgents([], agentSection, t("正在读取接入状态…"));
     this.renderServer();
+    // Icons are optional decoration: a broken connection record must not delay the dashboard.
+    const connectionsReady = this.loadAgentConnections();
     // These sections are independent: a damaged statistics file must not hide
     // service controls or prevent installing and managing local Agents.
     await Promise.all([
       (async () => {
         try {
-          const insights = await this.plugin.store.getDashboardInsights();
+          const [insights] = await Promise.all([this.plugin.store.getDashboardInsights(), connectionsReady]);
           if (version !== this.refreshVersion) return;
           dashboard.empty();
           this.renderDashboard(insights, dashboard, activitySection);
@@ -99,6 +121,7 @@ export class AgentNoteView extends ItemView {
         try {
           const connections = await this.plugin.connectedAgents();
           if (version !== this.refreshVersion) return;
+          this.agentConnections = connections;
           agentSection.empty();
           this.renderAgents(connections, agentSection);
         } catch (error) {
@@ -109,6 +132,11 @@ export class AgentNoteView extends ItemView {
         }
       })(),
     ]);
+  }
+  private async loadAgentConnections(): Promise<AgentConnection[]> {
+    try { this.agentConnections = await this.plugin.connectedAgents(); }
+    catch { this.agentConnections = []; }
+    return this.agentConnections;
   }
   private renderCurrentFile(): void {
     const card = this.currentFileCard;
@@ -243,7 +271,7 @@ export class AgentNoteView extends ItemView {
     const item = list.createEl("li");
     const surface = this.activitySurface(item, activity, activity.title);
     surface.addClass("is-new");
-    setIcon(surface.createSpan({ cls: "agentnote-activity-icon" }), activity.operation === "read" ? "sparkles" : "file-text");
+    agentAvatar(surface, this.agentConnections, activity.agentName, activity.operation === "read" ? "sparkles" : "file-text");
     const copy = surface.createSpan({ text: this.liveActivityText(activity.agentName, activity.title, [activity.operation]) });
     const time = surface.createEl("time", { text: t("刚刚") });
     list.prepend(item);
@@ -293,7 +321,9 @@ export class AgentNoteView extends ItemView {
     for (const event of insights.activities.slice(0, 10)) {
       const item = list.createEl("li");
       const row = this.activitySurface(item, event, event.title ?? t("资料"));
-      setIcon(row.createSpan({ cls: "agentnote-activity-icon" }), event.type === "share-resolved" ? "sparkles" : "file-text");
+      const actor = event.actor?.name ?? event.actor?.id;
+      if (actor) agentAvatar(row, this.agentConnections, actor, event.type === "share-resolved" ? "sparkles" : "file-text");
+      else setIcon(row.createSpan({ cls: "agentnote-activity-icon" }), event.type === "share-resolved" ? "sparkles" : "file-text");
       row.createSpan({ text: this.activityText(event) });
       row.createEl("time", { text: this.timeText(event.at) });
     }
@@ -411,6 +441,7 @@ class InsightsModal extends Modal {
   private bulkUndoIds: string[] | null = null;
   private localArchiveUndo: { originalPath: string; archivedPath: string } | null = null;
   private privateView = false;
+  private agentConnections: AgentConnection[] = [];
   constructor(app: App, private plugin: AgentNotePlugin, initialTab: InsightTab = "overview") { super(app); this.tab = initialTab; }
   onOpen(): void { this.modalEl.addClass("agentnote-insights-modal"); void this.render(); }
   private timeText(iso: string): string { return new Date(iso).toLocaleString(locale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
@@ -443,6 +474,8 @@ class InsightsModal extends Modal {
     if (!selected.length) section.createEl("p", { text: t("当日没有活动") });
     for (const event of selected) {
       const row = section.createDiv({ cls: "agentnote-day-record" });
+      const actor = event.actor?.name ?? event.actor?.id;
+      if (actor && !this.privateView) agentAvatar(row, this.agentConnections, actor, "file-text");
       if (event.type === "local-deleted" || event.targetKind === "folder") row.createEl("strong", { text: this.activityText(event) });
       else this.fileTitle(row, this.activityText(event), () => this.plugin.store.activityFilePath(event));
       row.createEl("small", { text: this.timeText(event.at) });
@@ -471,6 +504,8 @@ class InsightsModal extends Modal {
     const agents = await this.plugin.store.getAgentInsights();
     const deletionVisibleAfter = new Date(); deletionVisibleAfter.setDate(deletionVisibleAfter.getDate() - 30);
     const events = (await this.plugin.store.listActivity()).filter((event) => event.type !== "local-deleted" || new Date(event.at) >= deletionVisibleAfter);
+    try { this.agentConnections = await this.plugin.connectedAgents(); }
+    catch { this.agentConnections = []; }
     if (sequence !== this.renderSequence) return;
     this.contentEl.empty();
     const header = this.contentEl.createDiv({ cls: "agentnote-modal-header" });
@@ -590,7 +625,9 @@ class InsightsModal extends Modal {
     for (const agent of agents) {
       const card = list.createDiv({ cls: "agentnote-agent-insight" });
       const heading = card.createDiv({ cls: "agentnote-agent-insight-heading" });
-      heading.createEl("strong", { text: this.privateView ? t("协作者") : agent.name }); heading.createSpan({ text: t("有协作记录") });
+      const who = heading.createDiv({ cls: "agentnote-agent-insight-who" });
+      if (!this.privateView) agentAvatar(who, this.agentConnections, agent.name, "bot", "agentnote-agent-icon");
+      who.createEl("strong", { text: this.privateView ? t("协作者") : agent.name }); heading.createSpan({ text: t("有协作记录") });
       const stats = card.createDiv({ cls: "agentnote-agent-insight-stats" });
       for (const [value, label] of [[agent.uses, t("读取资料")], [agent.created, t("新建内容")], [agent.updated, t("更新内容")]] as const) {
         const stat = stats.createDiv(); stat.createEl("strong", { text: String(value) }); stat.createSpan({ text: label });
@@ -706,6 +743,8 @@ class InsightsModal extends Modal {
       const day = this.dayKey(new Date(event.at));
       if (day !== previousDay) { list.createEl("li", { cls: "agentnote-timeline-date", text: this.dateText(event.at) }); previousDay = day; }
       const item = list.createEl("li");
+      const actor = event.actor?.name ?? event.actor?.id;
+      if (actor && !this.privateView) agentAvatar(item, this.agentConnections, actor, event.type === "share-resolved" ? "sparkles" : "file-text");
       const detail = item.createDiv();
       const chip = event.type === "document-linked" ? t("连接") : ["share-resolved", "local-read"].includes(event.type) ? t("使用") : event.type === "share-created" ? t("分享") : ["node-created", "local-created"].includes(event.type) ? t("创建") : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? t("整理") : t("维护");
       const title = detail.createDiv({ cls: "agentnote-timeline-title" });
