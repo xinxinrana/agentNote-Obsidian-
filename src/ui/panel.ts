@@ -107,7 +107,8 @@ export class AgentNoteView extends ItemView {
     await Promise.all([
       (async () => {
         try {
-          const [insights] = await Promise.all([this.plugin.store.getDashboardInsights(), connectionsReady]);
+          // 首屏只要本周概况和最近动态，完整档案留给「完整档案」页再算。
+          const [insights] = await Promise.all([this.plugin.store.getDashboardInsights(new Date(), "summary"), connectionsReady]);
           if (version !== this.refreshVersion) return;
           dashboard.empty();
           this.renderDashboard(insights, dashboard, activitySection);

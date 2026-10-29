@@ -16,6 +16,7 @@ const devicePattern = /^[a-zA-Z0-9-]{1,80}$/;
 export interface ActivityReadIssue { file: string; message: string }
 export interface ActivityReadResult { events: InsightEvent[]; issues: ActivityReadIssue[] }
 type CachedSource = { mtimeMs: number; ctimeMs: number; size: number; events?: InsightEvent[]; issue?: string };
+type MonthListing = { mtimeMs: number; names: string[] };
 export function isLocalActivityBurst(events: readonly { type: string; at: number }[]): boolean {
   for (let end = 0, start = 0; end < events.length; end++) {
     while (events[end].at - events[start].at >= 1_000) start++;
@@ -43,6 +44,7 @@ export class ActivityLog {
   private identity: Promise<string> | null = null;
   private readonly deviceIdFile: string;
   private sourceCache = new Map<string, CachedSource>();
+  private monthCache = new Map<string, MonthListing>();
   constructor(private directory: string, options: ActivityLogOptions = {}) {
     this.deviceIdFile = options.deviceIdFile ?? path.join(os.homedir(), ".agentnote", "device-id");
   }
@@ -83,6 +85,12 @@ export class ActivityLog {
     if (!Array.isArray(value) || !value.every(isEvent)) throw new Error(t("活动日志格式无效：{0}", path.basename(file)));
     return value;
   }
+  /**
+   * Month listings are cached by directory mtime: adding or removing a shard
+   * always touches that mtime, so an unchanged month needs no readdir. File
+   * content is still verified per shard, because a damaged shard may be
+   * repaired in place without touching its directory.
+   */
   private async sourceFiles(issues: ActivityReadIssue[] = []): Promise<string[]> {
     const legacy = (await fsp.readdir(this.directory).catch((error: NodeJS.ErrnoException) => { issues.push({ file: this.directory, message: error.message }); return []; })).filter((name) => name === "events.json" || /^events\.[a-zA-Z0-9-]+\.json$/.test(name));
     const eventDirectory = path.join(this.directory, "events");
@@ -92,30 +100,40 @@ export class ActivityLog {
       return [];
     });
     const independent: string[] = [];
+    const present = new Set<string>();
     for (const month of months) {
       if (!month.isDirectory() || !/^\d{4}-\d{2}$/.test(month.name)) continue;
-      const names = await fsp.readdir(path.join(eventDirectory, month.name)).catch((error: NodeJS.ErrnoException) => { issues.push({ file: path.join("events", month.name), message: error.message }); return []; });
-      for (const name of names) {
-        if (/^[a-f0-9-]{36}\.json$/i.test(name)) independent.push(path.join("events", month.name, name));
-      }
+      present.add(month.name);
+      for (const name of await this.monthNames(month.name, path.join(eventDirectory, month.name), issues)) independent.push(path.join("events", month.name, name));
     }
+    for (const name of [...this.monthCache.keys()]) if (!present.has(name)) this.monthCache.delete(name);
     return [...legacy, ...independent].sort();
+  }
+  private async monthNames(name: string, absolute: string, issues: ActivityReadIssue[]): Promise<string[]> {
+    const stat = await fsp.stat(absolute).catch(() => null);
+    const cached = this.monthCache.get(name);
+    if (stat && cached && cached.mtimeMs === stat.mtimeMs) return cached.names;
+    const names = (await fsp.readdir(absolute).catch((error: NodeJS.ErrnoException) => { issues.push({ file: path.join("events", name), message: error.message }); return []; })).filter((entry) => /^[a-f0-9-]{36}\.json$/i.test(entry));
+    if (stat) this.monthCache.set(name, { mtimeMs: stat.mtimeMs, names });
+    else this.monthCache.delete(name);
+    return names;
   }
   async readReport(): Promise<ActivityReadResult> {
     const issues: ActivityReadIssue[] = [];
     const files = await this.sourceFiles(issues);
     const sourceSet = new Set(files);
     for (const file of this.sourceCache.keys()) if (!sourceSet.has(file)) this.sourceCache.delete(file);
-    const seen = new Map<string, string>();
+    const signature = (event: InsightEvent): string => canonical({ ...event, eventId: undefined });
+    const seen = new Map<string, InsightEvent>();
     const result: InsightEvent[] = [];
     const conflicted = new Set<string>();
-    for (let offset = 0; offset < files.length; offset += 64) {
-      const batch = files.slice(offset, offset + 64);
+    for (let offset = 0; offset < files.length; offset += 256) {
+      const batch = files.slice(offset, offset + 256);
       const sources = await Promise.all(batch.map(async (file): Promise<CachedSource> => {
+        const cached = this.sourceCache.get(file);
         try {
           const source = path.join(this.directory, file);
           const stat = await fsp.stat(source);
-          const cached = this.sourceCache.get(file);
           if (cached?.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs && cached.size === stat.size) return cached;
           const entry = { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, size: stat.size, events: await this.readFile(source) };
           this.sourceCache.set(file, entry);
@@ -138,14 +156,13 @@ export class ActivityLog {
             occurrences.set(hash, occurrence + 1);
             eventId = `legacy-${hash}-${occurrence}`;
           }
-          const signature = canonical(Object.fromEntries(Object.entries(event).filter(([key]) => key !== "eventId")));
           const previous = seen.get(eventId);
-          if (previous !== undefined) {
-            if (previous !== signature) { issues.push({ file, message: t("活动记录 ID 重复且内容不同：{0}", eventId) }); conflicted.add(eventId); }
+          if (previous) {
+            if (signature(previous) !== signature(event)) { issues.push({ file, message: t("活动记录 ID 重复且内容不同：{0}", eventId) }); conflicted.add(eventId); }
             continue;
           }
-          seen.set(eventId, signature);
-          result.push({ ...event, eventId });
+          seen.set(eventId, event);
+          result.push(event.eventId ? event : { ...event, eventId });
         }
       }
     }
@@ -178,7 +195,9 @@ export class ActivityLog {
     let created = 0;
     let existing = 0;
     if (snapshots.length) await fsp.mkdir(directory, { recursive: true });
+    const alreadyBackedUp = new Set(await fsp.readdir(directory).catch(() => [] as string[]));
     for (const snapshot of snapshots) {
+      if (alreadyBackedUp.has(snapshot.name)) { existing++; continue; }
       const target = path.join(directory, snapshot.name);
       const temporary = `${target}.${randomUUID()}.tmp`;
       try {
@@ -188,18 +207,31 @@ export class ActivityLog {
       } finally { await fsp.rm(temporary, { force: true }); }
     }
     const deviceDirectory = path.join(directory, "immutable");
-    for (const file of await this.sourceFiles()) {
-      if (!file.startsWith(`events${path.sep}`)) continue;
-      let events: InsightEvent[];
-      try { events = await this.readFile(path.join(this.directory, file)); }
-      catch { continue; }
-      if (events.length !== 1 || events[0].deviceId !== deviceId) continue;
-      const at = new Date(events[0].at);
-      if (!Number.isFinite(at.getTime()) || dayKey(at) >= today) continue;
-      const target = path.join(deviceDirectory, path.basename(file));
+    // Only this device's own shards are ever copied here, so an existing name
+    // means the shard is already backed up and needs no read at all.
+    const backedUp = new Set(await fsp.readdir(deviceDirectory).catch(() => [] as string[]));
+    const shards = (await this.sourceFiles()).filter((file) => file.startsWith(`events${path.sep}`));
+    for (let offset = 0; offset < shards.length; offset += 64) {
+      const batch = shards.slice(offset, offset + 64);
+      const decisions = await Promise.all(batch.map(async (file) => {
+        if (backedUp.has(path.basename(file))) return "existing" as const;
+        let events: InsightEvent[];
+        try { events = await this.readFile(path.join(this.directory, file)); }
+        catch { return "skip" as const; }
+        if (events.length !== 1 || events[0].deviceId !== deviceId) return "skip" as const;
+        const at = new Date(events[0].at);
+        if (!Number.isFinite(at.getTime()) || dayKey(at) >= today) return "skip" as const;
+        return "copy" as const;
+      }));
+      if (!decisions.includes("copy")) { existing += decisions.filter((decision) => decision === "existing").length; continue; }
       await fsp.mkdir(deviceDirectory, { recursive: true });
-      try { await fsp.copyFile(path.join(this.directory, file), target, constants.COPYFILE_EXCL); created++; }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") existing++; else throw error; }
+      for (const [index, decision] of decisions.entries()) {
+        if (decision === "existing") { existing++; continue; }
+        if (decision === "skip") continue;
+        const file = batch[index];
+        try { await fsp.copyFile(path.join(this.directory, file), path.join(deviceDirectory, path.basename(file)), constants.COPYFILE_EXCL); created++; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") existing++; else throw error; }
+      }
     }
     return { created, existing };
   }

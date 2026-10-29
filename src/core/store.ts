@@ -94,6 +94,8 @@ export interface ArchiveCandidate {
   uses: number;
   lastUsed?: string;
 }
+/** `summary` 只算接入台首屏需要的部分；完整档案用默认的 `full`。 */
+export type InsightScope = "full" | "summary";
 export interface DashboardInsights {
   health: { complete: boolean; issues: string[]; documentsAvailable: boolean };
   summary: {
@@ -139,6 +141,11 @@ const SHARE_HINT = "优先通过本链接读取。更新已分享内容时，PAT
 const FOLDER_HINT = "这里分享给你的是一个文件夹，不是单个文件：entries 只是第一层的直接条目（子目录以 / 结尾）。需要具体内容时，按 address 或 filePath 读取其中的文件；需要更深的层级时继续列出子目录。直接修改其中内容请对具体文件新建分享链接，PATCH 不适用于文件夹。";
 const FILES_HINT = "这里分享给你的是多个文件，不是一篇文档：files 列出每个文件的 address 与 filePath，其中没有正文。先按清单判断需要哪一份，再按 address 或 filePath 读取对应内容；如需修改其中某个文件，请对那个文件单独新建分享链接。";
 const SELECTION_HINT = "这里分享给你的是用户从文档中选中的一段片段，不是全文：content 只是这一片段，不应据此推断整篇内容或完整观点。位置与占比见 selection（startLine / endLine 行号从 1 开始；offset 从 0 开始，结束位置不包含在内；ambiguous 表示重复文本无法定位）。需要上下文时，按 address 或 filePath 读取同一文档的完整内容；PATCH 只替换该片段，保留其余正文。";
+const CREATED_ACTIVITIES = new Set<InsightEventType>(["node-created", "local-created"]);
+const UPDATED_ACTIVITIES = new Set<InsightEventType>(["node-updated", "local-edited", "local-moved", "local-deleted", "node-archived", "node-restored"]);
+const READ_ACTIVITIES = new Set<InsightEventType>(["share-resolved", "local-read"]);
+const USED_ACTIVITIES = new Set<InsightEventType>(["share-resolved", "local-read", "document-linked"]);
+const MEANINGFUL_ACTIVITIES = new Set<InsightEventType>(["node-created", "node-updated", "local-created", "local-edited", "share-created", "share-resolved", "local-read", "document-linked"]);
 /** Each recorded action counts once. State-only sync events are excluded separately. */
 const COUNTED_ACTIVITIES = new Set<InsightEventType>([
   "node-created", "node-updated", "node-archived", "node-restored", "share-created", "share-resolved",
@@ -862,7 +869,8 @@ export class VaultStore {
       throw error;
     }
   }
-  async getDashboardInsights(now = new Date()): Promise<DashboardInsights> {
+  async getDashboardInsights(now = new Date(), scope: InsightScope = "full"): Promise<DashboardInsights> {
+    const limited = scope === "summary";
     const [nodes, activityReport] = await Promise.all([this.listNodes(), this.activityLog.readReport()]);
     const documentReport = await this.documentView(activityReport.events, nodes);
     const documents = documentReport.documents;
@@ -880,65 +888,117 @@ export class VaultStore {
     const weekStart = new Date(now); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const deletionVisibleAfter = new Date(now); deletionVisibleAfter.setDate(deletionVisibleAfter.getDate() - 30);
-    const inRange = (at: string, start: Date) => new Date(at) >= start && new Date(at) <= now;
+    const nowMs = now.getTime();
+    const times = new WeakMap<InsightEvent, number>();
+    const timeOf = (event: InsightEvent): number => {
+      let ms = times.get(event);
+      if (ms === undefined) { ms = Date.parse(event.at); times.set(event, ms); }
+      return ms;
+    };
+    const inRange = (event: InsightEvent, start: Date) => timeOf(event) >= start.getTime() && timeOf(event) <= nowMs;
+    const counts = { weekActivityCount: 0, allTimeActivityCount: 0, weekCreated: 0, weekUpdated: 0, weekSharesCreated: 0, weekResolves: 0, weekUsedNotes: 0, monthResolves: 0 };
+    const usedDocuments = new Set<string>();
+    for (const event of activityEvents) {
+      const ms = timeOf(event);
+      const counted = COUNTED_ACTIVITIES.has(event.type);
+      if (counted) counts.allTimeActivityCount++;
+      const thisWeek = ms >= weekStart.getTime() && ms <= nowMs;
+      const thisMonth = ms >= monthStart.getTime() && ms <= nowMs;
+      if (counted && thisWeek) counts.weekActivityCount++;
+      if (!thisWeek && !thisMonth) continue;
+      if (thisWeek) {
+        if (CREATED_ACTIVITIES.has(event.type)) counts.weekCreated++;
+        else if (UPDATED_ACTIVITIES.has(event.type)) counts.weekUpdated++;
+        else if (event.type === "share-created") counts.weekSharesCreated++;
+      }
+      if (READ_ACTIVITIES.has(event.type)) {
+        if (thisWeek) { counts.weekResolves++; if (event.documentId) usedDocuments.add(event.documentId); }
+        if (thisMonth) counts.monthResolves++;
+      }
+    }
+    counts.weekUsedNotes = usedDocuments.size;
     const resolveEvents = activityEvents.filter((event) => event.type === "share-resolved");
-    const activityCount = (items: InsightEvent[]): number => items.filter((event) => COUNTED_ACTIVITIES.has(event.type)).length;
-    const documentIdForEvent = (event: InsightEvent): string | undefined => event.documentId;
     const recentStart = new Date(now); recentStart.setDate(recentStart.getDate() - 30);
-    const buildDocumentContributions = (start?: Date): DocumentContribution[] => documents.filter((document) => !document.deletedAt).map((document) => {
-      const documentEvents = (eventsByDocument.get(document.id) ?? []).filter((event) => !start || inRange(event.at, start));
+    const recentMs = recentStart.getTime();
+    const documentContribution = (document: VaultDocument, startMs: number): DocumentContribution | null => {
+      let count = 0;
+      let recent = 0;
+      let lastActive: string | undefined;
       const categories: Record<ContributionCategory, number> = { construction: 0, reuse: 0, connection: 0, organization: 0 };
-      for (const event of documentEvents) if (COUNTED_ACTIVITIES.has(event.type)) categories[contributionCategory(event)]++;
+      for (const event of eventsByDocument.get(document.id) ?? []) {
+        const ms = timeOf(event);
+        if (ms < startMs || ms > nowMs) continue;
+        if (lastActive === undefined || event.at > lastActive) lastActive = event.at;
+        if (!COUNTED_ACTIVITIES.has(event.type)) continue;
+        count++;
+        categories[contributionCategory(event)]++;
+        if (ms >= recentMs) recent++;
+      }
+      if (!count) return null;
       return {
         document,
-        activityCount: activityCount(documentEvents),
-        recentActivityCount: activityCount(documentEvents.filter((event) => inRange(event.at, recentStart))),
-        score: activityCount(documentEvents),
-        recentScore: activityCount(documentEvents.filter((event) => inRange(event.at, recentStart))),
+        activityCount: count,
+        recentActivityCount: recent,
+        score: count,
+        recentScore: recent,
         construction: categories.construction,
         reuse: categories.reuse,
         connection: categories.connection,
         organization: categories.organization,
-        lastActive: documentEvents.map((event) => event.at).sort().at(-1),
+        lastActive,
       };
-    }).filter((document) => document.activityCount > 0).sort((a, b) => b.activityCount - a.activityCount || (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
+    };
+    const buildDocumentContributions = (start?: Date): DocumentContribution[] => {
+      if (limited) return [];
+      const startMs = start ? start.getTime() : -Infinity;
+      const rows: DocumentContribution[] = [];
+      for (const document of documents) {
+        if (document.deletedAt) continue;
+        const row = documentContribution(document, startMs);
+        if (row) rows.push(row);
+      }
+      return rows.sort((a, b) => b.activityCount - a.activityCount || (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
+    };
     const documentContributions = buildDocumentContributions();
     const buildRanking = (start: Date, period: "week" | "month" | "all"): InsightNote[] => {
       const usage = new Map<string, InsightEvent[]>();
-      for (const event of resolveEvents.filter((event) => event.nodeId && inRange(event.at, start))) {
+      for (const event of resolveEvents.filter((event) => event.nodeId && inRange(event, start))) {
         const items = usage.get(event.nodeId!) ?? []; items.push(event); usage.set(event.nodeId!, items);
       }
       return nodes.filter((node) => !node.archived && usage.has(node.id)).map((node) => {
         const reads = usage.get(node.id)!;
-        const distinctWeeks = new Set(reads.map((event) => {
-          const date = new Date(event.at); const monday = new Date(date); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); return monday.toISOString().slice(0, 10);
-        })).size;
-        const updated = inRange(node.updated, start);
+        const distinctWeeks = new Set(reads.map((event) => weekKey(timeOf(event)))).size;
+        const updatedAt = Date.parse(node.updated);
+        const updated = updatedAt >= start.getTime() && updatedAt <= nowMs;
         const score = reads.length;
         const lastRead = reads.map((event) => event.at).sort().at(-1);
         const reason = period === "week" ? t("本周被读取 {0} 次{1}", reads.length, updated ? t("，并在本周更新") : "") : period === "month" ? t("本月被读取 {0} 次，跨 {1} 周复用", reads.length, distinctWeeks) : t("累计被读取 {0} 次，跨 {1} 周复用", reads.length, distinctWeeks);
         return { node, reads: reads.length, lastRead, score, reason };
       }).sort((a, b) => b.score - a.score || (b.lastRead ?? "").localeCompare(a.lastRead ?? "")).slice(0, 3);
     };
-    const usedNodeIds = new Set(activityEvents.filter((event) => ["share-resolved", "local-read"].includes(event.type) && inRange(event.at, weekStart)).map(documentIdForEvent).filter(Boolean));
     const dateKey = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const weekKey = (ms: number): string => { const date = new Date(ms); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return dateKey(date); };
     const documentsByPath = new Map(documents.map((document) => [document.path, document]));
     const archiveCandidate = (document: VaultDocument, node: AgentNode | undefined, events: InsightEvent[]): ArchiveCandidate | null => {
       if (document.protected || node?.pinned || node?.archived) return null;
-      const observed = events.filter((event) => new Date(event.at) <= now);
-      const uses = observed.filter((event) => ["share-resolved", "local-read", "document-linked"].includes(event.type));
-      const meaningful = observed.filter((event) => ["node-created", "node-updated", "local-created", "local-edited", "share-created", "share-resolved", "local-read", "document-linked"].includes(event.type));
-      const lastAttention = Math.max(new Date(document.created).getTime(), new Date(document.updated).getTime(), node ? new Date(node.updated).getTime() : 0, ...meaningful.map((event) => new Date(event.at).getTime()));
-      const lastUsed = uses.map((event) => event.at).sort().at(-1);
-      const useWeeks = new Set(uses.map((event) => {
-        const date = new Date(event.at); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return dateKey(date);
-      })).size;
-      const quietDays = uses.length === 0 ? 7 : useWeeks >= 2 ? 90 : 30;
+      const observed = events.filter((event) => timeOf(event) <= nowMs);
+      const uses = observed.filter((event) => USED_ACTIVITIES.has(event.type));
+      const meaningful = observed.filter((event) => MEANINGFUL_ACTIVITIES.has(event.type));
+      let attention = Math.max(Date.parse(document.created), Date.parse(document.updated), node ? Date.parse(node.updated) : 0);
+      let lastUsed: string | undefined;
+      const useWeeks = new Set<string>();
+      for (const event of meaningful) { const ms = timeOf(event); if (ms > attention) attention = ms; }
+      for (const event of uses) {
+        if (lastUsed === undefined || event.at > lastUsed) lastUsed = event.at;
+        useWeeks.add(weekKey(timeOf(event)));
+      }
+      const lastAttention = attention;
+      const quietDays = uses.length === 0 ? 7 : useWeeks.size >= 2 ? 90 : 30;
       if (!Number.isFinite(lastAttention) || now.getTime() - lastAttention < quietDays * 86_400_000) return null;
-      const reason = uses.length === 0 ? t("至少 7 天未被阅读、引用或通过分享链接访问") : useWeeks >= 2 ? t("曾跨周复用，近 90 天没有新的使用或维护") : t("曾被使用，近 30 天没有新的使用或维护");
+      const reason = uses.length === 0 ? t("至少 7 天未被阅读、引用或通过分享链接访问") : useWeeks.size >= 2 ? t("曾跨周复用，近 90 天没有新的使用或维护") : t("曾被使用，近 30 天没有新的使用或维护");
       return { document, node, reason, uses: uses.length, lastUsed };
     };
-    const nodeCandidates = nodes.flatMap((node): ArchiveCandidate[] => {
+    const nodeCandidates = limited ? [] : nodes.flatMap((node): ArchiveCandidate[] => {
       if (node.archived || node.pinned) return [];
       const nodePath = this.idToPath.get(node.id);
       if (!nodePath) return [];
@@ -948,17 +1008,19 @@ export class VaultStore {
       const candidate = archiveCandidate(document, node, events);
       return candidate ? [candidate] : [];
     });
-    const localCandidates = documents.flatMap((document): ArchiveCandidate[] => {
-      if (document.deletedAt || document.path.startsWith("agentNote/") || this.isConfigPath(document.path) || !fs.existsSync(path.join(this.root, document.path))) return [];
+    const localCandidates = limited ? [] : documents.flatMap((document): ArchiveCandidate[] => {
+      if (document.deletedAt || document.path.startsWith("agentNote/") || this.isConfigPath(document.path)) return [];
       const candidate = archiveCandidate(document, undefined, eventsByDocument.get(document.id) ?? []);
-      return candidate ? [candidate] : [];
+      // Only suggestions that survive the age checks need the file to exist on disk.
+      if (!candidate || !fs.existsSync(path.join(this.root, document.path))) return [];
+      return [candidate];
     });
     const archiveCandidates = activityReport.issues.length || documentReport.issue ? [] : [...nodeCandidates, ...localCandidates].sort((first, second) => first.uses - second.uses || first.document.updated.localeCompare(second.document.updated));
     const dailyCounts = new Map<string, number>();
     for (const event of activityEvents) {
-      const date = new Date(event.at);
-      if (Number.isNaN(date.getTime())) continue;
-      const key = dateKey(date);
+      const ms = timeOf(event);
+      if (!Number.isFinite(ms)) continue;
+      const key = dateKey(new Date(ms));
       dailyCounts.set(key, (dailyCounts.get(key) ?? 0) + (COUNTED_ACTIVITIES.has(event.type) ? 1 : 0));
     }
     const trend = (start: Date, days: number, label: (date: Date) => string): InsightTrendPoint[] => Array.from({ length: days }, (_, index) => {
@@ -974,26 +1036,26 @@ export class VaultStore {
     return {
       health: { complete: activityReport.issues.length === 0 && !documentReport.issue && !this.historyWriteIssue && !this.referenceIssue, issues: [...activityReport.issues.map((issue) => `${issue.file}: ${issue.message}`), ...(documentReport.issue ? [documentReport.issue] : []), ...(this.historyWriteIssue ? [t("本次活动未记录：{0}", this.historyWriteIssue)] : []), ...(this.referenceIssue ? [t("本机引用索引暂时不可用：{0}", this.referenceIssue)] : [])], documentsAvailable: !documentReport.issue },
       summary: {
-        weekActivityScore: activityCount(activityEvents.filter((event) => inRange(event.at, weekStart))),
-        allTimeActivityScore: activityCount(activityEvents),
-        allTimeActivityCount: activityCount(activityEvents),
-        weekActivityCount: activityEvents.filter((event) => inRange(event.at, weekStart) && COUNTED_ACTIVITIES.has(event.type)).length,
-        weekCreated: activityEvents.filter((event) => ["node-created", "local-created"].includes(event.type) && inRange(event.at, weekStart)).length,
-        weekUpdated: activityEvents.filter((event) => ["node-updated", "local-edited", "local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) && inRange(event.at, weekStart)).length,
-        weekSharesCreated: activityEvents.filter((event) => event.type === "share-created" && inRange(event.at, weekStart)).length,
-        weekResolves: activityEvents.filter((event) => ["share-resolved", "local-read"].includes(event.type) && inRange(event.at, weekStart)).length,
-        weekUsedNotes: usedNodeIds.size,
-        monthResolves: activityEvents.filter((event) => ["share-resolved", "local-read"].includes(event.type) && inRange(event.at, monthStart)).length,
+        weekActivityScore: counts.weekActivityCount,
+        allTimeActivityScore: counts.allTimeActivityCount,
+        allTimeActivityCount: counts.allTimeActivityCount,
+        weekActivityCount: counts.weekActivityCount,
+        weekCreated: counts.weekCreated,
+        weekUpdated: counts.weekUpdated,
+        weekSharesCreated: counts.weekSharesCreated,
+        weekResolves: counts.weekResolves,
+        weekUsedNotes: counts.weekUsedNotes,
+        monthResolves: counts.monthResolves,
       },
-      weekly: buildRanking(weekStart, "week"),
+      weekly: limited ? [] : buildRanking(weekStart, "week"),
       weeklyDocuments: buildDocumentContributions(weekStart),
-      monthly: buildRanking(monthStart, "month"),
-      allTime: buildRanking(startedAt, "all"),
+      monthly: limited ? [] : buildRanking(monthStart, "month"),
+      allTime: limited ? [] : buildRanking(startedAt, "all"),
       activities: [...activityEvents].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10),
-      timeline: activityEvents.filter((event) => event.type !== "local-deleted" || new Date(event.at) >= deletionVisibleAfter).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
+      timeline: limited ? [] : activityEvents.filter((event) => event.type !== "local-deleted" || timeOf(event) >= deletionVisibleAfter.getTime()).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100),
       weeklyTrend: trend(weekStart, 7, (date) => [t("日"), t("一"), t("二"), t("三"), t("四"), t("五"), t("六")][date.getDay()]),
-      monthlyTrend: trend(monthStart, monthDays, (date) => String(date.getDate())),
-      allTimeTrend: trend(contributionStart, contributionDays, dateKey),
+      monthlyTrend: limited ? [] : trend(monthStart, monthDays, (date) => String(date.getDate())),
+      allTimeTrend: limited ? [] : trend(contributionStart, contributionDays, dateKey),
       documents: documentContributions,
       startedAt: startedAt.toISOString(),
       archiveCandidates,

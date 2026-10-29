@@ -10,6 +10,7 @@ import type { AgentConnection } from "./core/agentConnections";
 import { isNewerVersion } from "./core/version";
 import { StoreError, VaultStore } from "./core/store";
 import { isLocalActivityBurst } from "./core/activityLog";
+import { installPerfProbe } from "./core/perf";
 import { isNodeFile } from "./core/nodeFile";
 import { selectionSnippet } from "./core/selection";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
@@ -59,6 +60,9 @@ export default class AgentNotePlugin extends Plugin {
     this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
     try { await this.store.init(); }
     catch (error) { new Notice(t("数据初始化失败，仍可打开接入台检查：{0}", (error as Error).message), 10000); }
+    // 性能探针默认关闭，只在控制台里执行过
+    // localStorage.setItem("agentnote:perf", "1") 的开发环境里挂载。
+    if (window.localStorage.getItem("agentnote:perf") === "1") this.register(installPerfProbe(this));
     this.connections = new AgentConnections(connectionsFile(os.homedir()));
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
