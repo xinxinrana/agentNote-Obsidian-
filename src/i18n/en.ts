@@ -534,6 +534,7 @@ export const en: Record<string, string> = {
   "接口不存在": "Endpoint not found",
   "请提供 name 和 skillPath": "Provide name and skillPath",
   "Agent 接入登记不可用": "Agent registration is unavailable",
+  "此 Agent 支持 Obsidian 链接。请将以下要求保存到你的 agentnote/SKILL.md 附加要求中：写入笔记后，向用户反馈一个 [文档标题](openLink) 链接；响应未包含 openLink 时使用 link。保留永久 HTTP link 用于后续 API 读取和修改，不要向 obsidian:// 地址发送 API 请求。": "This agent supports Obsidian links. Save the following as additional instructions in your agentnote/SKILL.md: after writing a note, show the user one [document title](openLink) link; use link if the response has no openLink. Keep the permanent HTTP link for subsequent API reads and edits; never send API requests to obsidian:// URLs.",
   "请求体必须是合法 JSON": "The request body must be valid JSON",
   "分享文件夹已不存在: {0}": "Shared folder no longer exists: {0}",
   "分享选段已不在当前文件中": "The shared selection is no longer in the current file",

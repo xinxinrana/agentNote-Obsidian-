@@ -56,7 +56,7 @@ You can add a desired title, tags, or background. The agent writes a normal note
 
 The choice follows local tests recorded in the issue: WorkBuddy supports clickable `obsidian://` links, while Codex and Claude Desktop do not. Claude Code and other agents have not been confirmed, so they use HTTP. Obsidian links follow the [official URI format](https://obsidian.md/help/uri), with URL-encoded vault and file names. The service uses the registered agent name when available, otherwise the request identity; requests without identity use HTTP.
 
-For existing installations, copy the connection task again to update the Skill. The updated Skill displays `openLink` when present and `link` otherwise. It keeps `link` for API reads and edits; `openLink` is only for opening the note.
+The supported-agent list lives in `OBSIDIAN_LINK_AGENTS` in `src/core/server.ts`. It currently contains only WorkBuddy; all unlisted agents use HTTP. When WorkBuddy reports its installation, the response includes `instructions` asking it to save an additional Skill instruction: display `openLink` when present, otherwise `link`, and keep `link` for API reads and edits. Other agents receive no link instructions, and the shared Skill keeps its existing HTTP behavior. Existing WorkBuddy installations can report again to receive the instructions.
 
 ## 3. Connect an agent
 

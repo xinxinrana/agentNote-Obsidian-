@@ -1409,16 +1409,38 @@ try {
       assert.equal(fallback.link, created.link);
     } finally { await linkServer.stop(); }
   });
-  await test("both Skill languages display one open link and preserve the HTTP API link", async () => {
-    for (const language of ["zh-CN", "en"]) {
-      setLanguage(language);
-      const skill = renderSharedSkillMd(port);
-      assert.match(skill, /openLink/);
-      assert.match(skill, /obsidian:\/\//);
-      assert.match(skill, /link/);
-      assert.match(skill, /HTTP/);
-    }
-    setLanguage("zh-CN");
+  await test("only supported agents receive link instructions when reporting their installation", async () => {
+    const root = path.join(vault, "链接接入");
+    const localConnections = new AgentConnections(path.join(root, "connections.json"));
+    const registrationServer = new AgentServer(new VaultStore(root), { port: 0, registerAgent: (name, skillPath) => localConnections.register(name, skillPath) });
+    const registrationBase = `http://127.0.0.1:${await registrationServer.start()}`;
+    try {
+      for (const language of ["zh-CN", "en"]) {
+        setLanguage(language);
+        const skill = renderSharedSkillMd(port);
+        assert.doesNotMatch(skill, /openLink|obsidian:\/\//);
+        for (const [index, name] of [" wOrKbUdDy ", "Codex", "Claude Desktop", "Claude Code", "Other", "WorkBuddy-like"].entries()) {
+          const skillDir = path.join(root, String(index));
+          const skillPath = path.join(skillDir, "SKILL.md");
+          await fsp.mkdir(skillDir, { recursive: true });
+          await fsp.writeFile(skillPath, skill);
+          await fsp.writeFile(path.join(skillDir, "agentnote.identity.json"), JSON.stringify({ id: `agent-${index}`, name }));
+          const response = await fetch(registrationBase + "/api/agents/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, skillPath }) });
+          assert.equal(response.status, 200);
+          const data = (await response.json()).data;
+          if (index === 0) {
+            assert.match(data.instructions, /agentnote\/SKILL\.md/);
+            assert.match(data.instructions, /\[.*\]\(openLink\)/);
+            assert.match(data.instructions, /HTTP link/);
+            assert.match(data.instructions, language === "en" ? /additional instructions/ : /附加要求/);
+          } else {
+            assert.equal(Object.hasOwn(data, "instructions"), false, name);
+          }
+          assert.equal(await fsp.readFile(skillPath, "utf8"), skill);
+          assert.equal(Object.hasOwn((await localConnections.list()).find((item) => item.name === name.trim()), "instructions"), false);
+        }
+      }
+    } finally { setLanguage("zh-CN"); await registrationServer.stop(); }
   });
 
   console.log(`\n${passed} passed`);

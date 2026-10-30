@@ -14,6 +14,9 @@ export interface AgentActivity { operation: AgentOperation; title: string; nodeI
 export interface ShareLinkInfo { original: string; link: string; displayText?: string; targetPath: string | null; subpath: string | null; status: "resolved" | "unresolved" }
 export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void; listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]>; registerAgent?: (name: string, skillPath: string, iconPath?: string) => Promise<AgentConnection> }
 const nodeView = (node: Awaited<ReturnType<VaultStore["getNode"]>>) => ({ ...node, warnings: qualityWarnings(node) });
+// Confirmed clickable Obsidian URI support. All other agents keep HTTP links.
+const OBSIDIAN_LINK_AGENTS = new Set(["workbuddy"]);
+const supportsObsidianLinks = (name?: string) => OBSIDIAN_LINK_AGENTS.has(name?.trim().toLowerCase() ?? "");
 
 async function readBody(req: http.IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -47,8 +50,7 @@ export class AgentServer {
   private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated", context: ActivityContext) {
     const share = await this.store.ensureShareForNode(node.id, context);
     const link = this.shareLink(share.id);
-    // Only WorkBuddy has confirmed support for clickable Obsidian URIs.
-    const file = context.actor?.name.trim().toLowerCase() === "workbuddy"
+    const file = supportsObsidianLinks(context.actor?.name)
       ? await this.store.nodeFilePath(node.id).catch(() => undefined) : undefined;
     const openLink = file === undefined ? undefined
       : `obsidian://open?vault=${encodeURIComponent(path.basename(this.store.root))}&file=${encodeURIComponent(file)}`;
@@ -82,7 +84,12 @@ export class AgentServer {
       const body = await readBody(req) as { name?: unknown; skillPath?: unknown; iconPath?: unknown };
       if (typeof body.name !== "string" || typeof body.skillPath !== "string") throw new StoreError(400, t("请提供 name 和 skillPath"));
       if (body.iconPath !== undefined && typeof body.iconPath !== "string") throw new StoreError(400, t("图标必须是 Skill 目录中的图片文件"));
-      try { return send(res, 200, { ok: true, data: await this.opts.registerAgent(body.name, body.skillPath, body.iconPath) }); }
+      try {
+        const connection = await this.opts.registerAgent(body.name, body.skillPath, body.iconPath);
+        const instructions = supportsObsidianLinks(connection.name)
+          ? t("此 Agent 支持 Obsidian 链接。请将以下要求保存到你的 agentnote/SKILL.md 附加要求中：写入笔记后，向用户反馈一个 [文档标题](openLink) 链接；响应未包含 openLink 时使用 link。保留永久 HTTP link 用于后续 API 读取和修改，不要向 obsidian:// 地址发送 API 请求。") : undefined;
+        return send(res, 200, { ok: true, data: { ...connection, ...(instructions ? { instructions } : {}) } });
+      }
       catch (error) { throw new StoreError(400, error instanceof Error ? error.message : String(error)); }
     }
     if (parts[0] !== "api") return send(res, 404, { ok: false, error: t("接口不存在") });

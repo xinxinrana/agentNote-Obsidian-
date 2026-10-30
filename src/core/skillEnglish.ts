@@ -28,7 +28,7 @@ Use "Type ｜ Document title" (a full-width vertical bar) for new note titles, s
 
 Organize the title, content, background, and tags from the user's intent. Leave unclear background or tags empty. You do not need to search for old notes before writing.
 
-A successful write returns \`status\` and \`link\`, and may include \`openLink\`. Immediately show one link as \`[document title](openLink or link)\`: use openLink when present, otherwise link. openLink opens the note in Obsidian; link is always the permanent HTTP address. Keep link for subsequent API reads and edits; never send API requests to obsidian:// URLs. If the user asks to edit the note you just wrote, use the saved link directly instead of searching again.
+A successful write returns \`status\` and \`link\`. The \`link\` is the note's permanent address. Send it to the user immediately and use it to refer to this note in subsequent conversation. If the user asks to edit the note you just wrote, use that link directly instead of searching again.
 
 ## Share links
 
