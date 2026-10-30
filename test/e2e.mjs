@@ -1366,6 +1366,61 @@ try {
     assert.deepEqual(stored.target, { kind: "files", paths: ["set-a.md", "set-b.md"] });
   });
 
+  await test("write links match the agent while HTTP addresses remain usable after archive", async () => {
+    const root = path.join(vault, "链接测试 & 空格");
+    const linkStore = new VaultStore(root);
+    const linkServer = new AgentServer(linkStore, { port: 0 });
+    const linkBase = `http://127.0.0.1:${await linkServer.start()}`;
+    const write = async (method, route, body, headers = {}) => {
+      const response = await fetch(linkBase + route, { method, headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+      assert.equal(response.status, method === "POST" ? 201 : 200);
+      return (await response.json()).data;
+    };
+    try {
+      const headers = { "x-agentnote-agent-name": " wOrKbUdDy " };
+      const created = await write("POST", "/api/nodes", { title: "笔记 & 空格 #1", content: "正文" }, headers);
+      const checkOpenLink = async (data) => {
+        const uri = new URL(data.openLink);
+        assert.equal(uri.protocol, "obsidian:");
+        assert.equal(uri.hostname, "open");
+        assert.equal(uri.searchParams.get("vault"), path.basename(root));
+        assert.equal(uri.searchParams.get("file"), await linkStore.nodeFilePath(data.id));
+        assert.equal(await fsp.readFile(path.join(root, uri.searchParams.get("file")), "utf8").then((text) => text.includes(data.content)), true);
+      };
+      await checkOpenLink(created);
+      assert.ok(created.link.startsWith(linkBase + "/api/shares/"));
+      const updated = await write("PATCH", `/api/nodes/${created.id}`, { title: "新标题 & 空格", content: "更新正文", archived: true }, headers);
+      assert.equal(updated.link, created.link);
+      await checkOpenLink(updated);
+      assert.notEqual(updated.openLink, created.openLink);
+      const resolved = await (await fetch(created.link)).json();
+      assert.equal(resolved.data.content, "更新正文");
+      for (const name of ["Codex", "Claude", "Claude Desktop", "Claude Code", "Other", "WorkBuddy-like", ""]) {
+        const data = await write("POST", "/api/nodes", { title: name || "未识别", content: "正文" }, { "x-agentnote-agent-name": name });
+        assert.equal(data.openLink, undefined, name);
+        assert.ok(data.link.startsWith(linkBase + "/api/shares/"));
+      }
+      await linkStore.registerAgent({ id: "wb", name: "WorkBuddy" });
+      const registered = await write("POST", "/api/nodes", { title: "登记身份", content: "正文" }, { "x-agentnote-agent-id": "wb", "x-agentnote-agent-name": "Other" });
+      await checkOpenLink(registered);
+      await linkStore.registerAgent({ id: "cx", name: "Codex" });
+      const fallback = await write("PATCH", `/api/nodes/${created.id}`, { content: "HTTP 编辑" }, { "x-agentnote-agent-id": "cx", "x-agentnote-agent-name": "WorkBuddy" });
+      assert.equal(fallback.openLink, undefined);
+      assert.equal(fallback.link, created.link);
+    } finally { await linkServer.stop(); }
+  });
+  await test("both Skill languages display one open link and preserve the HTTP API link", async () => {
+    for (const language of ["zh-CN", "en"]) {
+      setLanguage(language);
+      const skill = renderSharedSkillMd(port);
+      assert.match(skill, /openLink/);
+      assert.match(skill, /obsidian:\/\//);
+      assert.match(skill, /link/);
+      assert.match(skill, /HTTP/);
+    }
+    setLanguage("zh-CN");
+  });
+
   console.log(`\n${passed} passed`);
 } finally {
   await server.stop();

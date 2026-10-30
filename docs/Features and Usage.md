@@ -52,7 +52,11 @@ After connecting an agent, use natural language:
 - “Save this to my agent notes.”
 - “Remember this in my notes.”
 
-You can add a desired title, tags, or background. The agent writes a normal note to the vault and receives a permanent link. Later, “update the note we just made” updates the same note instead of creating a duplicate.
+You can add a desired title, tags, or background. The agent writes a normal note to the vault and returns one document link. WorkBuddy shows an Obsidian link that opens the note; Codex, Claude Desktop, Claude Code, and other agents show an HTTP share link. Later, “update the note we just made” updates the same note through its permanent HTTP address.
+
+The choice follows local tests recorded in the issue: WorkBuddy supports clickable `obsidian://` links, while Codex and Claude Desktop do not. Claude Code and other agents have not been confirmed, so they use HTTP. Obsidian links follow the [official URI format](https://obsidian.md/help/uri), with URL-encoded vault and file names. The service uses the registered agent name when available, otherwise the request identity; requests without identity use HTTP.
+
+For existing installations, copy the connection task again to update the Skill. The updated Skill displays `openLink` when present and `link` otherwise. It keeps `link` for API reads and edits; `openLink` is only for opening the note.
 
 ## 3. Connect an agent
 

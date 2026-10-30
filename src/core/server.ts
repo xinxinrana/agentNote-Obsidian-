@@ -1,5 +1,6 @@
 import { t } from "../i18n";
 import * as http from "http";
+import * as path from "path";
 import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateNodeInput, VaultStore } from "./store";
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
 import { renderSharedSkillMd } from "./skill";
@@ -45,7 +46,13 @@ export class AgentServer {
   private notifyActivity(activity: AgentActivity): void { try { this.opts.onActivity?.(activity); } catch (error) { console.warn("agentNote activity notification failed", error); } }
   private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated", context: ActivityContext) {
     const share = await this.store.ensureShareForNode(node.id, context);
-    return { status, link: this.shareLink(share.id), ...nodeView(node) };
+    const link = this.shareLink(share.id);
+    // Only WorkBuddy has confirmed support for clickable Obsidian URIs.
+    const file = context.actor?.name.trim().toLowerCase() === "workbuddy"
+      ? await this.store.nodeFilePath(node.id).catch(() => undefined) : undefined;
+    const openLink = file === undefined ? undefined
+      : `obsidian://open?vault=${encodeURIComponent(path.basename(this.store.root))}&file=${encodeURIComponent(file)}`;
+    return { status, link, ...(openLink ? { openLink } : {}), ...nodeView(node) };
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
