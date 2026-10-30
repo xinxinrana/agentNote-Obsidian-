@@ -1,57 +1,74 @@
-[English](README.md) · **简体中文**
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/agentnote-lockup-dark.svg">
+    <img src="assets/brand/agentnote-lockup.svg" alt="agentNote — 让本地知识参与 Agent 工作" width="310">
+  </picture>
+</p>
 
-# agentNote
+<p align="center"><strong>让笔记去上班，让成果回到笔记里。</strong><br>过去的判断，今天用得上。<br>今天的成果，下次接着用。</p>
 
-**让笔记去上班，让成果回到笔记里。**
+<p align="center">
+  <a href="https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest"><img src="https://img.shields.io/github/v/release/xinxinrana/agentNote-Obsidian-?style=flat-square&amp;label=release&amp;color=8652CF" alt="最新版本"></a>
+  <a href="https://community.obsidian.md/plugins/agentnote"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&amp;query=%24.agentnote.downloads&amp;label=downloads&amp;style=flat-square&amp;color=8652CF" alt="Obsidian 社区下载量"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/xinxinrana/agentNote-Obsidian-?style=flat-square&amp;color=8652CF" alt="MIT 许可证"></a>
+</p>
 
-Obsidian 里积累的不只是信息，还有你的方法、项目经历和已经做过的判断。agentNote 让这些知识真正参与 Agent 的工作，也让这次工作的成果，成为下一次可以继续使用的知识。
+<p align="center"><a href="https://community.obsidian.md/plugins/agentnote">安装插件</a> · <a href="docs/如何使用.md">三分钟开始</a> · <a href="https://agentnote-intro.app.workbuddy.host/">产品网站</a> · <a href="README.md">English</a></p>
 
-它是一个本地 Obsidian 桌面端插件：把资料分享给 Claude Code、Codex、WorkBuddy 等 Agent，再把成果写回自己的笔记库。
+![旧笔记汇聚成新的成果，再回到自己的知识库。agentNote 概念主视觉。](docs/img/readme/knowledge-in-motion.png)
 
-![在 Obsidian 的工作界面里，让本地资料参与 Agent 工作。](docs/img/readme/workspace-zh.png)
+<p align="center"><sub>让已有的知识，长出新的成果。概念视觉，非软件界面。</sub></p>
 
-*在 Obsidian 的工作界面里，让本地资料参与 Agent 工作。*
+agentNote 是一个 Obsidian 桌面插件。把你选中的笔记、文件夹或一段内容交给 Claude Code、Codex、WorkBuddy 等 Agent，让它带着你的背景工作，再把成果写回自己的笔记库。
 
-## 第二大脑，也可以参与工作
+![你的笔记 → Agent 工作 → 新的知识；已有的积累，成为下一次的起点。](docs/img/readme/knowledge-loop-zh.svg)
 
-存下更多笔记只是开始。当过去的判断能帮助今天做计划，一套方法能指导新的任务，一份项目记录能补上 Agent 缺少的背景，知识才真正发挥了作用。
+## 你积累的，终于用上了
 
-用 agentNote，你可以从 Obsidian 中选出此刻有用的资料，交给 Agent。它可以是一篇笔记、一个文件夹，也可以只是其中一段内容，成为调研、写作或规划的起点。笔记里的双链，也能让 Agent 沿着已有联系理解相关知识。
+那份反复修改的方法、上次项目做过的判断、随手记下却一直没用上的想法，都可以成为这次工作的起点。
 
-你负责指向，Agent 负责理解和执行。
+选出有用的资料，右键分享，把链接发给 Agent。它读取当前内容，也能按需沿双链寻找相关笔记。你负责指出哪些背景重要，Agent 带着这些背景继续做事。
 
-## 知识属于你，不属于某次对话
+## 这次做完的，下次还在
 
-一个有价值的结果，应该在聊天结束后仍然可用。让 Agent 把结论写回 Obsidian，它就成为普通的 Markdown 笔记：可以编辑、与其他资料连接，也可以再次交给 Agent 使用。
+对话里有了值得留下的结论，直接说：
 
-于是，工作形成一个循环：**已有知识 → Agent 工作 → 新的知识**。下一次协作可以接着上一次的成果继续。换一个 Agent，也不用从头重建自己的工作记忆。
+> 结合这些研究和方法笔记，整理下一步行动，把方案写到 Obsidian。
 
-## 看见知识真正参与了什么
+成果会成为普通的 Markdown 笔记，留在你的库里。可以继续编辑、建立双链、交给另一个 Agent，或在下次任务中接着使用。说“修改刚才那篇”，也可以继续更新原笔记。
 
-笔记库越积越多，哪些内容真正有用反而不容易看清。agentNote 的知识档案把这些活动呈现出来：哪些资料被阅读或继续建设，哪些 Agent 使用过它们，工作发生在什么时候。
+![公开演示：成果保存在自己的笔记库，右侧 agentNote 面板展示当前笔记与协作记录。](docs/img/readme/workspace-demo-zh.png)
 
-你可以从一份文档追溯到时间线，回到原笔记继续完善，或决定哪些资料值得保护、哪些可以归档。它帮助你维护仍在发挥作用的知识；活动值只是已记录行为的汇总，不是对工作质量的评分。
+<p align="center"><sub>从已有资料到新的笔记。界面演示使用公开示例内容。</sub></p>
 
-![回看知识持续参与工作的轨迹。图中统计来自个人笔记库。](docs/img/readme/profile-zh.png)
+## 回头看，知识一直在参与
 
-*回看知识持续参与工作的轨迹。图中统计来自个人笔记库。*
+哪些笔记被读取、继续建设，哪些 Agent 使用过它们，工作发生在什么时候，都可以在知识档案中回看。沿着活动记录打开原笔记，继续完善，或整理已经不再使用的资料。
 
-## 让知识流动，保留自己的掌控
+![公开演示：知识工作档案展示本周活动、使用资料与协作轨迹。](docs/img/readme/profile-demo-zh.png)
 
-笔记和活动记录仍保存在你的笔记库。agentNote 为已有工作方式搭一座本地桥梁，不要求你把知识迁到另一个平台，也不需要注册云端账号。
+<p align="center"><sub>活动次数记录已经发生的操作，不评价成果质量。图中为演示数据。</sub></p>
 
-你继续用 Obsidian 编辑和整理，用自己习惯的 Agent 完成工作。agentNote 不会上传整个笔记库；交给 Agent 的内容，仍由该 Agent 及其服务商按照各自的方式处理。
+## 三步，开始一次真实的工作
 
-## 从一次真实的任务开始
+1. **安装并启用**：在 Obsidian 社区插件中搜索 **agentNote**，安装并启用，然后打开 agentNote 接入台，确认本地服务正在运行。
+2. **接入一个 Agent**：点击“接入”，把复制的安装任务发给它，完成 Skill 安装与上报。
+3. **分享，然后继续对话**：右键一份笔记，选择 **agentNote: 分享给 agent**，把链接发给 Agent。需要保存成果时，说“写到 Obsidian”。
 
-接入一个 Agent，分享一份有用的背景，再让成果回到笔记里。例如：“结合这些项目笔记，整理下一步行动，把计划写到 Obsidian。”
+[查看图文教程](docs/如何使用.md) · [下载最新版本](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest)
 
-[安装最新版本](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest) · [查看图文教程](docs/如何使用.md)
+## 用自己的资料，用习惯的 Agent
 
-支持 **Obsidian 桌面端 1.8.7 或更新版本**，适用于 macOS、Windows、Linux。分享链接在同一台电脑的本地服务运行时可用。macOS 上，让 Agent 工作时请用 **⌘H** 隐藏或最小化 Obsidian；关闭笔记库窗口会停止服务。
+接入台提供 **Claude Code、Codex、WorkBuddy** 入口。其他支持安装 Skill 和访问本地 HTTP 的 Agent，可通过“接入其他 Agent”接入。
+
+笔记和活动记录保存在自己的 vault 中，无需注册 agentNote 云端账号。agentNote 不会上传整个笔记库；交给 Agent 的内容，由相应 Agent 及其服务商处理。
+
+需要 **Obsidian 桌面端 1.8.7 或更新版本**，支持 macOS、Windows 和 Linux。分享链接仅供同一台电脑访问，Agent 工作期间请保持笔记库打开。macOS 可使用 **⌘H** 隐藏或最小化 Obsidian；关闭笔记库窗口会停止服务。
+
+---
 
 [功能与使用](docs/功能与使用.md) · [产品哲学](docs/product-design.md) · [反馈问题](https://github.com/xinxinrana/agentNote-Obsidian-/issues)
 
-开发资料：[开发说明](docs/开发.md) · [Git 活动记录同步](docs/Git活动记录同步.md) · [品牌资产](assets/brand/README.md)
+[开发说明](docs/开发.md) · [Git 活动记录同步](docs/Git活动记录同步.md) · [品牌资产](assets/brand/README.md)
 
-[MIT License](LICENSE) · Evan · [GitHub](https://github.com/xinxinrana)
+[MIT License](LICENSE) · [Evan](https://github.com/xinxinrana)

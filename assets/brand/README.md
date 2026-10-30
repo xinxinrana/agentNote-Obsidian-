@@ -2,6 +2,8 @@
 
 小记是一张会陪伴资料流转的折角笔记。以下 SVG 是可编辑的主文件；静态形象在 `png/` 中提供同名透明背景位图，适合不支持 SVG 的场合。
 
+[深色背景品牌组合](agentnote-lockup-dark.svg)保留原有图形与品牌紫，将字标深色部分改为浅色；可与常规版本配合 `<picture>` 按背景切换。README 主视觉与演示配图见[素材说明](../../docs/img/readme/README.md)。
+
 [Skill 安装图标](skill-icon.ico)为含 16、24、32、48、64、128、256px 的透明 ICO，图形按画布的 82% 缩放并居中，适合 Skill 列表使用；另提供 [PNG](skill-icon.png)。
 
 [视觉识别规范（VI）](VI.md)包含标志、色彩、字体、留白和应用规则。
