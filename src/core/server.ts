@@ -4,6 +4,7 @@ import * as path from "path";
 import { ActivityContext, CreateNodeInput, InsightEventType, StoreError, UpdateNodeInput, VaultStore } from "./store";
 import { NodeType, ShareTarget, qualityWarnings } from "./types";
 import { renderSharedSkillMd } from "./skill";
+import { renderSharePage, shareView } from "./sharePage";
 import type { AgentConnection } from "./agentConnections";
 import skillIcoUrl from "../../assets/brand/skill-icon.ico";
 import skillIconUrl from "../../assets/brand/skill-icon.png";
@@ -146,6 +147,8 @@ export class AgentServer {
     }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
       const data = await this.store.resolveShare(parts[2], context);
+      res.setHeader("cache-control", "no-store");
+      res.setHeader("vary", "Accept");
       this.notifyActivity({ operation: "read", title: data.title, shareId: parts[2], targetKind: data.kind === "folder" ? "folder" : data.kind === "files" ? "files" : data.kind === "text" ? "node" : "file", actor: context.actor });
       if (url.searchParams.get("raw") === "1") {
         // Plain documents explain themselves; snippets, folders and file sets say what they are first.
@@ -157,7 +160,19 @@ export class AgentServer {
         res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "content-length": Buffer.byteLength(text) });
         return void res.end(text);
       }
-      return send(res, 200, { ok: true, data });
+      const detail = url.searchParams.get("detail") === "1";
+      const format = url.searchParams.get("format");
+      if (format === "json" || (!format && req.headers.accept?.includes("application/json"))) {
+        return send(res, 200, { ok: true, data: shareView(data, detail) });
+      }
+      const html = renderSharePage(data, this.store.root, detail);
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(html),
+        "cache-control": "no-store", "vary": "Accept", "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      });
+      return void res.end(html);
     }
     if (parts[1] === "insights" && method === "GET") {
       if (parts[2] === "overview") return send(res, 200, { ok: true, data: await this.store.getDashboardInsights() });

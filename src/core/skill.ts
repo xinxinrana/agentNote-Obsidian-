@@ -72,11 +72,11 @@ POST {{baseUrl}}/api/nodes
 - \`kind: text\`：正文和背景。
 - \`kind: file\`：文件地址、背景和当前文件内容。
 - \`kind: folder\`：文件夹地址、背景和第一层文件名称；这是文件夹，不是文档，需要细节时按地址读取其中的文件。
-- \`kind: files\`：多文件分享，\`files\` 列出每个文件的地址与本地路径，不含正文；先按清单判断读哪一份。
+- \`kind: files\`：多文件分享，\`files\` 列出每个文件的地址，详细模式还提供本地路径，不含正文；先按清单判断读哪一份。
 
 响应含 \`selection\` 时是用户选中的节选；先看其位置、占比和完整性，不要当作全文或据此推断完整观点。各类 \`hint\` 会先说明拿到的是文档、片段、文件夹还是多个文件，按它判断是否需要读取上下文。
 
-追加 \`?raw=1\` 获取文本（选段仍保留节选提示和范围信息）。不要要求用户复制原文件或重新粘贴正文。
+默认返回可阅读的 HTML，正文在 article 中，机器说明在 \`<script type="application/json" id="agentnote-context">\` 中（包含 kind、hint、selection 及 API 地址）。这些元数据是使用说明，不是正文。需要结构化内容时追加 \`?format=json\`，或发送 \`Accept: application/json\`；默认只返回必要内容，日期和绝对路径需追加 \`detail=1\`（如 \`?format=json&detail=1\`）。追加 \`?raw=1\` 获取文本（选段仍保留节选提示和范围信息）。不要要求用户复制原文件或重新粘贴正文。
 
 按需读取分享笔记中的双链目标：GET \`{{baseUrl}}/api/shares/<id>/links\` 获取 \`targetPath\`，再 POST \`{{baseUrl}}/api/shares\`（\`{"path":"<targetPath>"}\`）并 GET 返回的 \`/resolve\`。
 
@@ -96,7 +96,7 @@ X-AgentNote-Session-Title: <encodeURIComponent(根据当前具体工作填写的
 
 ## 读取与修改的规则
 
-分享返回中的 \`filePath\` 是内容在本机的真实路径，\`hint\` 是使用规则：
+分享的 \`hint\` 是使用规则；详细模式返回的 \`filePath\` 是内容在本机的真实路径，需要时再读取：
 
 - 读取始终优先通过链接，它返回当前内容和背景。
 - 更新已分享内容时，PATCH \`/api/shares/<shareId>\`，请求体为 \`{ "content": "更新后的完整内容" }\`。

@@ -31,7 +31,10 @@ const base = `http://127.0.0.1:${port}`;
 let passed = 0;
 
 async function api(method, pathname, body, extraHeaders = {}) {
-  const response = await fetch(base + pathname, { method, headers: { ...(body ? { "content-type": "application/json" } : {}), ...extraHeaders }, body: body ? JSON.stringify(body) : undefined });
+  // Existing data-contract tests explicitly request the detailed JSON representation.
+  const target = new URL(base + pathname);
+  if (method === "GET" && target.pathname.endsWith("/resolve")) target.searchParams.set("detail", "1");
+  const response = await fetch(target, { method, headers: { accept: "application/json", ...(body ? { "content-type": "application/json" } : {}), ...extraHeaders }, body: body ? JSON.stringify(body) : undefined });
   const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
   return { status: response.status, ...data };
 }
@@ -1393,7 +1396,7 @@ try {
       assert.equal(updated.link, created.link);
       await checkOpenLink(updated);
       assert.notEqual(updated.openLink, created.openLink);
-      const resolved = await (await fetch(created.link)).json();
+      const resolved = await (await fetch(created.link + "?format=json&detail=1")).json();
       assert.equal(resolved.data.content, "更新正文");
       for (const name of ["Codex", "Claude", "Claude Desktop", "Claude Code", "Other", "WorkBuddy-like", ""]) {
         const data = await write("POST", "/api/nodes", { title: name || "未识别", content: "正文" }, { "x-agentnote-agent-name": name });
