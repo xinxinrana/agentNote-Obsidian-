@@ -10,11 +10,11 @@ Instead of repeatedly copying paths, uploading files, pasting content, and expla
 
 ### Reading a share link
 
-Share links open a compact HTML page with the title, background, and Markdown content. **Open in Obsidian** at the top of a note opens the original file in the current vault. Reopening the share after a rename or archive uses the current path. Excerpts remain clearly marked as partial; folders and file sets show lists.
+Share links open a compact HTML page regardless of the Accept header with the title, background, and Markdown content. **Open in Obsidian** at the top of a note opens the original file in the current vault. Reopening the share after a rename or archive uses the current path. Excerpts remain clearly marked as partial; folders and file sets show lists.
 
 Dates and absolute local paths are omitted by default. Choose **Details** or append `?detail=1` to include them. Agents can read scope, selection positions, and API guidance from the inert `agentnote-context` JSON block in the page source. This metadata is separate from the visible article and does not repeat the note content.
 
-For structured reads, append `?format=json` or send `Accept: application/json`. Use `?format=json&detail=1` for complete fields. `?raw=1` still returns plain text. Pages require no network fonts, scripts, or external resources.
+For structured reads, append `?format=json`. Use `?format=json&detail=1` for complete fields. `?raw=1` still returns plain text. Pages require no network fonts, scripts, or external resources.
 
 ## Three-minute start
 

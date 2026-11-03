@@ -33,7 +33,7 @@ let passed = 0;
 async function api(method, pathname, body, extraHeaders = {}) {
   // Existing data-contract tests explicitly request the detailed JSON representation.
   const target = new URL(base + pathname);
-  if (method === "GET" && target.pathname.endsWith("/resolve")) target.searchParams.set("detail", "1");
+  if (method === "GET" && target.pathname.endsWith("/resolve")) { target.searchParams.set("format", "json"); target.searchParams.set("detail", "1"); }
   const response = await fetch(target, { method, headers: { accept: "application/json", ...(body ? { "content-type": "application/json" } : {}), ...extraHeaders }, body: body ? JSON.stringify(body) : undefined });
   const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
   return { status: response.status, ...data };

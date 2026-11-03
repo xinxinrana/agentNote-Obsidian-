@@ -43,7 +43,7 @@ Return share links as \`[document title](full URL)\`; use the original URL for A
 
 If the response includes \`selection\`, it is a user-selected excerpt. Check its position, coverage, and completeness; do not treat it as the full document or infer the author’s complete views.
 
-The default response is readable HTML. The article contains the content; \`<script type="application/json" id="agentnote-context">\` contains machine-readable kind, hint, selection, and API routes. Treat this metadata as usage guidance, not note content. Append \`?format=json\` or send \`Accept: application/json\` for structured content. Dates and absolute paths are opt-in with \`detail=1\`, for example \`?format=json&detail=1\`. Append \`?raw=1\` to get text (selection shares retain their excerpt notice and metadata). Do not ask the user to copy the original file or paste its content again.
+Presentation links always return readable HTML, regardless of the Accept header. The article contains the content; \`<script type="application/json" id="agentnote-context">\` contains machine-readable kind, hint, selection, and API routes. Treat this metadata as usage guidance, not note content. Append \`?format=json\` for structured content. Dates and absolute paths are opt-in with \`detail=1\`, for example \`?format=json&detail=1\`. Append \`?raw=1\` to get text (selection shares retain their excerpt notice and metadata). Do not ask the user to copy the original file or paste its content again.
 
 Read wikilink targets when needed: GET \`{{baseUrl}}/api/shares/<id>/links\` for \`targetPath\`, then POST \`{{baseUrl}}/api/shares\` with \`{"path":"<targetPath>"}\` and GET the returned \`/resolve\` URL.
 

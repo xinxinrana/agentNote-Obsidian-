@@ -57,6 +57,20 @@ try {
     assert.match(html, /\?detail=1/);
   });
 
+  await test('copied share URLs and returned write links stay HTML regardless of Accept headers', async () => {
+    const created = await (await fetch(base + '/api/nodes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: '展示链接', content: '写入后的正文' }) })).json();
+    for (const link of [url, created.data.link]) {
+      for (const accept of ['application/json', 'application/json, text/plain, */*', 'text/html', '*/*']) {
+        const response = await fetch(link, { headers: { accept } });
+        assert.match(response.headers.get('content-type'), /text\/html/);
+        assert.match(await response.text(), /<article>/);
+      }
+      const json = await fetch(link + '?format=json', { headers: { accept: 'text/html' } });
+      assert.match(json.headers.get('content-type'), /application\/json/);
+      assert.equal((await json.json()).ok, true);
+    }
+  });
+
   await test('raw HTML, links and metadata cannot inject active page content', async () => {
     const response = await fetch(url);
     const html = await response.text();
@@ -78,7 +92,7 @@ try {
   });
 
   await test('JSON negotiation is compact by default and detail=1 restores complete metadata', async () => {
-    for (const options of [{ suffix: '?format=json', headers: { accept: 'text/html' } }, { suffix: '', headers: { accept: 'application/json' } }]) {
+    for (const options of [{ suffix: '?format=json', headers: { accept: 'text/html' } }, { suffix: '?format=json', headers: { accept: 'application/json' } }]) {
       const response = await fetch(url + options.suffix, { headers: options.headers });
       assert.match(response.headers.get('content-type'), /application\/json/);
       const { data } = await response.json();

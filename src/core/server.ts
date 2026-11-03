@@ -162,7 +162,8 @@ export class AgentServer {
       }
       const detail = url.searchParams.get("detail") === "1";
       const format = url.searchParams.get("format");
-      if (format === "json" || (!format && req.headers.accept?.includes("application/json"))) {
+      // Presentation links always stay HTML, even when an agent sends a JSON Accept header.
+      if (format === "json") {
         return send(res, 200, { ok: true, data: shareView(data, detail) });
       }
       const html = renderSharePage(data, this.store.root, detail);
