@@ -14,3 +14,5 @@ export * from "./activityLog";
 export * from "./agentConnections";
 export * from "./dataRepair";
 export * from "../i18n";
+export * from "./excludedFolders";
+export * from "./mobileHistory";

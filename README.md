@@ -63,7 +63,7 @@ The panel includes **Claude Code, Codex, and WorkBuddy**. Other agents that supp
 
 Your notes and activity records stay in your vault. No agentNote cloud account is required. agentNote does not upload your entire vault; material you give an agent is processed by that agent and its provider.
 
-Requires **Obsidian desktop 1.8.7 or later** on macOS, Windows, or Linux. Share links work only on the same computer. Keep the vault open while your agent works. On macOS, use **⌘H** or minimize Obsidian; closing the vault window stops the service.
+Sharing and agent connections require **Obsidian desktop 1.8.7 or later** on macOS, Windows, or Linux. Mobile offers a read-only dashboard and history viewer for synced activity. Share links work only on the same computer. Keep the vault open while your agent works. On macOS, use **⌘H** or minimize Obsidian; closing the vault window stops the service.
 
 ---
 

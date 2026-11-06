@@ -2000,3 +2000,13 @@ span.agentnote-agent-icon svg {
 .agentnote-macos-reminder strong { color: var(--text-normal); font-size: 13px; }
 .agentnote-macos-reminder p { margin: 5px 0 0; color: var(--text-normal); font-size: 12px; line-height: 1.65; }
 .agentnote-health-notice { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--background-modifier-border); border-left: 3px solid var(--text-warning, #d99a16); border-radius: 8px; background: var(--background-secondary); color: var(--text-normal); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+
+/* Mobile read-only activity viewer. */
+.agentnote-mobile { padding: 18px; overflow-wrap: anywhere; }
+.agentnote-mobile-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:20px 0; }
+.agentnote-mobile-stats > div { padding:12px 8px; border:1px solid var(--background-modifier-border); border-radius:10px; font-size:11px; }
+.agentnote-mobile-stats strong { display:block; font-size:24px; color:var(--text-accent); }
+.agentnote-mobile input { width:100%; margin-bottom:12px; }
+.agentnote-mobile-row { padding:14px 0; border-bottom:1px solid var(--background-modifier-border); }
+.agentnote-mobile-row button { height:auto; white-space:normal; text-align:left; }
+.agentnote-mobile-row small { display:block; margin-top:6px; color:var(--text-muted); }

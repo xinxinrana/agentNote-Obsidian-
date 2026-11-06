@@ -63,7 +63,7 @@ agentNote 是一个 Obsidian 桌面插件。把你选中的笔记、文件夹或
 
 笔记和活动记录保存在自己的 vault 中，无需注册 agentNote 云端账号。agentNote 不会上传整个笔记库；交给 Agent 的内容，由相应 Agent 及其服务商处理。
 
-需要 **Obsidian 桌面端 1.8.7 或更新版本**，支持 macOS、Windows 和 Linux。分享链接仅供同一台电脑访问，Agent 工作期间请保持笔记库打开。macOS 可使用 **⌘H** 隐藏或最小化 Obsidian；关闭笔记库窗口会停止服务。
+分享与 Agent 接入需要 **Obsidian 桌面端 1.8.7 或更新版本**，支持 macOS、Windows 和 Linux。手机端可只读查看已同步的看板与活动历史。分享链接仅供同一台电脑访问，Agent 工作期间请保持笔记库打开。macOS 可使用 **⌘H** 隐藏或最小化 Obsidian；关闭笔记库窗口会停止服务。
 
 ---
 

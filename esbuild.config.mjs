@@ -24,7 +24,7 @@ const external = [
 
 /** Plugin bundle (Obsidian entry). */
 const pluginConfig = {
-  entryPoints: ["src/main.ts"],
+  entryPoints: ["src/entry.ts"],
   bundle: true,
   external,
   format: "cjs",

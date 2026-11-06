@@ -156,3 +156,11 @@ The editor supplies the selected occurrence. If the source changes, a unique mat
 Installation tasks offer `/api/skill-icon.ico`, a transparent ICO product icon with padding and sizes from 16 to 256px. For Codex, save it as `assets/icon.ico` inside the Skill directory and reference `./assets/icon.ico` from both `interface.icon_small` and `interface.icon_large` in `agents/openai.yaml`. Existing installations can copy a new installation task to update the icon configuration without deleting their identity file. The PNG and SVG endpoints remain available.
 
 Activity API consumers should use `summary.weekActivityCount`, `summary.allTimeActivityCount`, and document `activityCount` / `recentActivityCount`. The legacy score fields remain compatibility aliases for the same unweighted counts. Historical event files are unchanged.
+
+## Mobile reader and excluded folders
+
+Mobile provides a read-only activity dashboard, timeline, title search, and links to existing notes. It reads locally synced activity files without starting a server, sharing content, or recording activity. Sync `agentNote/data/` and your notes using your preferred sync service. Unsynced history shows an empty state; unreadable files remain intact with a notice.
+
+On desktop, go to agentNote settings → Activity → **Excluded folders**. Enter vault-relative paths separated by newlines, commas, or semicolons, or choose folders one at a time from the folder list. Rules include subfolders and match directory boundaries: excluding `archive` does not exclude `archive-2026`. Matching activity is no longer written; existing matching records are hidden from reports without deleting history files. Removing a rule makes those records visible again. Mobile uses the synced exclusion settings.
+
+Sharing from the file-tree root creates a folder share for the vault root and lists its direct children. Share links remain desktop-only and local to the same computer.

@@ -130,7 +130,7 @@ export class AgentServer {
         return send(res, 201, { ok: true, data: await this.store.createFilesShare(body.paths as string[], body.background, context) });
       }
       if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context, body.selectionStart) });
-      if (body.path) return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context, body.selectionStart) });
+      if (typeof body.path === "string") return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context, body.selectionStart) });
       throw new StoreError(400, t("nodeId、path 或 paths 至少提供一个"));
     }
     if (parts[1] === "shares" && parts.length === 3 && (method === "PUT" || method === "PATCH")) {

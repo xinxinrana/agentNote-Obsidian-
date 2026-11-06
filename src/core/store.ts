@@ -1,3 +1,4 @@
+import { isExcludedFolder } from "./excludedFolders";
 import { selectionMetadata, type SelectionMetadata } from "./selection";
 import { t } from "../i18n";
 import * as fs from "fs";
@@ -193,6 +194,10 @@ export class VaultStore {
     this.activityLog = new ActivityLog(this.p("data"), activityOptions);
     this.referencesFile = activityOptions.referencesFile ?? path.join(os.homedir(), ".agentnote", `references.${createHash("sha256").update(this.root).digest("hex").slice(0, 16)}.json`);
   }
+  private excludedFolders: string[] = [];
+  setExcludedFolders(folders: string[]): void { this.excludedFolders = [...folders]; }
+  isExcludedPath(filePath: string): boolean { return isExcludedFolder(this.normalizeVaultPath(filePath), this.excludedFolders); }
+  private includedEvent(event: InsightEvent): boolean { return ![event.path, event.sourcePath, event.previousPath].some(p => p !== undefined && this.isExcludedPath(p)); }
   private p(...parts: string[]): string { return path.join(this.dataDir, ...parts); }
   private isConfigPath(filePath: string): boolean {
     const normalized = this.normalizeVaultPath(filePath);
@@ -354,6 +359,8 @@ export class VaultStore {
   }
   async recordDocumentReferences(sourcePath: string, targetPaths: string[], recordAdditions = true): Promise<void> {
     const source = this.normalizeVaultPath(sourcePath);
+    if (this.isExcludedPath(source)) return;
+    targetPaths = targetPaths.filter(target => !this.isExcludedPath(target));
     const targets = [...new Set(targetPaths.filter((target) => target.toLowerCase().endsWith(".md")).map((target) => this.normalizeVaultPath(target)).filter((target) => target !== source))].sort();
     const task = this.referenceWriteQueue.then(async () => {
       const references = await this.readReferences();
@@ -432,7 +439,7 @@ export class VaultStore {
   }
 
   async listNodes(filter: NodeFilter = {}): Promise<AgentNode[]> {
-    let nodes = await this.scanNodes();
+    let nodes = (await this.scanNodes()).filter(node => !this.isExcludedPath(this.idToPath.get(node.id)!));
     if (filter.type) nodes = nodes.filter((node) => node.type === filter.type);
     if (filter.archived !== undefined) nodes = nodes.filter((node) => node.archived === filter.archived);
     if (filter.q) {
@@ -750,15 +757,15 @@ export class VaultStore {
   }
   private vaultPath(relPath: string): { rel: string; abs: string } {
     const rel = relPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-    if (!rel || rel.split("/").includes("..")) throw new StoreError(400, t("必须提供 vault 内相对路径"));
-    return { rel, abs: path.join(this.root, ...rel.split("/")) };
+    if (rel.split("/").includes("..")) throw new StoreError(400, t("必须提供 vault 内相对路径"));
+    return { rel: rel || ".", abs: path.join(this.root, ...rel.split("/")) };
   }
   async createPathShare(relPath: string, background?: string, selection?: string, context: ActivityContext = {}, selectionStart?: number): Promise<Share> {
     selection = selection || undefined;
     const { rel, abs } = this.vaultPath(relPath);
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat) throw new StoreError(404, t("找不到内容: {0}", rel));
-    const title = path.basename(rel).replace(/\.md$/i, "");
+    const title = rel === "." ? path.basename(this.root) : path.basename(rel).replace(/\.md$/i, "");
     if (stat.isDirectory()) { if (selection) throw new StoreError(400, t("文件夹不能分享选段")); return this.appendShare({ kind: "folder", path: rel }, undefined, background, context, title); }
     const source = selection ? await fsp.readFile(abs, "utf8") : undefined;
     if (selection && !source!.includes(selection)) throw new StoreError(400, t("选段已不在当前文件中"));
@@ -845,7 +852,7 @@ export class VaultStore {
   }
 
   private async readStoredEvents(): Promise<InsightEvent[]> {
-    return this.activityLog.read();
+    return (await this.activityLog.read()).filter(event => this.includedEvent(event));
   }
   private async readEvents(): Promise<InsightEvent[]> {
     const events = (await this.readStoredEvents()).filter((event) => !event.stateOnly);
@@ -862,6 +869,7 @@ export class VaultStore {
       }));
   }
   private async recordEvent(event: Omit<InsightEvent, "at">): Promise<void> {
+    if (!this.includedEvent(event as InsightEvent)) return;
     try { await this.activityLog.append(event); this.historyWriteIssue = null; }
     catch (error) {
       this.historyWriteIssue = error instanceof Error ? error.message : String(error);
@@ -872,9 +880,10 @@ export class VaultStore {
   async getDashboardInsights(now = new Date(), scope: InsightScope = "full"): Promise<DashboardInsights> {
     const limited = scope === "summary";
     const [nodes, activityReport] = await Promise.all([this.listNodes(), this.activityLog.readReport()]);
-    const documentReport = await this.documentView(activityReport.events, nodes);
-    const documents = documentReport.documents;
-    const activityEvents = activityReport.events.filter((event) => !event.stateOnly);
+    const visibleEvents = activityReport.events.filter(event => this.includedEvent(event));
+    const documentReport = await this.documentView(visibleEvents, nodes);
+    const documents = documentReport.documents.filter(document => !this.isExcludedPath(document.path));
+    const activityEvents = visibleEvents.filter((event) => !event.stateOnly);
     const eventsByDocument = new Map<string, InsightEvent[]>();
     const eventsByNode = new Map<string, InsightEvent[]>();
     for (const event of activityEvents) {
@@ -1112,7 +1121,7 @@ export class VaultStore {
     if (!stat) throw new StoreError(410, t("分享目标已不存在"));
     return stat.isDirectory() ? this.resolveFolderShare(share, node.path, node.path, node.background, node.title) : this.resolveFileShare(share, node.path, node.path, node.background, node.title);
   }
-  private async resolveFileShare(share: Share, address: string, abs: string, background = share.background ?? "", title = path.basename(address)): Promise<ShareResult> {
+  private async resolveFileShare(share: Share, address: string, abs: string, background = share.background ?? "", title = address === "." ? path.basename(this.root) : path.basename(address)): Promise<ShareResult> {
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat?.isFile()) throw new StoreError(410, t("分享文件已不存在: {0}", address));
     const body = await fsp.readFile(abs, "utf8");
@@ -1120,7 +1129,7 @@ export class VaultStore {
     if (share.selection !== undefined && !body.includes(share.selection)) throw new StoreError(410, t("分享选段已不在当前文件中"));
     return { shareId: share.id, kind: "file", title, background, address, content, updated: stat.mtime.toISOString(), filePath: abs, ...this.selectionDetails(share, body) };
   }
-  private async resolveFolderShare(share: Share, address: string, abs: string, background = share.background ?? "", title = path.basename(address)): Promise<ShareResult> {
+  private async resolveFolderShare(share: Share, address: string, abs: string, background = share.background ?? "", title = address === "." ? path.basename(this.root) : path.basename(address)): Promise<ShareResult> {
     const stat = await fsp.stat(abs).catch(() => null);
     if (!stat?.isDirectory()) throw new StoreError(410, t("分享文件夹已不存在: {0}", address));
     const entries = (await fsp.readdir(abs, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)).map((item) => item.isDirectory() ? `${item.name}/` : item.name);

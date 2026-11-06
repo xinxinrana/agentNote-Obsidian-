@@ -1,3 +1,4 @@
+import { parseExcludedFolders } from "./core/excludedFolders";
 import { languageForPreference, setLanguage, t } from "./i18n";
 import type { LanguagePreference } from "./i18n";
 import * as os from "os";
@@ -20,8 +21,8 @@ import xiaojiMarkUrl from "../assets/brand/xiaoji-mark.svg";
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
 type BulkActivityAction = "ask" | "record" | "ignore";
-interface AgentNoteSettings { language: LanguagePreference; port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; bulkActivityAction: BulkActivityAction; agents: Record<string, AgentProfile> }
-const DEFAULT_SETTINGS: AgentNoteSettings = { language: "auto", port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, bulkActivityAction: "ask", agents: {} };
+interface AgentNoteSettings { language: LanguagePreference; port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; bulkActivityAction: BulkActivityAction; excludedFolders: string[]; agents: Record<string, AgentProfile> }
+const DEFAULT_SETTINGS: AgentNoteSettings = { language: "auto", port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, bulkActivityAction: "ask", excludedFolders: [], agents: {} };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -58,6 +59,7 @@ export default class AgentNotePlugin extends Plugin {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) { new Notice(t("agentNote 需要桌面端文件系统 vault。")); return; }
     this.store = new VaultStore(adapter.getBasePath(), this.app.vault.configDir);
+    this.store.setExcludedFolders(this.settings.excludedFolders);
     try { await this.store.init(); }
     catch (error) { new Notice(t("数据初始化失败，仍可打开接入台检查：{0}", (error as Error).message), 10000); }
     // 性能探针默认关闭，只在控制台里执行过
@@ -146,7 +148,7 @@ export default class AgentNotePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-open", (file) => this.trackReadFile(file)));
   }
   private isTrackedMarkdown(file: TAbstractFile | null): file is TFile {
-    return file instanceof TFile && file.extension.toLowerCase() === "md" && !file.path.startsWith(`${this.app.vault.configDir}/`) && !file.path.startsWith("agentNote/data/");
+    return file instanceof TFile && file.extension.toLowerCase() === "md" && !file.path.startsWith(`${this.app.vault.configDir}/`) && !file.path.startsWith("agentNote/data/") && !this.store.isExcludedPath(file.path);
   }
   private recordLocalActivity(type: "local-created" | "local-edited" | "local-read" | "local-moved" | "local-deleted", filePath: string, oldPath?: string): void {
     if (type !== "local-read") {
@@ -369,7 +371,7 @@ export default class AgentNotePlugin extends Plugin {
     try {
       this.shareServicePort();
       const share = await this.store.createPathShare(relPath, undefined, selection, {}, selectionStart);
-      await this.copyShareLink(share.id, path.basename(relPath));
+      await this.copyShareLink(share.id, path.basename(relPath) || this.app.vault.getName());
       return true;
     } catch (error) {
       new Notice(t("分享失败：{0}", (error as Error).message));
@@ -429,10 +431,11 @@ export default class AgentNotePlugin extends Plugin {
       coldBackupEnabled: typeof settings.coldBackupEnabled === "boolean" ? settings.coldBackupEnabled : DEFAULT_SETTINGS.coldBackupEnabled,
       coldBackupDelayMinutes: typeof settings.coldBackupDelayMinutes === "number" && Number.isInteger(settings.coldBackupDelayMinutes) && settings.coldBackupDelayMinutes >= 1 && settings.coldBackupDelayMinutes <= 60 ? settings.coldBackupDelayMinutes : DEFAULT_SETTINGS.coldBackupDelayMinutes,
       bulkActivityAction: settings.bulkActivityAction === "record" || settings.bulkActivityAction === "ignore" ? settings.bulkActivityAction : "ask",
+      excludedFolders: Array.isArray(settings.excludedFolders) ? parseExcludedFolders(settings.excludedFolders.filter((p): p is string => typeof p === "string").join("\n")) : [],
       agents: isRecord(settings.agents) ? settings.agents as Record<string, AgentProfile> : {},
     };
   }
-  async saveSettings(): Promise<void> { await this.saveData(this.settings); }
+  async saveSettings(): Promise<void> { await this.saveData(this.settings); this.store?.setExcludedFolders(this.settings.excludedFolders); this.refreshPanels(); }
 }
 
 class PortConflictModal extends Modal {
@@ -509,6 +512,17 @@ class AgentNoteSettingTab extends PluginSettingTab {
       .setName(t("活动记录"))
       .setDesc(t("决定大量本地文件变动是否显示为活动，并保存历史活动副本。"))
       .setHeading();
+    new Setting(this.containerEl).setName(t("排除目录")).setDesc(t("这些目录及其子目录不计入活动和看板。每行一个，或使用逗号、分号分隔；历史文件保持原样。"))
+      .addTextArea(input => input.setValue(this.plugin.settings.excludedFolders.join("\n")).onChange(async value => {
+        try { this.plugin.settings.excludedFolders = parseExcludedFolders(value); await this.plugin.saveSettings(); }
+        catch (error) { new Notice((error as Error).message); }
+      }));
+    new Setting(this.containerEl).setName(t("选择排除目录")).addDropdown(dropdown => {
+      const folders = this.app.vault.getAllLoadedFiles().filter(file => !(file instanceof TFile) && file.path && !this.plugin.settings.excludedFolders.includes(file.path)).map(file => file.path).sort();
+      dropdown.addOption("", t("选择文件夹"));
+      for (const folder of folders) dropdown.addOption(folder, folder);
+      dropdown.onChange(async value => { if (!value) return; this.plugin.settings.excludedFolders = parseExcludedFolders([...this.plugin.settings.excludedFolders, value].join("\n")); await this.plugin.saveSettings(); this.display(); });
+    });
     new Setting(this.containerEl).setName(t("一次改动很多文件时")).setDesc(t("Git 同步或批量导入时，选择是否把这批变化记入活动；不影响文件内容和分享链接。"))
       .addDropdown((dropdown) => dropdown.addOptions({ ask: t("先询问我"), ignore: t("不计入活动"), record: t("计入活动") }).setValue(this.plugin.settings.bulkActivityAction).onChange(async (value) => {
         this.plugin.settings.bulkActivityAction = value as BulkActivityAction;
