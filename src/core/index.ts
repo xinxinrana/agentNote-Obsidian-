@@ -16,3 +16,5 @@ export * from "./dataRepair";
 export * from "../i18n";
 export * from "./excludedFolders";
 export * from "./mobileHistory";
+
+export * from "./shareMarkdown";

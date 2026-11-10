@@ -787,7 +787,7 @@ export class VaultStore {
     return this.appendShare({ kind: "files", paths }, undefined, background, context, t("{0} 个文件", paths.length));
   }
 
-  async resolveShare(id: string, context: ActivityContext = {}): Promise<ShareResult> {
+  async resolveShare(id: string, context: ActivityContext = {}, recordRead = true): Promise<ShareResult> {
     const share = await this.getShare(id);
     let result: ShareResult;
     if (share.target.kind === "node") {
@@ -799,6 +799,7 @@ export class VaultStore {
       const { rel, abs } = this.vaultPath(target.path);
       result = target.kind === "file" ? await this.resolveFileShare(share, rel, abs) : await this.resolveFolderShare(share, rel, abs);
     }
+    if (!recordRead) return result;
     const documentId = await this.documentIdForTarget(share.target).catch(() => undefined);
     await this.recordEvent({ type: "share-resolved", shareId: share.id, nodeId: share.target.kind === "node" ? share.target.nodeId : undefined, documentId, path: await this.documentPathForTarget(share.target), targetKind: share.target.kind, title: result.title, actor: context.actor, origin: context.actor ? "agent" : "link", storageVersion: 2 }).catch(() => undefined);
     return result;

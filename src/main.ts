@@ -1,3 +1,4 @@
+import { createShareRenderer, readShareImage } from "./shareRenderer";
 import { parseExcludedFolders } from "./core/excludedFolders";
 import { languageForPreference, setLanguage, t } from "./i18n";
 import type { LanguagePreference } from "./i18n";
@@ -295,7 +296,13 @@ export default class AgentNotePlugin extends Plugin {
   }
   async startServer(quiet = false): Promise<void> {
     if (this.server) return;
-    this.server = new AgentServer(this.store, { port: this.settings.port, onActivity: (activity) => this.recordAgentActivity(activity), listLinks: (sourcePath) => this.listShareLinks(sourcePath), registerAgent: async (name, skillPath, iconPath) => {
+    this.server = new AgentServer(this.store, {
+      port: this.settings.port,
+      renderMarkdown: createShareRenderer(this.app, this),
+      readImage: (link, sourcePath) => readShareImage(this.app, this.store.root, link, sourcePath),
+      onActivity: (activity) => this.recordAgentActivity(activity),
+      listLinks: (sourcePath) => this.listShareLinks(sourcePath),
+      registerAgent: async (name, skillPath, iconPath) => {
       const connection = await this.connections.register(name, skillPath, iconPath);
       this.refreshPanels();
       return connection;

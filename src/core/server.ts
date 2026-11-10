@@ -1,3 +1,6 @@
+import MarkdownIt from "markdown-it";
+import { prepareShareMarkdown, restoreShareSlots, imageMime } from "./shareMarkdown";
+import type { ShareResult } from "./store";
 import { t } from "../i18n";
 import * as http from "http";
 import * as path from "path";
@@ -13,7 +16,15 @@ import xiaojiMarkUrl from "../../assets/brand/xiaoji-mark.svg";
 export type AgentOperation = "read" | "created" | "updated" | "archived";
 export interface AgentActivity { operation: AgentOperation; title: string; nodeId?: string; shareId?: string; targetKind?: ShareTarget["kind"]; actor?: ActivityContext["actor"] }
 export interface ShareLinkInfo { original: string; link: string; displayText?: string; targetPath: string | null; subpath: string | null; status: "resolved" | "unresolved" }
-export interface ServerOptions { port: number; host?: string; onActivity?: (activity: AgentActivity) => void; listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]>; registerAgent?: (name: string, skillPath: string, iconPath?: string) => Promise<AgentConnection> }
+export interface ServerOptions {
+  port: number;
+  host?: string;
+  renderMarkdown?: (markdown: string, sourcePath: string) => Promise<string>;
+  readImage?: (link: string, sourcePath: string) => Promise<{ bytes: Uint8Array; mime: string } | null>;
+  onActivity?: (activity: AgentActivity) => void;
+  listLinks?: (sourcePath: string) => Promise<ShareLinkInfo[]>;
+  registerAgent?: (name: string, skillPath: string, iconPath?: string) => Promise<AgentConnection>;
+}
 const nodeView = (node: Awaited<ReturnType<VaultStore["getNode"]>>) => ({ ...node, warnings: qualityWarnings(node) });
 // Confirmed clickable Obsidian URI support. All other agents keep HTTP links.
 const OBSIDIAN_LINK_AGENTS = new Set(["workbuddy"]);
@@ -46,6 +57,11 @@ export class AgentServer {
     return this.port!;
   }
   async stop(): Promise<void> { if (this.server) await new Promise<void>((resolve) => this.server!.close(() => resolve())); this.server = null; }
+  private renderSource(data: ShareResult): string | null {
+    if (data.kind !== "text" && data.kind !== "file") return null;
+    const relative = path.relative(this.store.root, data.filePath).split(path.sep).join("/");
+    return relative && !relative.startsWith("../") && relative !== ".." && !path.isAbsolute(relative) ? relative : null;
+  }
   private shareLink(shareId: string): string { return `http://127.0.0.1:${this.port ?? this.opts.port}/api/shares/${shareId}/resolve`; }
   private notifyActivity(activity: AgentActivity): void { try { this.opts.onActivity?.(activity); } catch (error) { console.warn("agentNote activity notification failed", error); } }
   private async withLink(node: Awaited<ReturnType<VaultStore["getNode"]>>, status: "created" | "updated", context: ActivityContext) {
@@ -145,6 +161,18 @@ export class AgentServer {
       if (!this.opts.listLinks) throw new StoreError(503, t("Obsidian 双链索引不可用"));
       return send(res, 200, { ok: true, data: { sourcePath, links: await this.opts.listLinks(sourcePath) } });
     }
+    if (parts[1] === "shares" && parts.length === 4 && parts[3] === "image" && method === "GET") {
+      const data = await this.store.resolveShare(parts[2], context, false);
+      if (data.kind !== "text" && data.kind !== "file") throw new StoreError(404, "Image unavailable");
+      const source = this.renderSource(data);
+      const link = url.searchParams.get("link") ?? "";
+      const referenced = prepareShareMarkdown(data.content).slots.some(slot => slot.image?.link === link);
+      if (!source || !referenced || !imageMime(link) || /^(?:[a-z][a-z\d+.-]*:|\/|\\)/i.test(link) || link.includes("\0")) throw new StoreError(404, "Image unavailable");
+      const image = await this.opts.readImage?.(link, source);
+      if (!image || image.mime !== imageMime(link)) throw new StoreError(404, "Image unavailable");
+      res.writeHead(200, { "content-type": image.mime, "content-length": image.bytes.byteLength, "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox", "referrer-policy": "no-referrer" });
+      return void res.end(image.bytes);
+    }
     if (parts[1] === "shares" && parts.length === 4 && parts[3] === "resolve" && method === "GET") {
       const data = await this.store.resolveShare(parts[2], context);
       res.setHeader("cache-control", "no-store");
@@ -166,12 +194,21 @@ export class AgentServer {
       if (format === "json") {
         return send(res, 200, { ok: true, data: shareView(data, detail) });
       }
-      const html = renderSharePage(data, this.store.root, detail);
+      let rendered: string | undefined;
+      if (data.kind === "text" || data.kind === "file") {
+        const prepared = prepareShareMarkdown(data.content);
+        const source = this.renderSource(data);
+        const body = this.opts.renderMarkdown && source
+          ? await this.opts.renderMarkdown(prepared.markdown, source)
+          : new MarkdownIt({ html: false, linkify: false }).render(prepared.markdown);
+        rendered = restoreShareSlots(body, prepared, data.shareId);
+      }
+      const html = renderSharePage(data, this.store.root, detail, rendered);
       res.writeHead(200, {
         "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(html),
         "cache-control": "no-store", "vary": "Accept", "x-content-type-options": "nosniff",
         "referrer-policy": "no-referrer",
-        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
       });
       return void res.end(html);
     }
