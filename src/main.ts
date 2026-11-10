@@ -20,7 +20,7 @@ import { isNodeFile } from "./core/nodeFile";
 import { selectionSnippet } from "./core/selection";
 import { fetchLatestRelease, installRelease, ReleaseInfo } from "./updater";
 import { AGENTNOTE_VIEW, AgentNoteView, BulkActivityModal, QuickStartModal } from "./ui/panel";
-import xiaojiMarkUrl from "../assets/brand/xiaoji-mark.svg";
+import ribbonMarkUrl from "../assets/brand/ribbon-mark.svg";
 
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
@@ -72,16 +72,8 @@ export default class AgentNotePlugin extends Plugin {
     this.connections = new AgentConnections(connectionsFile(os.homedir()));
     this.addSettingTab(new AgentNoteSettingTab(this.app, this));
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
-    const mark = new DOMParser().parseFromString(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1)), "image/svg+xml").documentElement;
-    mark.querySelector("title")?.remove();
-    mark.querySelectorAll("path").forEach((shape) => {
-      shape.setAttribute("fill", "none");
-      shape.setAttribute("stroke", "currentColor");
-      shape.setAttribute("stroke-width", "var(--icon-stroke, 2px)");
-      shape.setAttribute("vector-effect", "non-scaling-stroke");
-    });
-    mark.querySelectorAll("ellipse").forEach((shape) => shape.setAttribute("fill", "currentColor"));
-    addIcon("agentnote-mark", `<g transform="scale(0.78125)">${mark.innerHTML}</g>`);
+    const mark = new DOMParser().parseFromString(decodeURIComponent(ribbonMarkUrl.slice(ribbonMarkUrl.indexOf(",") + 1)), "image/svg+xml").documentElement;
+    addIcon("agentnote-mark", `<g transform="scale(${100 / 24})" fill="none" stroke="currentColor" stroke-width="var(--icon-stroke, 1.75)" stroke-linecap="round" stroke-linejoin="round">${mark.innerHTML}</g>`);
     this.addRibbonIcon("agentnote-mark", t("打开 agentNote 接入台"), () => void this.activatePanel());
     this.addCommand({ id: "open-panel", name: t("打开接入台"), callback: () => void this.activatePanel() });
     this.addCommand({ id: "create-note", name: t("新建笔记"), callback: () => this.openCreateNoteModal() });

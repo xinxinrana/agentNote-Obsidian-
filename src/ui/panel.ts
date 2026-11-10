@@ -427,6 +427,7 @@ class InsightsModal extends Modal {
   private timelineQuery = "";
   private timelineLimit = 100;
   private renderSequence = 0;
+  private cancelTimelineSearch: (() => void) | null = null;
   private bulkUndoIds: string[] | null = null;
   private localArchiveUndo: { originalPath: string; archivedPath: string } | null = null;
   private privateView = false;
@@ -484,7 +485,9 @@ class InsightsModal extends Modal {
     if (event.type === "share-created") return t("分享「{0}」", this.displayTitle(event.title ?? t("资料")));
     return t("访问分享链接「{0}」", this.displayTitle(event.title ?? t("分享资料")));
   }
+  onClose(): void { this.renderSequence++; this.cancelTimelineSearch?.(); this.cancelTimelineSearch = null; }
   private async render(): Promise<void> {
+    this.cancelTimelineSearch?.();
     const previousScroll = this.contentEl.querySelector<HTMLElement>(".agentnote-modal-body")?.scrollTop ?? 0;
     const sequence = ++this.renderSequence;
     const insights = await this.plugin.store.getDashboardInsights();
@@ -494,6 +497,8 @@ class InsightsModal extends Modal {
     try { this.agentConnections = await this.plugin.connectedAgents(); }
     catch { this.agentConnections = []; }
     if (sequence !== this.renderSequence) return;
+    this.cancelTimelineSearch?.();
+    this.cancelTimelineSearch = null;
     this.contentEl.empty();
     const header = this.contentEl.createDiv({ cls: "agentnote-modal-header" });
     const title = header.createDiv(); title.createSpan({ cls: "agentnote-eyebrow", text: "AGENTNOTE · LOCAL PROFILE" }); title.createEl("h2", { text: t("我的知识工作档案"), attr: { id: "agentnote-profile-title" } });
@@ -707,40 +712,68 @@ class InsightsModal extends Modal {
     const query = search.createEl("input", { attr: { type: "search", placeholder: t("查找笔记名称"), "aria-label": t("查找笔记名称") } });
     query.value = this.privateView ? "" : this.timelineQuery;
     query.disabled = this.privateView;
-    query.oninput = () => { const position = query.selectionStart; this.timelineQuery = query.value; void this.render().then(() => { const input = this.contentEl.querySelector<HTMLInputElement>(".agentnote-timeline-search input"); input?.focus(); input?.setSelectionRange(position, position); }); };
+    let composing = false;
+    let searchTimer: number | undefined;
+    const cancelSearch = () => { if (searchTimer !== undefined) window.clearTimeout(searchTimer); searchTimer = undefined; };
+    this.cancelTimelineSearch = cancelSearch;
+    const commitQuery = () => {
+      this.timelineQuery = query.value;
+      this.timelineLimit = 100;
+      cancelSearch();
+      searchTimer = window.setTimeout(() => { searchTimer = undefined; draw(); }, 120);
+    };
+    query.addEventListener("compositionstart", () => { composing = true; cancelSearch(); });
+    query.addEventListener("compositionend", () => { composing = false; commitQuery(); });
+    query.oninput = event => { if (!composing && !(event as InputEvent | undefined)?.isComposing) commitQuery(); };
     const collaborator = search.createEl("select", { attr: { "aria-label": t("全部协作者") } });
     collaborator.createEl("option", { text: t("全部协作者"), value: "" });
     collaborator.createEl("option", { text: t("本地操作"), value: "__local" });
     for (const name of agents) collaborator.createEl("option", { text: this.privateView ? t("协作者 {0}", [...agents].indexOf(name) + 1) : name!, value: name });
     collaborator.value = this.timelineAgent;
-    collaborator.onchange = () => { this.timelineAgent = collaborator.value; void this.render(); };
+    collaborator.onchange = () => { this.timelineAgent = collaborator.value; this.timelineLimit = 100; cancelSearch(); draw(); };
     const filters = parent.createDiv({ cls: "agentnote-timeline-filters" });
-    if (this.timelineDay) filters.createEl("button", { cls: "agentnote-timeline-day", text: t("{0} · 清除日期", this.timelineDay) }).onclick = () => { this.timelineDay = null; void this.render(); };
+    if (this.timelineDay) {
+      const day = filters.createEl("button", { cls: "agentnote-timeline-day", text: t("{0} · 清除日期", this.timelineDay) });
+      day.onclick = () => { this.timelineDay = null; day.hidden = true; this.timelineLimit = 100; cancelSearch(); draw(); };
+    }
+    const filterButtons: { filter: TimelineFilter; button: HTMLButtonElement }[] = [];
     for (const [filter, label] of [["all", t("全部")], ["construction", t("建设")], ["reuse", t("使用")], ["connection", t("连接")], ["organization", t("整理")]] as const) {
       const button = filters.createEl("button", { text: label, cls: this.timelineFilter === filter ? "is-active" : "" });
-      button.onclick = () => { this.timelineFilter = filter; void this.render(); };
+      filterButtons.push({ filter, button });
+      button.onclick = () => { this.timelineFilter = filter; this.timelineLimit = 100; cancelSearch(); draw(); };
     }
-    const matching = events.filter((event) => (!this.timelineDay || this.dayKey(new Date(event.at)) === this.timelineDay) && (!this.timelineAgent || (this.timelineAgent === "__local" ? !event.actor && event.origin === "local" : (event.actor?.name ?? event.actor?.id) === this.timelineAgent)) && (!this.timelineQuery || (event.title ?? "").toLocaleLowerCase().includes(this.timelineQuery.toLocaleLowerCase())));
-    const visible = matching.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "construction" && ["node-created", "node-updated", "local-created", "local-edited"].includes(event.type)) || (this.timelineFilter === "reuse" && ["share-created", "share-resolved", "local-read"].includes(event.type)) || (this.timelineFilter === "connection" && event.type === "document-linked") || (this.timelineFilter === "organization" && ["node-archived", "node-restored", "local-moved", "local-deleted"].includes(event.type)));
-    if (!visible.length) { parent.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: t("还没有符合条件的活动。换一个筛选条件，或开始一次新的资料协作。") }); return; }
-    search.createSpan({ text: t("{0} 条记录", visible.length) });
-    const list = parent.createEl("ul", { cls: "agentnote-timeline" });
-    let previousDay = "";
-    for (const event of visible.slice(0, this.timelineLimit)) {
-      const day = this.dayKey(new Date(event.at));
-      if (day !== previousDay) { list.createEl("li", { cls: "agentnote-timeline-date", text: this.dateText(event.at) }); previousDay = day; }
-      const item = list.createEl("li");
-      const detail = item.createDiv();
-      const chip = event.type === "document-linked" ? t("连接") : ["share-resolved", "local-read"].includes(event.type) ? t("使用") : event.type === "share-created" ? t("分享") : ["node-created", "local-created"].includes(event.type) ? t("创建") : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? t("整理") : t("维护");
-      const title = detail.createDiv({ cls: "agentnote-timeline-title" });
-      const canOpen = !this.privateView && event.type !== "local-deleted" && event.targetKind !== "folder" && event.targetKind !== "files" && !!(event.nodeId || event.documentId || event.shareId || event.path);
-      if (canOpen) this.fileTitle(title, this.activityText(event), () => this.plugin.store.activityFilePath(event));
-      else title.createEl("strong", { text: this.activityText(event) });
-      title.createSpan({ cls: `agentnote-event-chip is-${event.type}`, text: chip });
-      detail.createSpan({ text: [this.privateView && event.actor ? t("协作者") : event.actor?.name ?? event.actor?.id ?? (event.type === "share-resolved" ? t("访问方未识别") : event.origin === "local" ? t("本地操作") : t("未申报 agent")), this.privateView ? undefined : event.actor?.sessionTitle, event.targetKind === "folder" ? t("文件夹") : event.targetKind === "files" ? t("多文件") : event.targetKind === "node" ? t("笔记") : event.targetKind === "file" ? t("文件") : undefined].filter(Boolean).join(" · ") });
-      item.createEl("time", { text: this.timeText(event.at) });
-    }
-    if (visible.length > this.timelineLimit) parent.createEl("button", { text: t("再看 {0} 条", Math.min(100, visible.length - this.timelineLimit)) }).onclick = () => { this.timelineLimit += 100; void this.render(); };
+    const count = search.createSpan({ attr: { role: "status", "aria-live": "polite", "aria-atomic": "true" } });
+    const results = parent.createDiv({ cls: "agentnote-timeline-results" });
+    // Controls remain mounted: changing results must not interrupt focus or IME composition.
+    const draw = () => {
+      results.empty();
+      for (const { filter, button } of filterButtons) {
+        if (this.timelineFilter === filter) button.addClass("is-active"); else button.removeClass("is-active");
+      }
+      const term = this.timelineQuery.toLocaleLowerCase();
+      const matching = events.filter((event) => (!this.timelineDay || this.dayKey(new Date(event.at)) === this.timelineDay) && (!this.timelineAgent || (this.timelineAgent === "__local" ? !event.actor && event.origin === "local" : (event.actor?.name ?? event.actor?.id) === this.timelineAgent)) && (!this.timelineQuery || (event.title ?? "").toLocaleLowerCase().includes(term)));
+      const visible = matching.filter((event) => this.timelineFilter === "all" || (this.timelineFilter === "construction" && ["node-created", "node-updated", "local-created", "local-edited"].includes(event.type)) || (this.timelineFilter === "reuse" && ["share-created", "share-resolved", "local-read"].includes(event.type)) || (this.timelineFilter === "connection" && event.type === "document-linked") || (this.timelineFilter === "organization" && ["node-archived", "node-restored", "local-moved", "local-deleted"].includes(event.type)));
+      count.setText(t("{0} 条记录", visible.length));
+      if (!visible.length) { results.createEl("p", { cls: "agentnote-empty-copy agentnote-polished-empty", text: t("还没有符合条件的活动。换一个筛选条件，或开始一次新的资料协作。") }); return; }
+      const list = results.createEl("ul", { cls: "agentnote-timeline" });
+      let previousDay = "";
+      for (const event of visible.slice(0, this.timelineLimit)) {
+        const day = this.dayKey(new Date(event.at));
+        if (day !== previousDay) { list.createEl("li", { cls: "agentnote-timeline-date", text: this.dateText(event.at) }); previousDay = day; }
+        const item = list.createEl("li");
+        const detail = item.createDiv();
+        const chip = event.type === "document-linked" ? t("连接") : ["share-resolved", "local-read"].includes(event.type) ? t("使用") : event.type === "share-created" ? t("分享") : ["node-created", "local-created"].includes(event.type) ? t("创建") : ["local-moved", "local-deleted", "node-archived", "node-restored"].includes(event.type) ? t("整理") : t("维护");
+        const title = detail.createDiv({ cls: "agentnote-timeline-title" });
+        const canOpen = !this.privateView && event.type !== "local-deleted" && event.targetKind !== "folder" && event.targetKind !== "files" && !!(event.nodeId || event.documentId || event.shareId || event.path);
+        if (canOpen) this.fileTitle(title, this.activityText(event), () => this.plugin.store.activityFilePath(event));
+        else title.createEl("strong", { text: this.activityText(event) });
+        title.createSpan({ cls: `agentnote-event-chip is-${event.type}`, text: chip });
+        detail.createSpan({ text: [this.privateView && event.actor ? t("协作者") : event.actor?.name ?? event.actor?.id ?? (event.type === "share-resolved" ? t("访问方未识别") : event.origin === "local" ? t("本地操作") : t("未申报 agent")), this.privateView ? undefined : event.actor?.sessionTitle, event.targetKind === "folder" ? t("文件夹") : event.targetKind === "files" ? t("多文件") : event.targetKind === "node" ? t("笔记") : event.targetKind === "file" ? t("文件") : undefined].filter(Boolean).join(" · ") });
+        item.createEl("time", { text: this.timeText(event.at) });
+      }
+      if (visible.length > this.timelineLimit) results.createEl("button", { text: t("再看 {0} 条", Math.min(100, visible.length - this.timelineLimit)) }).onclick = () => { this.timelineLimit += 100; draw(); };
+    };
+    draw();
   }
   private renderArchive(parent: HTMLElement, insights: DashboardInsights): void {
     if (!insights.health.complete) { parent.createEl("p", { cls: "agentnote-health-notice", text: t("历史尚不完整，整理建议暂不可用。"), attr: { role: "status" } }); return; }
