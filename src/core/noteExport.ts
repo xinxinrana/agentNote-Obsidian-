@@ -2,7 +2,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { execFile } from "child_process";
-import { pathToFileURL } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { language, t } from "../i18n";
 import { escapeHtml, imageMime, prepareShareMarkdown, restoreShareSlots } from "./shareMarkdown";
 import { sharePageStyles } from "./sharePage";
@@ -58,23 +58,70 @@ export async function writeExportFile(title: string, format: ExportFormat, html:
   } catch (error) { await fs.rm(folder, { recursive: true, force: true }); throw error; }
 }
 
-type CommandRunner = (command: string, args: string[], options?: { input?: string; env?: NodeJS.ProcessEnv }) => Promise<void>;
+type CommandRunner = (command: string, args: string[], options?: { input?: string; env?: NodeJS.ProcessEnv }) => Promise<string | void>;
+export type FileClipboardTarget = "darwin" | "win32" | "wayland" | "x11";
 const runCommand: CommandRunner = (command, args, options = {}) => new Promise((resolve, reject) => {
-  const child = execFile(command, args, { env: options.env ?? process.env, timeout: 15000, windowsHide: true }, error => error ? reject(error) : resolve());
+  const child = execFile(command, args, { env: options.env ?? process.env, timeout: 15000, windowsHide: true }, (error, stdout) => error ? reject(error) : resolve(stdout));
   // xclip reads the file URI from stdin, never from a shell command.
   child.stdin?.on("error", () => undefined);
   child.stdin?.end(options.input);
 });
 
 /** Copy the file itself, rather than its text, HTML markup or path string. */
-export async function copyExportFile(file: string, platform: NodeJS.Platform = process.platform, run: CommandRunner = runCommand): Promise<void> {
+export async function copyExportFile(file: string, platform: NodeJS.Platform = process.platform, run: CommandRunner = runCommand): Promise<FileClipboardTarget> {
   if (platform === "darwin") {
-    await run("/usr/bin/osascript", ["-e", "on run argv\nset the clipboard to (POSIX file (item 1 of argv)) as alias\nend run", file]);
-  } else if (platform === "win32") {
+    // NSURL publishes public.file-url, the native format Finder and other apps read.
+    await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", `ObjC.import('AppKit');
+function run(argv) {
+  var board = argv[1] ? $.NSPasteboard.pasteboardWithName(argv[1]) : $.NSPasteboard.generalPasteboard;
+  var file = $.NSURL.fileURLWithPath(argv[0]);
+  board.clearContents;
+  if (!board.writeObjects($.NSArray.arrayWithObject(file))) throw new Error('File copy failed');
+}`, file]);
+    return "darwin";
+  }
+  if (platform === "win32") {
     await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; Set-Clipboard -LiteralPath $env:AGENTNOTE_EXPORT_FILE"], { env: { ...process.env, AGENTNOTE_EXPORT_FILE: file } });
-  } else if (platform === "linux") {
+    return "win32";
+  }
+  if (platform === "linux") {
     const uri = `${pathToFileURL(file).href}\r\n`;
-    try { await run("wl-copy", ["--type", "text/uri-list"], { input: uri }); }
-    catch { await run("xclip", ["-selection", "clipboard", "-t", "text/uri-list"], { input: uri }); }
-  } else throw new Error(t("当前平台暂不支持复制文件。"));
+    try { await run("wl-copy", ["--type", "text/uri-list"], { input: uri }); return "wayland"; }
+    catch { await run("xclip", ["-selection", "clipboard", "-t", "text/uri-list"], { input: uri }); return "x11"; }
+  }
+  throw new Error(t("当前平台暂不支持复制文件。"));
+}
+
+/** Read independently from the exact clipboard backend that received the file. */
+export async function verifyExportFile(file: string, target: FileClipboardTarget, run: CommandRunner = runCommand): Promise<boolean> {
+  try {
+    if (target === "darwin") {
+      await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", `ObjC.import('AppKit');
+function run(argv) {
+  var board = argv[1] ? $.NSPasteboard.pasteboardWithName(argv[1]) : $.NSPasteboard.generalPasteboard;
+  var actual = ObjC.unwrap(board.stringForType('public.file-url'));
+  if (typeof actual !== 'string' || !actual) throw new Error('No file in clipboard');
+  var url = $.NSURL.URLWithString(actual);
+  var expected = $.NSURL.fileURLWithPath(argv[0]);
+  if (!url.isFileURL || ObjC.unwrap(url.standardizedURL.path) !== ObjC.unwrap(expected.standardizedURL.path)) throw new Error('Clipboard file mismatch');
+}`, file]);
+      return true;
+    }
+    if (target === "win32") {
+      await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; $files = @(Get-Clipboard -Format FileDropList); if ($files.Count -ne 1 -or -not [String]::Equals($files[0].FullName, $env:AGENTNOTE_EXPORT_FILE, [StringComparison]::OrdinalIgnoreCase)) { throw 'Clipboard file mismatch' }"], { env: { ...process.env, AGENTNOTE_EXPORT_FILE: file } });
+      return true;
+    }
+    const output = target === "wayland"
+      ? await run("wl-paste", ["--no-newline", "--type", "text/uri-list"])
+      : await run("xclip", ["-selection", "clipboard", "-t", "text/uri-list", "-o"]);
+    if (typeof output !== "string") return false;
+    const files = output.split(/\r?\n/).filter(line => line.trim() && !line.startsWith("#"));
+    return files.length === 1 && path.resolve(fileURLToPath(files[0])) === path.resolve(file);
+  } catch { return false; }
+}
+
+/** A successful write alone is never enough to report success to the user. */
+export async function copyExportFileAndVerify(file: string, write = copyExportFile, verify = verifyExportFile): Promise<boolean> {
+  try { const target = await write(file); return await verify(file, target); }
+  catch { return false; }
 }

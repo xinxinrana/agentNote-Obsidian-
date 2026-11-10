@@ -74,7 +74,12 @@ export default class AgentNotePlugin extends Plugin {
     this.registerView(AGENTNOTE_VIEW, (leaf) => new AgentNoteView(leaf, this));
     const mark = new DOMParser().parseFromString(decodeURIComponent(xiaojiMarkUrl.slice(xiaojiMarkUrl.indexOf(",") + 1)), "image/svg+xml").documentElement;
     mark.querySelector("title")?.remove();
-    mark.querySelectorAll("path").forEach((shape) => { shape.setAttribute("fill", "none"); shape.setAttribute("stroke", "currentColor"); });
+    mark.querySelectorAll("path").forEach((shape) => {
+      shape.setAttribute("fill", "none");
+      shape.setAttribute("stroke", "currentColor");
+      shape.setAttribute("stroke-width", "var(--icon-stroke, 2px)");
+      shape.setAttribute("vector-effect", "non-scaling-stroke");
+    });
     mark.querySelectorAll("ellipse").forEach((shape) => shape.setAttribute("fill", "currentColor"));
     addIcon("agentnote-mark", `<g transform="scale(0.78125)">${mark.innerHTML}</g>`);
     this.addRibbonIcon("agentnote-mark", t("打开 agentNote 接入台"), () => void this.activatePanel());
@@ -396,7 +401,7 @@ export default class AgentNotePlugin extends Plugin {
     try {
       const result = await exportNoteFile(this.app, this, this.store.root, sourcePath, format, selection);
       if (!result.copied) {
-        new Notice(t("文件已生成，但剪贴板复制失败，已打开文件所在位置。"), 7000);
+        new Notice(t("文件已生成，但未确认复制成功。已打开文件所在位置，可手动发送。"), 7000);
         const { shell } = await import("electron");
         shell.showItemInFolder(result.file);
         return false;

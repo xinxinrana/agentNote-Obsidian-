@@ -1,5 +1,5 @@
 import type { App, Component } from "obsidian";
-import { buildExportHtml, copyExportFile, writeExportFile } from "./core/noteExport";
+import { buildExportHtml, copyExportFileAndVerify, writeExportFile } from "./core/noteExport";
 import type { ExportFormat } from "./core/noteExport";
 import { createShareRenderer, readShareImage } from "./shareRenderer";
 import { t } from "./i18n";
@@ -44,6 +44,5 @@ export async function exportNoteFile(app: App, parent: Component, root: string, 
   if (!content.trim()) throw new Error(t("笔记内容为空，无法导出。"));
   const html = await buildExportHtml({ title: source.basename, content, sourcePath, selection: selection !== undefined }, { renderMarkdown: createShareRenderer(app, parent), readImage: (link, originalPath) => readShareImage(app, root, link, originalPath) });
   const file = await writeExportFile(source.basename, format, html, printExportPdf);
-  try { await copyExportFile(file); return { file, copied: true }; }
-  catch { return { file, copied: false }; }
+  return { file, copied: await copyExportFileAndVerify(file) };
 }

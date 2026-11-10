@@ -3,12 +3,16 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 import MarkdownIt from 'markdown-it';
 const require = createRequire(import.meta.url);
-const { buildExportHtml, writeExportFile, copyExportFile } = require('./core-bundle.cjs');
+const { buildExportHtml, writeExportFile, copyExportFile, verifyExportFile, copyExportFileAndVerify } = require('./core-bundle.cjs');
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'agentnote-export-'));
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY9sAAAAASUVORK5CYII=', 'base64');
 const source = { title: '旅行 <计划> & 好软件', sourcePath: 'Notes/旅行.md', content: '# 原文\n\n图片会一起导出。\n\n![[好 软件.png|320]]\n\n![图](assets/photo.png)\n\n```dataviewjs\napp.vault.delete(secret)\n```\n\n<script>alert(1)</script>' };
@@ -76,7 +80,7 @@ try {
     await copyExportFile(file, 'darwin', record);
     assert.equal(commands[0][0], '/usr/bin/osascript');
     assert.equal(commands[0][1].at(-1), file);
-    assert.doesNotMatch(commands[0][1][1], /中文/);
+    assert.doesNotMatch(commands[0][1][3], /中文/);
     await copyExportFile(file, 'win32', record);
     assert.equal(commands[1][2].env.AGENTNOTE_EXPORT_FILE, file);
     assert.match(commands[1][1].at(-1), /Set-Clipboard -LiteralPath \$env:AGENTNOTE_EXPORT_FILE/);
@@ -87,6 +91,40 @@ try {
     await copyExportFile(file, 'linux', async (...args) => { fallback.push(args); if (args[0] === 'wl-copy') throw new Error('not installed'); });
     assert.equal(fallback[1][0], 'xclip');
     await assert.rejects(copyExportFile(file, 'darwin', async () => { throw new Error('clipboard denied'); }), /clipboard denied/);
+  });
+  await test('clipboard verification is independent and a successful command cannot fake a successful copy', async () => {
+    const file = path.join(temp, '中文 #1.html');
+    const phases = [];
+    const written = async () => { phases.push('write'); return 'darwin'; };
+    const missing = async (path, target) => { assert.equal(path, file); assert.equal(target, 'darwin'); phases.push('verify'); return false; };
+    assert.equal(await copyExportFileAndVerify(file, written, missing), false);
+    assert.deepEqual(phases, ['write', 'verify']);
+    assert.equal(await copyExportFileAndVerify(file, written, async () => true), true);
+    assert.equal(await copyExportFileAndVerify(file, async () => { throw new Error('write denied'); }, async () => { throw new Error('must not verify'); }), false);
+    assert.equal(await copyExportFileAndVerify(file, written, async () => { throw new Error('verification denied'); }), false);
+    assert.equal(await verifyExportFile(file, 'wayland', async command => { assert.equal(command, 'wl-paste'); return pathToFileURL(file).href + '\r\n'; }), true);
+    assert.equal(await verifyExportFile(file, 'x11', async command => { assert.equal(command, 'xclip'); return '# file list\n' + pathToFileURL(file).href + '\n'; }), true);
+    assert.equal(await verifyExportFile(file, 'wayland', async () => 'file:///some/other.html'), false);
+    assert.equal(await verifyExportFile(file, 'wayland', async () => ''), false);
+    assert.equal(await verifyExportFile(file, 'x11', async () => 'plain path text'), false);
+    assert.equal(await verifyExportFile(file, 'wayland', async command => { assert.equal(command, 'wl-paste'); throw new Error('read unavailable'); }), false);
+  });
+  if (process.platform === 'darwin') await test('real macOS file clipboard round-trip uses an isolated pasteboard and rejects absent or different files', async () => {
+    const exec = promisify(execFile);
+    const board = 'org.agentnote.test.' + randomUUID();
+    const file = path.join(temp, '真实 中文 空格 \" #1.html');
+    await fs.writeFile(file, '<!doctype html><p>native clipboard test</p>');
+    const nativeRunner = async (command, args) => (await exec(command, [...args, board], { timeout: 15000 })).stdout;
+    try {
+      assert.equal(await verifyExportFile(file, 'darwin', nativeRunner), false);
+      const target = await copyExportFile(file, 'darwin', nativeRunner);
+      assert.equal(await verifyExportFile(file, target, nativeRunner), true);
+      const legacy = await exec('/usr/bin/osascript', ['-l', 'JavaScript', '-e', "ObjC.import('AppKit');function run(argv){var files=ObjC.deepUnwrap($.NSPasteboard.pasteboardWithName(argv[0]).propertyListForType('NSFilenamesPboardType'));if(!Array.isArray(files)||files.length!==1)throw new Error('Missing native file list');}", board]);
+      assert.equal(legacy.stderr, '');
+      assert.equal(await verifyExportFile(path.join(temp, 'wrong.html'), target, nativeRunner), false);
+    } finally {
+      await exec('/usr/bin/osascript', ['-l', 'JavaScript', '-e', "ObjC.import('AppKit');function run(argv){$.NSPasteboard.pasteboardWithName(argv[0]).releaseGlobally;}", board]);
+    }
   });
   await test('Electron PDF window is hidden and sandboxed, and destroyed after printing or failure', async () => {
     let destroyed = 0;

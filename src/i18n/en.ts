@@ -665,4 +665,5 @@ export const en: Record<string, string> = {
   "链接已复制": "Link copied",
   "更多分享方式": "More sharing actions",
   "复制 Agent 链接": "Copy Agent link",
+  "文件已生成，但未确认复制成功。已打开文件所在位置，可手动发送。": "The file was generated, but copying could not be confirmed. Its folder has been opened so you can send it manually.",
 };
