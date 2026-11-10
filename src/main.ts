@@ -401,9 +401,14 @@ export default class AgentNotePlugin extends Plugin {
     try {
       const result = await exportNoteFile(this.app, this, this.store.root, sourcePath, format, selection);
       if (!result.copied) {
-        new Notice(t("文件已生成，但未确认复制成功。已打开文件所在位置，可手动发送。"), 7000);
-        const { shell } = await import("electron");
-        shell.showItemInFolder(result.file);
+        try {
+          const { shell } = require("electron") as typeof import("electron");
+          shell.showItemInFolder(result.file);
+          new Notice(t("文件已生成，但未确认复制成功。已打开文件所在位置，可手动发送。"), 7000);
+        } catch (error) {
+          console.warn("agentNote: reveal exported file failed", error);
+          new Notice(t("文件已生成，但复制和打开位置均未成功。文件保留在：{0}", result.file), 12000);
+        }
         return false;
       }
       new Notice(t("{0} 文件已复制，可直接粘贴发送。", format.toUpperCase()), 5000);

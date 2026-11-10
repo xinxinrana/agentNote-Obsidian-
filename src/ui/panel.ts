@@ -1125,7 +1125,7 @@ export class DataRepairModal extends Modal {
       open.disabled = issue.kind === "missing";
       open.onclick = async () => {
         try {
-          const { shell } = await import("electron");
+          const { shell } = require("electron") as typeof import("electron");
           const error = await shell.openPath(path.join(this.plugin.store.root, issue.file));
           if (error) throw new Error(error);
         } catch (error) { new Notice(t("打开问题文件失败：{0}", (error as Error).message)); }

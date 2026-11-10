@@ -59,7 +59,7 @@ export async function writeExportFile(title: string, format: ExportFormat, html:
 }
 
 type CommandRunner = (command: string, args: string[], options?: { input?: string; env?: NodeJS.ProcessEnv }) => Promise<string | void>;
-export type FileClipboardTarget = "darwin" | "win32" | "wayland" | "x11";
+export type FileClipboardTarget = "win32" | "wayland" | "x11";
 const runCommand: CommandRunner = (command, args, options = {}) => new Promise((resolve, reject) => {
   const child = execFile(command, args, { env: options.env ?? process.env, timeout: 15000, windowsHide: true }, (error, stdout) => error ? reject(error) : resolve(stdout));
   // xclip reads the file URI from stdin, never from a shell command.
@@ -69,17 +69,6 @@ const runCommand: CommandRunner = (command, args, options = {}) => new Promise((
 
 /** Copy the file itself, rather than its text, HTML markup or path string. */
 export async function copyExportFile(file: string, platform: NodeJS.Platform = process.platform, run: CommandRunner = runCommand): Promise<FileClipboardTarget> {
-  if (platform === "darwin") {
-    // NSURL publishes public.file-url, the native format Finder and other apps read.
-    await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", `ObjC.import('AppKit');
-function run(argv) {
-  var board = argv[1] ? $.NSPasteboard.pasteboardWithName(argv[1]) : $.NSPasteboard.generalPasteboard;
-  var file = $.NSURL.fileURLWithPath(argv[0]);
-  board.clearContents;
-  if (!board.writeObjects($.NSArray.arrayWithObject(file))) throw new Error('File copy failed');
-}`, file]);
-    return "darwin";
-  }
   if (platform === "win32") {
     await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; Set-Clipboard -LiteralPath $env:AGENTNOTE_EXPORT_FILE"], { env: { ...process.env, AGENTNOTE_EXPORT_FILE: file } });
     return "win32";
@@ -95,18 +84,6 @@ function run(argv) {
 /** Read independently from the exact clipboard backend that received the file. */
 export async function verifyExportFile(file: string, target: FileClipboardTarget, run: CommandRunner = runCommand): Promise<boolean> {
   try {
-    if (target === "darwin") {
-      await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", `ObjC.import('AppKit');
-function run(argv) {
-  var board = argv[1] ? $.NSPasteboard.pasteboardWithName(argv[1]) : $.NSPasteboard.generalPasteboard;
-  var actual = ObjC.unwrap(board.stringForType('public.file-url'));
-  if (typeof actual !== 'string' || !actual) throw new Error('No file in clipboard');
-  var url = $.NSURL.URLWithString(actual);
-  var expected = $.NSURL.fileURLWithPath(argv[0]);
-  if (!url.isFileURL || ObjC.unwrap(url.standardizedURL.path) !== ObjC.unwrap(expected.standardizedURL.path)) throw new Error('Clipboard file mismatch');
-}`, file]);
-      return true;
-    }
     if (target === "win32") {
       await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; $files = @(Get-Clipboard -Format FileDropList); if ($files.Count -ne 1 -or -not [String]::Equals($files[0].FullName, $env:AGENTNOTE_EXPORT_FILE, [StringComparison]::OrdinalIgnoreCase)) { throw 'Clipboard file mismatch' }"], { env: { ...process.env, AGENTNOTE_EXPORT_FILE: file } });
       return true;
@@ -124,4 +101,19 @@ function run(argv) {
 export async function copyExportFileAndVerify(file: string, write = copyExportFile, verify = verifyExportFile): Promise<boolean> {
   try { const target = await write(file); return await verify(file, target); }
   catch { return false; }
+}
+
+export interface MacFileClipboard {
+  writeBuffer(format: string, buffer: Buffer): void;
+  readBuffer(format: string): Uint8Array;
+}
+/** Keep writing and verification separate, within Obsidian's own Electron process. */
+export function writeMacFileClipboard(file: string, clipboard: MacFileClipboard): void {
+  clipboard.writeBuffer("public.file-url", Buffer.from(pathToFileURL(file).href, "utf8"));
+}
+export function verifyMacFileClipboard(file: string, clipboard: MacFileClipboard): boolean {
+  try {
+    const uri = Buffer.from(clipboard.readBuffer("public.file-url")).toString("utf8").replace(/\0+$/, "");
+    return path.resolve(fileURLToPath(uri)) === path.resolve(file);
+  } catch { return false; }
 }
