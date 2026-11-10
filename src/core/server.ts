@@ -143,7 +143,7 @@ export class AgentServer {
       const body = await readBody(req) as { nodeId?: string; path?: string; paths?: unknown; background?: string; selection?: string; selectionStart?: number };
       if (body.paths !== undefined) {
         if (!Array.isArray(body.paths) || !body.paths.every((item) => typeof item === "string")) throw new StoreError(400, t("paths 必须是字符串数组"));
-        return send(res, 201, { ok: true, data: await this.store.createFilesShare(body.paths as string[], body.background, context) });
+        return send(res, 201, { ok: true, data: await this.store.createFilesShare(body.paths, body.background, context) });
       }
       if (body.nodeId) return send(res, 201, { ok: true, data: await this.store.createShare(body.nodeId, body.selection, context, body.selectionStart) });
       if (typeof body.path === "string") return send(res, 201, { ok: true, data: await this.store.createPathShare(body.path, body.background, body.selection, context, body.selectionStart) });

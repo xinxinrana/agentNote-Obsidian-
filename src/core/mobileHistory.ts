@@ -2,6 +2,14 @@ import { isExcludedFolder } from "./excludedFolders";
 import type { InsightEvent } from "./store";
 
 export interface HistoryAdapter { exists(path: string): Promise<boolean>; read(path: string): Promise<string>; list(path: string): Promise<{ files: string[]; folders: string[] }> }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function isHistoryEvent(value: unknown): value is InsightEvent {
+  if (!isRecord(value) || typeof value.at !== "string" || !Number.isFinite(Date.parse(value.at)) || typeof value.type !== "string") return false;
+  if (["path", "sourcePath", "previousPath", "title", "nodeId", "documentId", "eventId"].some(key => value[key] !== undefined && typeof value[key] !== "string")) return false;
+  return value.actor === undefined || (isRecord(value.actor) && typeof value.actor.name === "string");
+}
 /** Read only the canonical logs, never backup snapshots. No Node APIs or vault writes. */
 export async function readMobileHistory(adapter: HistoryAdapter, excludedFolders: string[]) {
   const directory = "agentNote/data";
@@ -11,10 +19,9 @@ export async function readMobileHistory(adapter: HistoryAdapter, excludedFolders
   const read = async (file: string) => {
     try {
       const value: unknown = JSON.parse(await adapter.read(file));
-      for (const item of Array.isArray(value) ? value : [value]) {
-        if (!item || typeof item !== "object" || typeof item.at !== "string" || !Number.isFinite(Date.parse(item.at)) || typeof item.type !== "string") throw new Error(file);
-        if (["path", "sourcePath", "previousPath", "title", "nodeId", "documentId", "eventId"].some(key => item[key] !== undefined && typeof item[key] !== "string") || (item.actor !== undefined && (!item.actor || typeof item.actor.name !== "string"))) throw new Error(file);
-        const event = item as InsightEvent;
+      const items: unknown[] = Array.isArray(value) ? value : [value];
+      for (const event of items) {
+        if (!isHistoryEvent(event)) throw new Error(file);
         const signature = JSON.stringify(Object.fromEntries(Object.entries(event).sort(([a], [b]) => a.localeCompare(b))));
         const id = event.eventId || signature;
         const previous = events.get(id);

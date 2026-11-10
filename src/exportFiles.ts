@@ -23,7 +23,7 @@ export async function printExportPdf(htmlPath: string): Promise<Uint8Array> {
   } catch { throw new Error(t("当前 Obsidian 无法生成 PDF，请重启后重试。")); }
   if (!remote?.BrowserWindow) throw new Error(t("当前 Obsidian 无法生成 PDF，请重启后重试。"));
   const win = new remote.BrowserWindow({ show: false, width: 1000, height: 800, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, javascript: false, backgroundThrottling: false } });
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   try {
     win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     win.webContents.on("will-navigate", event => event.preventDefault());
@@ -32,9 +32,9 @@ export async function printExportPdf(htmlPath: string): Promise<Uint8Array> {
         await win.loadFile(htmlPath);
         return win.webContents.printToPDF({ printBackground: true, pageSize: "A4", preferCSSPageSize: true, displayHeaderFooter: false, margins: { top: 0.55, bottom: 0.55, left: 0.55, right: 0.55 } });
       })(),
-      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(t("PDF 生成超时，请重试。"))), 30000); }),
+      new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error(t("PDF 生成超时，请重试。"))), 30000); }),
     ]);
-  } finally { if (timer) clearTimeout(timer); win.destroy(); }
+  } finally { if (timer) window.clearTimeout(timer); win.destroy(); }
 }
 
 /** Use the host clipboard on macOS; subprocess pasteboard access can differ from the host. */

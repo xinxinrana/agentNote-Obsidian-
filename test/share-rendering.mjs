@@ -10,6 +10,7 @@ import MarkdownIt from 'markdown-it';
 const require = createRequire(import.meta.url);
 const { VaultStore, AgentServer, prepareShareMarkdown, imageMime } = require('./core-bundle.cjs');
 const dom = new JSDOM('<!doctype html><body></body>');
+dom.window.HTMLElement.prototype.createDiv = function(options = {}) { const el = dom.window.document.createElement('div'); el.className = options.cls || ''; this.append(el); return el; };
 let active = 0;
 let failure = false;
 const calls = [];

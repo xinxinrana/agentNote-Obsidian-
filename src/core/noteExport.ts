@@ -41,7 +41,7 @@ export async function buildExportHtml(source: ExportSource, renderer: ExportRend
 /** Keep the file after copying: native file clipboards reference a path until paste. */
 export async function writeExportFile(title: string, format: ExportFormat, html: string, printPdf: (htmlPath: string) => Promise<Uint8Array>, directory = path.join(os.tmpdir(), "agentnote-exports")): Promise<string> {
   if (format !== "html" && format !== "pdf") throw new Error("Unsupported export format");
-  let name = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "").slice(0, 100) || "note";
+  let name = Array.from(title, character => character.charCodeAt(0) < 32 ? "_" : character).join("").replace(/[<>:"/\\|?*]/g, "_").replace(/[. ]+$/, "").slice(0, 100) || "note";
   if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) name = `_${name}`;
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const folder = await fs.mkdtemp(path.join(directory, "share-"));
@@ -61,7 +61,7 @@ export async function writeExportFile(title: string, format: ExportFormat, html:
 type CommandRunner = (command: string, args: string[], options?: { input?: string; env?: NodeJS.ProcessEnv }) => Promise<string | void>;
 export type FileClipboardTarget = "win32" | "wayland" | "x11";
 const runCommand: CommandRunner = (command, args, options = {}) => new Promise((resolve, reject) => {
-  const child = execFile(command, args, { env: options.env ?? process.env, timeout: 15000, windowsHide: true }, (error, stdout) => error ? reject(error) : resolve(stdout));
+  const child = execFile(command, args, { env: options.env ?? process.env, timeout: 15000, windowsHide: true }, (error, stdout) => { if (error) reject(error instanceof Error ? error : new Error(String(error))); else resolve(stdout); });
   // xclip reads the file URI from stdin, never from a shell command.
   child.stdin?.on("error", () => undefined);
   child.stdin?.end(options.input);
@@ -113,7 +113,8 @@ export function writeMacFileClipboard(file: string, clipboard: MacFileClipboard)
 }
 export function verifyMacFileClipboard(file: string, clipboard: MacFileClipboard): boolean {
   try {
-    const uri = Buffer.from(clipboard.readBuffer("public.file-url")).toString("utf8").replace(/\0+$/, "");
+    let uri = Buffer.from(clipboard.readBuffer("public.file-url")).toString("utf8");
+    while (uri.endsWith(String.fromCharCode(0))) uri = uri.slice(0, -1);
     return path.resolve(fileURLToPath(uri)) === path.resolve(file);
   } catch { return false; }
 }

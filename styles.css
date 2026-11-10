@@ -2090,3 +2090,5 @@ span.agentnote-agent-icon svg {
   .agentnote-share-split, .agentnote-share-split > button,
   .agentnote-share-toggle svg, .agentnote-share-option { transition: none; }
 }
+
+.agentnote-share-render-host { position: fixed; left: -10000px; top: 0; width: 800px; visibility: hidden; pointer-events: none; }

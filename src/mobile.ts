@@ -7,7 +7,8 @@ const VIEW = "agentnote-mobile-history";
 export default class MobileAgentNote extends Plugin {
   excludedFolders: string[] = [];
   async onload(): Promise<void> {
-    const saved = await this.loadData().catch(() => null);
+    const value: unknown = await this.loadData().catch(() => null);
+    const saved = value && typeof value === "object" ? value as Record<string, unknown> : {};
     setLanguage(languageForPreference(saved?.language === "zh" || saved?.language === "en" ? saved.language : "auto", getLanguage()));
     this.excludedFolders = Array.isArray(saved?.excludedFolders) ? saved.excludedFolders.filter((p: unknown): p is string => typeof p === "string") : [];
     this.registerView(VIEW, leaf => new MobileHistoryView(leaf, this));

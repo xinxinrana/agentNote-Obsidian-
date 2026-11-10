@@ -33,10 +33,7 @@ export function cleanShareHtml(root: HTMLElement): string {
 export function createShareRenderer(app: App, parent: Component) {
   return async (markdown: string, sourcePath: string): Promise<string> => {
     const component = parent.addChild(new Component());
-    const host = document.createElement("div");
-    host.className = "markdown-rendered";
-    host.style.cssText = "position:fixed;left:-10000px;top:0;width:800px;visibility:hidden;pointer-events:none";
-    document.body.appendChild(host);
+    const host = document.body.createDiv({ cls: "markdown-rendered agentnote-share-render-host" });
     try {
       // Image/note embeds and executable code processors are masked before reaching this API.
       await MarkdownRenderer.render(app, markdown, host, sourcePath, component);
