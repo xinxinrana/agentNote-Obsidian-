@@ -19,6 +19,9 @@ class Element {
   setText(text) { this.text = text; }
   setAttribute(name, value) { this.attrs[name] = value; }
   setCssProps(props) { this.css = props; }
+  matches() { return false; }
+  addEventListener() {}
+  focus() {}
   querySelector() { return null; }
 }
 export class ItemView { constructor(leaf) { this.app = leaf.app; this.contentEl = new Element(); } registerEvent() {} }
@@ -51,7 +54,7 @@ try {
     } }],
   });
   const { AgentNoteView, DataRepairModal, FeedbackModal, InsightsModal, VaultStore, setLanguage } = createRequire(import.meta.url)(path.join(dir, 'ui.cjs'));
-  globalThis.window = { setTimeout: () => 0, requestAnimationFrame: () => 0 };
+  globalThis.window = { clearTimeout: () => {}, setTimeout: () => 0, requestAnimationFrame: () => 0 };
   setLanguage('zh');
   const vault = path.join(dir, 'vault');
   const store = new VaultStore(vault, '.obsidian', { deviceIdFile: path.join(dir, 'device-id'), referencesFile: path.join(dir, 'references.json') });
@@ -170,23 +173,26 @@ try {
   plugin.server = { port: 27182 };
   plugin.serverPortInUse = false;
   await view.refresh();
-  const shareButton = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find((element) => element.tag === 'button' && element.text === '分享当前笔记');
+  const shareButton = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find((element) => element.tag === 'button' && element.cls === 'agentnote-share-primary');
   await shareButton.onclick();
   assert.equal(sharedPath, 'Current note.md');
   assert.match(view.contentEl.textContent, /链接已复制/);
-  const formatSelect = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find(element => element.tag === 'select' && element.attrs['aria-label'] === '分享格式');
+  const shareElements = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; });
+  const formatToggle = shareElements.find(element => element.cls === 'agentnote-share-toggle');
+  assert.ok(!shareElements.some(element => element.tag === 'select' && element.cls === 'agentnote-share-format'));
   plugin.server = null;
   for (const format of ['pdf', 'html']) {
-    formatSelect.value = format;
-    formatSelect.onchange();
-    assert.match(shareButton.text, /生成并复制文件/);
+    const option = shareElements.find(element => element.attrs['data-format'] === format);
+    option.onclick();
+    assert.match(shareButton.textContent, /复制 (PDF|HTML) 文件/);
+    assert.equal(option.attrs['aria-checked'], 'true');
     await shareButton.onclick();
     assert.deepEqual(exported, { filePath: 'Current note.md', format });
-    assert.match(shareButton.text, /文件已复制/);
-    assert.equal(formatSelect.disabled, false);
+    assert.match(shareButton.textContent, /文件已复制/);
+    assert.equal(formatToggle.disabled, false);
   }
   plugin.server = { port: 27182 };
-  console.log('PASS PDF/HTML dropdown routes to file export without the local service');
+  console.log('PASS split share button routes PDF/HTML exports without the local service');
   activeFile = null;
   onFileOpen();
   assert.match(view.contentEl.textContent, /尚未打开笔记/);
