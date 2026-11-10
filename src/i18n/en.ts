@@ -663,4 +663,6 @@ export const en: Record<string, string> = {
   "正在复制链接…": "Copying link\u2026",
   "文件已复制": "File copied",
   "链接已复制": "Link copied",
+  "更多分享方式": "More sharing actions",
+  "复制 Agent 链接": "Copy Agent link",
 };

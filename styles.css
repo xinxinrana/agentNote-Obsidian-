@@ -2075,19 +2075,14 @@ span.agentnote-agent-icon svg {
 }
 .agentnote-share-menu button.agentnote-share-option:hover,
 .agentnote-share-menu button.agentnote-share-option:focus-visible { background: #f4f0fc; outline: none; }
-.agentnote-share-menu button.agentnote-share-option[aria-checked="true"] { background: #f8f5fe; }
 .agentnote-share-option-icon { display: grid; place-items: center; flex: 0 0 32px; height: 34px; border-radius: 8px; background: #f0ebfa; color: #8058d1; }
 .agentnote-share-option-icon svg { width: 17px; height: 17px; stroke-width: 1.7px; }
 .agentnote-share-option-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
 .agentnote-share-option-title { font-size: 14px; line-height: 1.4; font-weight: 600; }
 .agentnote-share-option-detail { color: #8b8298; font-size: 12px; line-height: 1.4; }
-.agentnote-share-option-check { display: flex; flex: 0 0 16px; color: #8257d7; opacity: 0; }
-.agentnote-share-option-check svg { width: 15px; height: 15px; }
-.agentnote-share-option[aria-checked="true"] .agentnote-share-option-check { opacity: 1; }
 .theme-dark .agentnote-share-menu[popover] { background: #26212f; border-color: #41374e; color: #eee7f7; box-shadow: 0 12px 36px #0005; }
 .theme-dark .agentnote-share-menu button.agentnote-share-option:hover,
 .theme-dark .agentnote-share-menu button.agentnote-share-option:focus-visible { background: #3b304b; }
-.theme-dark .agentnote-share-menu button.agentnote-share-option[aria-checked="true"] { background: #332a41; }
 .theme-dark .agentnote-share-option-icon { background: #3a2e4d; color: #be9af8; }
 .theme-dark .agentnote-share-option-detail,
 .theme-dark .agentnote-share-menu-heading { color: #b2a5c2; }

@@ -183,10 +183,9 @@ try {
   plugin.server = null;
   for (const format of ['pdf', 'html']) {
     const option = shareElements.find(element => element.attrs['data-format'] === format);
-    option.onclick();
-    assert.match(shareButton.textContent, /复制 (PDF|HTML) 文件/);
-    assert.equal(option.attrs['aria-checked'], 'true');
-    await shareButton.onclick();
+    await option.onclick();
+    assert.equal(option.attrs.role, "menuitem");
+    assert.equal(option.attrs["aria-checked"], undefined);
     assert.deepEqual(exported, { filePath: 'Current note.md', format });
     assert.match(shareButton.textContent, /文件已复制/);
     assert.equal(formatToggle.disabled, false);

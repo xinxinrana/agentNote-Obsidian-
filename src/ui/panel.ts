@@ -149,10 +149,9 @@ export class AgentNoteView extends ItemView {
     setIcon(label.createSpan(), "file-text");
     label.createSpan({ text: t("当前笔记") });
     card.createEl("h4", { text: file?.basename ?? t("尚未打开笔记") });
-    const description = card.createEl("p", { text: file ? t("把这份资料分享给 agent，随后可以在最近动态中查看协作。") : t("打开一篇笔记后，就可以从这里直接分享。") });
+    card.createEl("p", { text: file ? t("把这份资料分享给 agent，随后可以在最近动态中查看协作。") : t("打开一篇笔记后，就可以从这里直接分享。") });
     if (!file) return;
     renderShareButton(card, {
-      onFormatChange: format => description.setText(format === "link" ? t("把这份资料分享给 agent，随后可以在最近动态中查看协作。") : t("笔记库中的图片会随文件一起导出，无需启动本地服务。")),
       share: format => format === "link" ? this.plugin.shareFileFromPanel(file.path) : this.plugin.exportFileFromPanel(file.path, format),
     });
   }
