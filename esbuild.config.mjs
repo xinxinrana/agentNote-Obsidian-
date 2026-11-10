@@ -8,6 +8,7 @@ const watch = process.argv.includes("--watch");
 const external = [
   "obsidian",
   "electron",
+  "@electron/remote",
   "@codemirror/autocomplete",
   "@codemirror/collab",
   "@codemirror/commands",

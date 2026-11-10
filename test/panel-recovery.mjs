@@ -148,7 +148,8 @@ try {
     : '<<<<<<< HEAD\n[]\n=======\n[]\n>>>>>>> origin/main\n';
   await fs.writeFile(file, damaged);
   let sharedPath;
-  const plugin = { store, server: { port: 27182 }, settings: { port: 27182, showQuickStart: true }, connectedAgents: async () => [], shareFileFromPanel: async (filePath) => { sharedPath = filePath; return true; } };
+  let exported;
+  const plugin = { store, server: { port: 27182 }, settings: { port: 27182, showQuickStart: true }, connectedAgents: async () => [], exportFileFromPanel: async (filePath, format) => { exported = { filePath, format }; return true; }, shareFileFromPanel: async (filePath) => { sharedPath = filePath; return true; } };
   let activeFile = { basename: 'Current note', path: 'Current note.md' };
   let onFileOpen;
   const view = new AgentNoteView({ app: { workspace: { on: (_event, handler) => { onFileOpen = handler; return {}; }, getActiveFile: () => activeFile } } }, plugin);
@@ -173,6 +174,19 @@ try {
   await shareButton.onclick();
   assert.equal(sharedPath, 'Current note.md');
   assert.match(view.contentEl.textContent, /链接已复制/);
+  const formatSelect = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find(element => element.tag === 'select' && element.attrs['aria-label'] === '分享格式');
+  plugin.server = null;
+  for (const format of ['pdf', 'html']) {
+    formatSelect.value = format;
+    formatSelect.onchange();
+    assert.match(shareButton.text, /生成并复制文件/);
+    await shareButton.onclick();
+    assert.deepEqual(exported, { filePath: 'Current note.md', format });
+    assert.match(shareButton.text, /文件已复制/);
+    assert.equal(formatSelect.disabled, false);
+  }
+  plugin.server = { port: 27182 };
+  console.log('PASS PDF/HTML dropdown routes to file export without the local service');
   activeFile = null;
   onFileOpen();
   assert.match(view.contentEl.textContent, /尚未打开笔记/);

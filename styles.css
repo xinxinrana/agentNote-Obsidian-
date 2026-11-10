@@ -2010,3 +2010,5 @@ span.agentnote-agent-icon svg {
 .agentnote-mobile-row { padding:14px 0; border-bottom:1px solid var(--background-modifier-border); }
 .agentnote-mobile-row button { height:auto; white-space:normal; text-align:left; }
 .agentnote-mobile-row small { display:block; margin-top:6px; color:var(--text-muted); }
+
+.agentnote-share-format { width: 100%; margin-bottom: 10px; }

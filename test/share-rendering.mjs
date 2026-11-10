@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 import MarkdownIt from 'markdown-it';
 const require = createRequire(import.meta.url);
-const { VaultStore, AgentServer, prepareShareMarkdown } = require('./core-bundle.cjs');
+const { VaultStore, AgentServer, prepareShareMarkdown, imageMime } = require('./core-bundle.cjs');
 const dom = new JSDOM('<!doctype html><body></body>');
 let active = 0;
 let failure = false;
@@ -118,6 +118,9 @@ try {
     assert.equal((await fetch(imageUrl('s-x-not-existing', '好 软件.png'))).status, 404);
   });
   await test('parser respects inline/fenced code, reference images and escaping', async () => {
+    assert.equal(imageMime('constructor'), undefined);
+    assert.equal(imageMime('toString'), undefined);
+    assert.equal(prepareShareMarkdown('![[constructor]]').slots.some(s => s.image), false);
     const prepared = prepareShareMarkdown('`![[hidden.png]]`\n\n~~~js\n![[hidden2.png]]\n~~~\n\n\\![[escaped.png]]\n\n![x][photo]\n\n[photo]: assets/a%23b.png');
     assert.deepEqual(prepared.slots.filter(s => s.image).map(s => s.image.link), ['assets/a#b.png']);
   });

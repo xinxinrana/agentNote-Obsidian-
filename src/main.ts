@@ -1,3 +1,6 @@
+import { exportNoteFile } from "./exportFiles";
+import type { ExportFormat } from "./core/noteExport";
+import { ExportNoteModal } from "./ui/exportModal";
 import { createShareRenderer, readShareImage } from "./shareRenderer";
 import { parseExcludedFolders } from "./core/excludedFolders";
 import { languageForPreference, setLanguage, t } from "./i18n";
@@ -79,12 +82,16 @@ export default class AgentNotePlugin extends Plugin {
     this.addCommand({ id: "create-note", name: t("新建笔记"), callback: () => this.openCreateNoteModal() });
     this.addCommand({ id: "share-selection", name: t("分享选中内容"), editorCallback: (editor) => void this.shareSelection(editor) });
     this.addCommand({ id: "share-current-note", name: t("分享当前文件"), callback: () => void this.shareCurrentFile() });
+    this.addCommand({ id: "export-current-note", name: t("导出 PDF 或 HTML 文件"), callback: () => { const file = this.app.workspace.getActiveFile(); if (file) new ExportNoteModal(this, file.path).open(); } });
     this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
       if (!editor.getSelection()) return;
       menu.addItem((item) => item.setTitle(t("agentNote: 分享选中内容")).setIcon("link").onClick(() => void this.shareSelection(editor)));
+      const file = this.app.workspace.getActiveFile();
+      if (file) menu.addItem(item => item.setTitle(t("agentNote: 导出选段文件")).setIcon("file-output").onClick(() => new ExportNoteModal(this, file.path, editor.getSelection()).open()));
     }));
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       menu.addItem((item) => item.setTitle(t("agentNote: 分享给 agent")).setIcon("link").onClick(() => void this.sharePath(file.path)));
+      if (file instanceof TFile && file.extension.toLowerCase() === "md") menu.addItem(item => item.setTitle(t("agentNote: 导出 PDF / HTML")).setIcon("file-output").onClick(() => new ExportNoteModal(this, file.path).open()));
     }));
     this.registerEvent(this.app.workspace.on("files-menu", (menu, files) => {
       if (files.length < 2) return;
@@ -384,6 +391,19 @@ export default class AgentNotePlugin extends Plugin {
       new Notice(t("分享失败：{0}", (error as Error).message));
       return false;
     }
+  }
+  async exportFileFromPanel(sourcePath: string, format: ExportFormat, selection?: string): Promise<boolean> {
+    try {
+      const result = await exportNoteFile(this.app, this, this.store.root, sourcePath, format, selection);
+      if (!result.copied) {
+        new Notice(t("文件已生成，但剪贴板复制失败，已打开文件所在位置。"), 7000);
+        const { shell } = await import("electron");
+        shell.showItemInFolder(result.file);
+        return false;
+      }
+      new Notice(t("{0} 文件已复制，可直接粘贴发送。", format.toUpperCase()), 5000);
+      return true;
+    } catch (error) { new Notice(t("导出失败：{0}", (error as Error).message), 7000); return false; }
   }
   private async sharePaths(files: TAbstractFile[]): Promise<void> {
     try { this.shareServicePort(); }

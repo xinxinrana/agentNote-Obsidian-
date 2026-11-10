@@ -18,3 +18,4 @@ export * from "./excludedFolders";
 export * from "./mobileHistory";
 
 export * from "./shareMarkdown";
+export * from "./noteExport";

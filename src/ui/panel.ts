@@ -148,19 +148,34 @@ export class AgentNoteView extends ItemView {
     setIcon(label.createSpan(), "file-text");
     label.createSpan({ text: t("当前笔记") });
     card.createEl("h4", { text: file?.basename ?? t("尚未打开笔记") });
-    card.createEl("p", { text: file ? t("把这份资料分享给 agent，随后可以在最近动态中查看协作。") : t("打开一篇笔记后，就可以从这里直接分享。") });
+    const description = card.createEl("p", { text: file ? t("把这份资料分享给 agent，随后可以在最近动态中查看协作。") : t("打开一篇笔记后，就可以从这里直接分享。") });
     if (!file) return;
+    const format = card.createEl("select", { cls: "agentnote-share-format", attr: { "aria-label": t("分享格式") } });
+    format.createEl("option", { value: "link", text: t("Agent 链接") });
+    format.createEl("option", { value: "pdf", text: "PDF" });
+    format.createEl("option", { value: "html", text: "HTML" });
+    format.value = "link";
     const button = card.createEl("button", { cls: "mod-cta agentnote-current-share", text: t("分享当前笔记") });
+    format.onchange = () => {
+      button.setText(format.value === "link" ? t("分享当前笔记") : t("生成并复制文件"));
+      description.setText(format.value === "link" ? t("把这份资料分享给 agent，随后可以在最近动态中查看协作。") : t("笔记库中的图片会随文件一起导出，无需启动本地服务。"));
+    };
     button.onclick = async () => {
       button.disabled = true;
-      const shared = await this.plugin.shareFileFromPanel(file.path);
+      format.disabled = true;
+      const selected = format.value;
+      if (selected !== "link") button.setText(t("正在生成文件…"));
+      const shared = selected === "pdf" || selected === "html"
+        ? await this.plugin.exportFileFromPanel(file.path, selected)
+        : await this.plugin.shareFileFromPanel(file.path);
+      format.disabled = false;
       if (shared) {
-        button.setText(t("链接已复制 · 发给 Agent 即可"));
+        button.setText(selected === "link" ? t("链接已复制 · 发给 Agent 即可") : t("文件已复制 · 可粘贴发送"));
         button.addClass("is-complete");
-      } else button.disabled = false;
+      } else { button.disabled = false; button.setText(selected === "link" ? t("分享当前笔记") : t("生成并复制文件")); }
       window.setTimeout(() => {
         if (!button.isConnected) return;
-        button.setText(t("分享当前笔记"));
+        button.setText(format.value === "link" ? t("分享当前笔记") : t("生成并复制文件"));
         button.removeClass("is-complete");
         button.disabled = false;
       }, 3500);

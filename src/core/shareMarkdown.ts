@@ -4,7 +4,8 @@ import { randomUUID } from "crypto";
 const parser = new MarkdownIt({ html: true });
 const staticMarkdown = new MarkdownIt({ html: false, linkify: false });
 export const escapeHtml = (value: string): string => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-export const imageMime = (link: string): string | undefined => ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml" }[link.split(".").pop()?.toLowerCase() ?? ""]);
+const imageTypes = new Map(Object.entries({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml" }));
+export const imageMime = (link: string): string | undefined => imageTypes.get(link.split(".").pop()?.toLowerCase() ?? "");
 export interface SharedImage { link: string; alt: string; width?: number; height?: number }
 interface Edit { start: number; end: number; block?: boolean; html?: string; image?: SharedImage }
 
@@ -96,13 +97,14 @@ export function prepareShareMarkdown(source: string) {
 }
 
 /** Images use same-origin URLs; no app:// URLs or external requests leave the host. */
-export function restoreShareSlots(html: string, prepared: ReturnType<typeof prepareShareMarkdown>, shareId: string): string {
+export function restoreShareSlots(html: string, prepared: ReturnType<typeof prepareShareMarkdown>, shareId: string, imageSources?: ReadonlyMap<string, string>): string {
   for (const slot of prepared.slots) {
     let replacement = slot.html ?? "";
     if (slot.image) {
       const { link, alt, width, height } = slot.image;
       const local = imageMime(link) && !/^(?:[a-z][a-z\d+.-]*:|\/|\\)/i.test(link) && !link.includes("\0");
-      replacement = local ? `<img src="/api/shares/${encodeURIComponent(shareId)}/image?link=${encodeURIComponent(link)}" alt="${escapeHtml(alt)}" loading="lazy"${width ? ` width="${width}"` : ""}${height ? ` height="${height}"` : ""}>` : `<span class="unavailable-embed">${escapeHtml(alt || link)}</span>`;
+      const src = imageSources ? imageSources.get(link) : local ? `/api/shares/${encodeURIComponent(shareId)}/image?link=${encodeURIComponent(link)}` : undefined;
+      replacement = src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy"${width ? ` width="${width}"` : ""}${height ? ` height="${height}"` : ""}>` : `<span class="unavailable-embed">${escapeHtml(alt || link)}</span>`;
     }
     // Block slots must not leave <pre> or <p> nested inside a paragraph.
     html = html.split(`<p>${slot.marker}</p>`).join(replacement).split(slot.marker).join(replacement);
