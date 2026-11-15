@@ -4,7 +4,7 @@ import * as path from "path";
 import { execFile } from "child_process";
 import { fileURLToPath, pathToFileURL } from "url";
 import { language, t } from "../i18n";
-import { escapeHtml, imageMime, prepareShareMarkdown, restoreShareSlots } from "./shareMarkdown";
+import { escapeHtml, imageMime, prepareShareMarkdown, restoreShareSlots, readInlineImage } from "./shareMarkdown";
 import { sharePageStyles } from "./sharePage";
 import { shareBrand, shareBrandStyles } from "./shareBrand";
 
@@ -23,9 +23,15 @@ export async function buildExportHtml(source: ExportSource, renderer: ExportRend
   for (const slot of prepared.slots) {
     const image = slot.image;
     if (!image || images.has(image.link)) continue;
-    if (!imageMime(image.link) || /^(?:[a-z][a-z\d+.-]*:|\/|\\)/i.test(image.link)) throw new Error(t("请先将网络图片保存到笔记库后再导出：{0}", image.link));
-    const data = await renderer.readImage(image.link, source.sourcePath);
-    if (!data || data.mime !== imageMime(image.link)) throw new Error(t("图片无法导出：{0}", image.link));
+    let data: { bytes: Uint8Array; mime: string } | null;
+    if (/^data:/i.test(image.link)) {
+      data = readInlineImage(image.link);
+      if (!data) throw new Error(t("内嵌图片无效、格式不支持或超过 20 MiB，无法导出。"));
+    } else {
+      if (!imageMime(image.link) || /^(?:[a-z][a-z\d+.-]*:|\/|\\)/i.test(image.link)) throw new Error(t("请先将网络图片保存到笔记库后再导出：{0}", image.link));
+      data = await renderer.readImage(image.link, source.sourcePath);
+      if (!data || data.mime !== imageMime(image.link)) throw new Error(t("图片无法导出：{0}", image.link));
+    }
     totalBytes += data.bytes.byteLength;
     if (totalBytes > 50 * 1024 * 1024) throw new Error(t("导出图片总大小超过 50 MiB，请缩小图片后重试。"));
     images.set(image.link, `data:${data.mime};base64,${Buffer.from(data.bytes).toString("base64")}`);

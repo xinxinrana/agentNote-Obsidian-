@@ -20,7 +20,7 @@ For structured reads, append `?format=json`. Use `?format=json&detail=1` for com
 
 Choose **Copy PDF file**, **Copy HTML file** or **Copy Markdown file** from the current note’s sharing menu, then paste the generated file to send it. You can also open the export dialog from a note or text selection’s context menu.
 
-PDF and HTML embed vault images and work without the local service. Large images keep their proportions within a height limit, leaving space for surrounding text in PDF. The footer carries Obsidian and agentNote marks.
+PDF and HTML include vault images and PNG, JPEG, GIF or WebP images embedded directly in the note. The original note needs no conversion, and recipients do not need the local service. Large images keep their proportions within a height limit, leaving space for surrounding text in PDF. The footer carries Obsidian and agentNote marks.
 
 Markdown preserves the original text and image references without bundling images. On first use, acknowledge the image notice or cancel; you can also select “Don’t show again”. Cancelling does not generate or copy a file. For images to appear on another device, upload them to an accessible image host and use those links in the original note.
 

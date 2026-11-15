@@ -678,4 +678,6 @@ export const en: Record<string, string> = {
   "我已知晓": "I understand",
   "导出 PDF、HTML 或 Markdown 文件": "Export a PDF, HTML or Markdown file",
   "agentNote: 导出 PDF / HTML / Markdown": "agentNote: Export PDF / HTML / Markdown",
+  "内嵌图片无法显示": "Embedded image unavailable",
+  "内嵌图片无效、格式不支持或超过 20 MiB，无法导出。": "An embedded image is invalid, unsupported or exceeds 20 MiB and cannot be exported.",
 };

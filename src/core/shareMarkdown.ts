@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import { randomUUID } from "crypto";
+import { t } from "../i18n";
 
 const parser = new MarkdownIt({ html: true });
 const staticMarkdown = new MarkdownIt({ html: false, linkify: false });
@@ -8,6 +9,44 @@ const imageTypes = new Map(Object.entries({ png: "image/png", jpg: "image/jpeg",
 export const imageMime = (link: string): string | undefined => imageTypes.get(link.split(".").pop()?.toLowerCase() ?? "");
 export interface SharedImage { link: string; alt: string; width?: number; height?: number }
 interface Edit { start: number; end: number; block?: boolean; html?: string; image?: SharedImage }
+
+/** Accept embedded raster images, not arbitrary data documents or permissively decoded text. */
+export function readInlineImage(link: string): { bytes: Buffer; mime: string } | null {
+  const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([\s\S]*)$/i.exec(link);
+  if (!match || match[2].length > 28 * 1024 * 1024) return null;
+  const encoded = match[2].replace(/[\t\n\r ]/g, "");
+  if (!encoded || !/^[a-z\d+/]+={0,2}$/i.test(encoded) || encoded.length % 4 === 1) return null;
+  const bytes = Buffer.from(encoded, "base64");
+  if (bytes.length > 20 * 1024 * 1024 || bytes.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, "")) return null;
+  const mime = match[1].toLowerCase();
+  const valid = mime === "image/png" ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    : mime === "image/jpeg" ? bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+      : mime === "image/gif" ? /^(?:GIF87a|GIF89a)$/.test(bytes.subarray(0, 6).toString("ascii"))
+        : bytes.length >= 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  return valid ? { bytes, mime } : null;
+}
+
+/** Read only a single img tag's source, text and numeric dimensions. Never forward HTML attributes. */
+function htmlImage(tag: string): SharedImage | undefined {
+  const match = /^<img(?=[\s/>])([\s\S]*?)\/?\s*>$/i.exec(tag);
+  if (!match) return undefined;
+  const attrs = new Map<string, string>();
+  const attributes = /\s+([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/gy;
+  let cursor = 0;
+  while (cursor < match[1].length) {
+    attributes.lastIndex = cursor;
+    const attr = attributes.exec(match[1]);
+    if (!attr) { if (match[1].slice(cursor).trim()) return undefined; break; }
+    const name = attr[1].toLowerCase();
+    const value = (attr[2] ?? attr[3] ?? attr[4] ?? "").replace(/&(?:#x[\da-f]+|#\d+|[a-z][a-z\d]+);/gi, entity => parser.utils.unescapeAll(entity));
+    if (!attrs.has(name)) attrs.set(name, value);
+    cursor = attributes.lastIndex;
+  }
+  const link = attrs.get("src")?.trim();
+  if (!link) return undefined;
+  const dimension = (key: string) => { const value = attrs.get(key) ?? ""; return /^[1-9]\d{0,3}$/.test(value) ? Number(value) : undefined; };
+  return { link, alt: attrs.get("alt") ?? "", width: dimension("width"), height: dimension("height") };
+}
 
 /** Inspect only the shared string, never the source file's full metadata cache. */
 export function prepareShareMarkdown(source: string) {
@@ -20,10 +59,21 @@ export function prepareShareMarkdown(source: string) {
     const start = offsets[token.map![0]];
     const end = Math.min(source.length, offsets[token.map![1]]);
     const raw = source.slice(start, end);
-    const html = token.type === "html_block" ? `<p>${escapeHtml(raw)}</p>` : staticMarkdown.render(raw);
-    return { start, end, html, block: true };
+    const images: Edit[] = [];
+    let cursor = 0;
+    if (token.type === "html_block") {
+      // Only image-only blocks qualify. Script bodies, comments and other HTML stay literal.
+      for (const tag of raw.matchAll(/<img(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*')*>/gi)) {
+        const image = htmlImage(tag[0]);
+        if (raw.slice(cursor, tag.index).trim() || !image) break;
+        images.push({ start: start + tag.index, end: start + tag.index + tag[0].length, image, block: true });
+        cursor = tag.index + tag[0].length;
+      }
+    }
+    if (images.length && !raw.slice(cursor).trim()) edits.push(...images);
+    else edits.push({ start, end, html: token.type === "html_block" ? `<p>${escapeHtml(raw)}</p>` : staticMarkdown.render(raw), block: true });
+    return { start, end };
   });
-  edits.push(...protectedRanges);
   const scan = (text: string, base: number) => {
     const inline = new MarkdownIt({ html: true });
     const imageRule = inline.inline.ruler.__rules__.find(rule => rule.name === "image")!.fn;
@@ -72,7 +122,11 @@ export function prepareShareMarkdown(source: string) {
     inline.inline.ruler.at("html_inline", (state, silent) => {
       const start = state.pos;
       const matched = htmlRule(state, silent);
-      if (matched && !silent && state.src === text) edits.push({ start: base + start, end: base + state.pos, html: escapeHtml(text.slice(start, state.pos)) });
+      if (matched && !silent && state.src === text) {
+        const tag = text.slice(start, state.pos);
+        const image = htmlImage(tag);
+        edits.push({ start: base + start, end: base + state.pos, ...(image ? { image } : { html: escapeHtml(tag) }) });
+      }
       return matched;
     });
     inline.parseInline(text, env);
@@ -103,8 +157,9 @@ export function restoreShareSlots(html: string, prepared: ReturnType<typeof prep
     if (slot.image) {
       const { link, alt, width, height } = slot.image;
       const local = imageMime(link) && !/^(?:[a-z][a-z\d+.-]*:|\/|\\)/i.test(link) && !link.includes("\0");
-      const src = imageSources ? imageSources.get(link) : local ? `/api/shares/${encodeURIComponent(shareId)}/image?link=${encodeURIComponent(link)}` : undefined;
-      replacement = src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy"${width ? ` width="${width}"` : ""}${height ? ` height="${height}"` : ""}>` : `<span class="unavailable-embed">${escapeHtml(alt || link)}</span>`;
+      const embedded = !imageSources && /^data:/i.test(link) ? readInlineImage(link) : null;
+      const src = imageSources ? imageSources.get(link) : embedded ? `data:${embedded.mime};base64,${embedded.bytes.toString("base64")}` : local ? `/api/shares/${encodeURIComponent(shareId)}/image?link=${encodeURIComponent(link)}` : undefined;
+      replacement = src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy"${width ? ` width="${width}"` : ""}${height ? ` height="${height}"` : ""}>` : `<span class="unavailable-embed">${escapeHtml(alt || (/^data:/i.test(link) ? t("内嵌图片无法显示") : link))}</span>`;
     }
     // Block slots must not leave <pre> or <p> nested inside a paragraph.
     html = html.split(`<p>${slot.marker}</p>`).join(replacement).split(slot.marker).join(replacement);

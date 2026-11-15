@@ -101,6 +101,22 @@ try {
     const page = await (await fetch(url(selection.id))).text();
     assert.doesNotMatch(page, /Secret note|app.vault.delete|Other%2F/);
   });
+  await test('share pages display embedded images with no attachment reads and respect selection boundaries', async () => {
+    const uri = 'data:image/png;base64,' + png.toString('base64');
+    const snippet = `<img src="${uri}" alt="内嵌图片" width="320" onload="evil()">`;
+    const content = `# Embedded\n\n${snippet}\n\n<img src="Other/好 软件.png">`;
+    await fs.writeFile(path.join(root, 'Notes/embedded.md'), content);
+    const embedded = await store.createPathShare('Notes/embedded.md', '', snippet);
+    const before = imageReads;
+    const page = new JSDOM(await (await fetch(url(embedded.id))).text()).window.document;
+    assert.equal(page.querySelectorAll('article img').length, 1);
+    assert.equal(page.querySelector('article img').src, uri);
+    assert.equal(page.querySelector('article img').getAttribute('width'), '320');
+    assert.equal(page.querySelector('article [onload]'), null);
+    assert.doesNotMatch(page.querySelector('article').textContent, /data:image|base64|Other/);
+    assert.equal(imageReads, before);
+    assert.equal((await fetch(imageUrl(embedded.id, 'Other/好 软件.png'))).status, 404);
+  });
   await test('hidden attachments and symlinks escaping the vault are refused even when referenced', async () => {
     await fs.writeFile(path.join(root, 'Notes/private.md'), '![[.obsidian/private.png]]\n\n![[assets/outside.png]]');
     const privateShare = await store.createPathShare('Notes/private.md');

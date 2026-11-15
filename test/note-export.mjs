@@ -66,6 +66,40 @@ try {
     assert.doesNotMatch(selected, /好 软件|app.vault.delete/);
     assert.match(selected, /!\[\[Other note\]\]/);
   });
+  await test('HTML and Markdown embedded images render as images without reading attachments or printing Base64', async () => {
+    const uri = 'data:image/png;base64,' + png.toString('base64');
+    const content = `<img src="${uri}" alt="整机 > 外观 &amp; 图" width="1100" onerror="alert(1)" style="position:fixed">\n<img src='${uri}' width='320' height='200' />\n\n文字 <IMG SRC="${uri}" WIDTH="240"> 继续。\n\n![内嵌图片](${uri})`;
+    const exported = await buildExportHtml({ ...source, content }, { ...renderer, readImage: async () => { throw new Error('Embedded images must not read disk'); } });
+    const doc = new JSDOM(exported).window.document;
+    const images = [...doc.querySelectorAll('article img')];
+    assert.equal(images.length, 4);
+    assert.ok(images.every(image => image.src === uri));
+    assert.equal(images[0].alt, '整机 > 外观 & 图');
+    assert.equal(images[0].getAttribute('width'), '1100');
+    assert.equal(images[1].getAttribute('height'), '200');
+    assert.equal(images[2].getAttribute('width'), '240');
+    assert.match(doc.querySelector('article').textContent, /文字.*继续/);
+    assert.doesNotMatch(doc.querySelector('article').textContent, /data:image|base64/);
+    assert.equal(doc.querySelector('article [onerror], article [style]'), null);
+  });
+  await test('HTML attachment images reuse the existing resolver while image code examples stay literal', async () => {
+    const content = '<img src="photo.png" width="320">\n\n`<img src="code.png">`\n\n```html\n<img src="fenced.png">\n```\n\n<script>\n<img src="script.png">\n</script>';
+    const loaded = [];
+    const exported = await buildExportHtml({ ...source, content }, { ...renderer, readImage: async link => { loaded.push(link); return { bytes: png, mime: 'image/png' }; } });
+    assert.deepEqual(loaded, ['photo.png']);
+    const doc = new JSDOM(exported).window.document;
+    assert.equal(doc.querySelectorAll('article img').length, 1);
+    assert.match(doc.querySelector('article code').textContent, /<img/);
+    assert.equal(doc.querySelector('script'), null);
+  });
+  await test('invalid, unsupported, mismatched or oversized embedded images fail with a short error', async () => {
+    for (const uri of ['data:image/png;base64,not!base64', 'data:image/jpeg;base64,' + png.toString('base64'), 'data:text/html;base64,PHNjcmlwdD4=', 'data:image/svg+xml;base64,PHN2Zz4=']) {
+      await assert.rejects(buildExportHtml({ ...source, content: `<img src="${uri}">` }, renderer), error => /内嵌图片/.test(error.message) && error.message.length < 100);
+    }
+    const oversized = Buffer.alloc(20 * 1024 * 1024 + 1);
+    png.copy(oversized);
+    await assert.rejects(buildExportHtml({ ...source, content: `<img src="data:image/png;base64,${oversized.toString('base64')}">` }, renderer), /20 MiB/);
+  });
   await test('missing, remote or oversized image content never produces a misleading successful export', async () => {
     await assert.rejects(buildExportHtml(source, { ...renderer, readImage: async () => null }), /图片无法导出/);
     await assert.rejects(buildExportHtml({ ...source, content: '![](https://example.invalid/image.png)' }, renderer), /网络图片/);
