@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 import { t } from "../i18n";
 
-type ShareFormat = "link" | "pdf" | "html";
+type ShareFormat = "link" | "pdf" | "html" | "md";
 interface ShareButtonOptions {
   share(format: ShareFormat): Promise<boolean>;
 }
@@ -14,6 +14,7 @@ export function renderShareButton(parent: HTMLElement, options: ShareButtonOptio
     { id: "link", icon: "link", title: t("复制 Agent 链接"), detail: t("供本机 Agent 读取与写回") },
     { id: "pdf", icon: "file-text", title: t("复制 PDF 文件"), detail: t("适合发送、阅读和打印") },
     { id: "html", icon: "file-code", title: t("复制 HTML 文件"), detail: t("携带图片，浏览器直接打开") },
+    { id: "md", icon: "file-text", title: t("复制 Markdown 文件"), detail: t("保留原文，图片仅保留引用地址") },
   ];
   const control = parent.createDiv({ cls: "agentnote-share-split" });
   const primary = control.createEl("button", { cls: "agentnote-share-primary", attr: { type: "button" } });

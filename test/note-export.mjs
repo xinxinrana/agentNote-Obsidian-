@@ -29,16 +29,34 @@ try {
     html = await buildExportHtml(source, renderer);
     const doc = new JSDOM(html).window.document;
     assert.equal(doc.title, source.title);
-    assert.equal(doc.querySelectorAll('img').length, 2);
-    for (const image of doc.querySelectorAll('img')) {
+    assert.equal(doc.querySelectorAll('article img').length, 2);
+    for (const image of doc.querySelectorAll('article img')) {
       assert.equal(image.src, 'data:image/png;base64,' + png.toString('base64'));
       assert.equal(image.loading || image.getAttribute('loading'), 'eager');
     }
-    assert.equal(doc.querySelector('img').getAttribute('width'), '320');
+    assert.equal(doc.querySelector('article img').getAttribute('width'), '320');
     assert.equal(doc.querySelectorAll('script').length, 0);
     assert.match(doc.querySelector('article').textContent, /app.vault.delete/);
     assert.doesNotMatch(html, /127\.0\.0\.1|localhost|app:\/\/|\/api\/shares|agentnote-context|Notes\/旅行/);
     assert.ok(reads.every(([, original]) => original === source.sourcePath));
+  });
+  await test('portable exports carry both embedded brand marks without adding images to the note body', async () => {
+    const doc = new JSDOM(html).window.document;
+    const brand = doc.querySelector('footer .share-brand');
+    assert.equal(brand.querySelectorAll('img').length, 2);
+    for (const image of brand.querySelectorAll('img')) assert.match(image.src, /^data:image\//);
+    const svgSource = brand.querySelectorAll('img')[1].getAttribute('src');
+    const svg = decodeURIComponent(svgSource.slice(svgSource.indexOf(',') + 1));
+    assert.equal(new JSDOM(svg, { contentType: 'image/svg+xml' }).window.document.documentElement.localName, 'svg');
+    assert.match(brand.textContent, /Obsidian.*agentNote/);
+    assert.equal(brand.querySelector('a').href, 'https://obsidian.md/');
+    assert.equal(doc.querySelector('article .share-brand'), null);
+  });
+  await test('Markdown files preserve Unicode, frontmatter, image references and code byte for byte without rendering or printing', async () => {
+    const original = '---\r\ntitle: 中文\r\n---\r\n# 原文\r\n\r\n![[图片.png|320]]\r\n![remote](https://example.com/image.png)\r\n`<script>`\r\n';
+    const file = await writeExportFile('Markdown', 'md', original, async () => { throw new Error('Markdown must not print'); }, temp);
+    assert.equal(path.extname(file), '.md');
+    assert.equal(await fs.readFile(file, 'utf8'), original);
   });
   await test('selection exports only its content and images without expanding another note', async () => {
     reads.length = 0;
@@ -157,7 +175,7 @@ try {
       async loadFile(file) { assert.equal(file, '/safe/export.html'); if (fail) throw new Error('load failed'); }
       destroy() { destroyed++; }
     }
-    const bundle = await build({ entryPoints: ['src/exportFiles.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['obsidian', 'electron', '@electron/remote'], write: false, logLevel: 'silent' });
+    const bundle = await build({ entryPoints: ['src/exportFiles.ts'], loader: { '.svg': 'dataurl', '.png': 'dataurl' }, bundle: true, platform: 'node', format: 'cjs', external: ['obsidian', 'electron', '@electron/remote'], write: false, logLevel: 'silent' });
     const exported = { exports: {} };
     vm.runInNewContext(bundle.outputFiles[0].text, { module: exported, exports: exported.exports, require: name => name === 'electron' ? {} : name === '@electron/remote' ? { BrowserWindow } : name === 'obsidian' ? {} : require(name), process, Buffer, window: { setTimeout, clearTimeout } });
     await exported.exports.printExportPdf('/safe/export.html');

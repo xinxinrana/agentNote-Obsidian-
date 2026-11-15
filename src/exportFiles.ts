@@ -59,7 +59,7 @@ export async function exportNoteFile(app: App, parent: Component, root: string, 
   if (!source || source.extension.toLowerCase() !== "md") throw new Error(t("请选择 Markdown 笔记导出。"));
   const content = selection ?? await app.vault.cachedRead(source);
   if (!content.trim()) throw new Error(t("笔记内容为空，无法导出。"));
-  const html = await buildExportHtml({ title: source.basename, content, sourcePath, selection: selection !== undefined }, { renderMarkdown: createShareRenderer(app, parent), readImage: (link, originalPath) => readShareImage(app, root, link, originalPath) });
-  const file = await writeExportFile(source.basename, format, html, printExportPdf);
+  const output = format === "md" ? content : await buildExportHtml({ title: source.basename, content, sourcePath, selection: selection !== undefined }, { renderMarkdown: createShareRenderer(app, parent), readImage: (link, originalPath) => readShareImage(app, root, link, originalPath) });
+  const file = await writeExportFile(source.basename, format, output, printExportPdf);
   return { file, copied: await copyExportedFile(file) };
 }

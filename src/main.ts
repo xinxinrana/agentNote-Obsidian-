@@ -1,6 +1,6 @@
 import { exportNoteFile } from "./exportFiles";
 import type { ExportFormat } from "./core/noteExport";
-import { ExportNoteModal } from "./ui/exportModal";
+import { ExportNoteModal, MarkdownExportNotice } from "./ui/exportModal";
 import { createShareRenderer, readShareImage } from "./shareRenderer";
 import { parseExcludedFolders } from "./core/excludedFolders";
 import { languageForPreference, setLanguage, t } from "./i18n";
@@ -25,8 +25,8 @@ import ribbonMarkUrl from "../assets/brand/ribbon-mark.svg";
 export interface AgentProfile { enabled: boolean; instructions: string; template?: string }
 export interface LiveAgentActivity extends AgentActivity { at: string; agentName: string; sessionTitle?: string }
 type BulkActivityAction = "ask" | "record" | "ignore";
-interface AgentNoteSettings { language: LanguagePreference; port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; bulkActivityAction: BulkActivityAction; excludedFolders: string[]; agents: Record<string, AgentProfile> }
-const DEFAULT_SETTINGS: AgentNoteSettings = { language: "auto", port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, bulkActivityAction: "ask", excludedFolders: [], agents: {} };
+interface AgentNoteSettings { markdownExportNoticeDismissed: boolean; language: LanguagePreference; port: number; autostartServer: boolean; showQuickStart: boolean; coldBackupEnabled: boolean; coldBackupDelayMinutes: number; bulkActivityAction: BulkActivityAction; excludedFolders: string[]; agents: Record<string, AgentProfile> }
+const DEFAULT_SETTINGS: AgentNoteSettings = { markdownExportNoticeDismissed: false, language: "auto", port: 27182, autostartServer: true, showQuickStart: true, coldBackupEnabled: true, coldBackupDelayMinutes: 3, bulkActivityAction: "ask", excludedFolders: [], agents: {} };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -79,7 +79,7 @@ export default class AgentNotePlugin extends Plugin {
     this.addCommand({ id: "create-note", name: t("新建笔记"), callback: () => this.openCreateNoteModal() });
     this.addCommand({ id: "share-selection", name: t("分享选中内容"), editorCallback: (editor) => void this.shareSelection(editor) });
     this.addCommand({ id: "share-current-note", name: t("分享当前文件"), callback: () => void this.shareCurrentFile() });
-    this.addCommand({ id: "export-current-note", name: t("导出 PDF 或 HTML 文件"), callback: () => { const file = this.app.workspace.getActiveFile(); if (file) new ExportNoteModal(this, file.path).open(); } });
+    this.addCommand({ id: "export-current-note", name: t("导出 PDF、HTML 或 Markdown 文件"), callback: () => { const file = this.app.workspace.getActiveFile(); if (file) new ExportNoteModal(this, file.path).open(); } });
     this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
       if (!editor.getSelection()) return;
       menu.addItem((item) => item.setTitle(t("agentNote: 分享选中内容")).setIcon("link").onClick(() => void this.shareSelection(editor)));
@@ -88,7 +88,7 @@ export default class AgentNotePlugin extends Plugin {
     }));
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
       menu.addItem((item) => item.setTitle(t("agentNote: 分享给 agent")).setIcon("link").onClick(() => void this.sharePath(file.path)));
-      if (file instanceof TFile && file.extension.toLowerCase() === "md") menu.addItem(item => item.setTitle(t("agentNote: 导出 PDF / HTML")).setIcon("file-output").onClick(() => new ExportNoteModal(this, file.path).open()));
+      if (file instanceof TFile && file.extension.toLowerCase() === "md") menu.addItem(item => item.setTitle(t("agentNote: 导出 PDF / HTML / Markdown")).setIcon("file-output").onClick(() => new ExportNoteModal(this, file.path).open()));
     }));
     this.registerEvent(this.app.workspace.on("files-menu", (menu, files) => {
       if (files.length < 2) return;
@@ -391,6 +391,17 @@ export default class AgentNotePlugin extends Plugin {
   }
   async exportFileFromPanel(sourcePath: string, format: ExportFormat, selection?: string): Promise<boolean> {
     try {
+      if (format === "md" && !this.settings.markdownExportNoticeDismissed) {
+        const accepted = await new Promise<{ accepted: boolean; remember: boolean }>(resolve => {
+          new MarkdownExportNotice(this.app, (accepted, remember) => resolve({ accepted, remember })).open();
+        });
+        if (!accepted.accepted) return false;
+        if (accepted.remember) {
+          this.settings.markdownExportNoticeDismissed = true;
+          try { await this.saveSettings(); }
+          catch (error) { this.settings.markdownExportNoticeDismissed = false; throw error; }
+        }
+      }
       const result = await exportNoteFile(this.app, this, this.store.root, sourcePath, format, selection);
       if (!result.copied) {
         try {
@@ -460,6 +471,7 @@ export default class AgentNotePlugin extends Plugin {
       coldBackupEnabled: typeof settings.coldBackupEnabled === "boolean" ? settings.coldBackupEnabled : DEFAULT_SETTINGS.coldBackupEnabled,
       coldBackupDelayMinutes: typeof settings.coldBackupDelayMinutes === "number" && Number.isInteger(settings.coldBackupDelayMinutes) && settings.coldBackupDelayMinutes >= 1 && settings.coldBackupDelayMinutes <= 60 ? settings.coldBackupDelayMinutes : DEFAULT_SETTINGS.coldBackupDelayMinutes,
       bulkActivityAction: settings.bulkActivityAction === "record" || settings.bulkActivityAction === "ignore" ? settings.bulkActivityAction : "ask",
+      markdownExportNoticeDismissed: settings.markdownExportNoticeDismissed === true,
       excludedFolders: Array.isArray(settings.excludedFolders) ? parseExcludedFolders(settings.excludedFolders.filter((p): p is string => typeof p === "string").join("\n")) : [],
       agents: isRecord(settings.agents) ? settings.agents as Record<string, AgentProfile> : {},
     };

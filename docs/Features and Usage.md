@@ -16,6 +16,14 @@ Dates and absolute local paths are omitted by default. Choose **Details** or app
 
 For structured reads, append `?format=json`. Use `?format=json&detail=1` for complete fields. `?raw=1` still returns plain text. Pages require no network fonts, scripts, or external resources.
 
+### Export files for others
+
+Choose **Copy PDF file**, **Copy HTML file** or **Copy Markdown file** from the current note’s sharing menu, then paste the generated file to send it. You can also open the export dialog from a note or text selection’s context menu.
+
+PDF and HTML embed vault images and work without the local service. Large images keep their proportions within a height limit, leaving space for surrounding text in PDF. The footer carries Obsidian and agentNote marks.
+
+Markdown preserves the original text and image references without bundling images. On first use, acknowledge the image notice or cancel; you can also select “Don’t show again”. Cancelling does not generate or copy a file. For images to appear on another device, upload them to an accessible image host and use those links in the original note.
+
 ## Three-minute start
 
 1. Open the **agentNote connection panel** and confirm the green local-service light.
