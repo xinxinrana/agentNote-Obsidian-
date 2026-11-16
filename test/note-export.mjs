@@ -29,16 +29,34 @@ try {
     html = await buildExportHtml(source, renderer);
     const doc = new JSDOM(html).window.document;
     assert.equal(doc.title, source.title);
-    assert.equal(doc.querySelectorAll('img').length, 2);
-    for (const image of doc.querySelectorAll('img')) {
+    assert.equal(doc.querySelectorAll('article img').length, 2);
+    for (const image of doc.querySelectorAll('article img')) {
       assert.equal(image.src, 'data:image/png;base64,' + png.toString('base64'));
       assert.equal(image.loading || image.getAttribute('loading'), 'eager');
     }
-    assert.equal(doc.querySelector('img').getAttribute('width'), '320');
+    assert.equal(doc.querySelector('article img').getAttribute('width'), '320');
     assert.equal(doc.querySelectorAll('script').length, 0);
     assert.match(doc.querySelector('article').textContent, /app.vault.delete/);
     assert.doesNotMatch(html, /127\.0\.0\.1|localhost|app:\/\/|\/api\/shares|agentnote-context|Notes\/旅行/);
     assert.ok(reads.every(([, original]) => original === source.sourcePath));
+  });
+  await test('portable exports carry both embedded brand marks without adding images to the note body', async () => {
+    const doc = new JSDOM(html).window.document;
+    const brand = doc.querySelector('footer .share-brand');
+    assert.equal(brand.querySelectorAll('img').length, 2);
+    for (const image of brand.querySelectorAll('img')) assert.match(image.src, /^data:image\//);
+    const svgSource = brand.querySelectorAll('img')[1].getAttribute('src');
+    const svg = decodeURIComponent(svgSource.slice(svgSource.indexOf(',') + 1));
+    assert.equal(new JSDOM(svg, { contentType: 'image/svg+xml' }).window.document.documentElement.localName, 'svg');
+    assert.match(brand.textContent, /Obsidian.*agentNote/);
+    assert.equal(brand.querySelector('a').href, 'https://obsidian.md/');
+    assert.equal(doc.querySelector('article .share-brand'), null);
+  });
+  await test('Markdown files preserve Unicode, frontmatter, image references and code byte for byte without rendering or printing', async () => {
+    const original = '---\r\ntitle: 中文\r\n---\r\n# 原文\r\n\r\n![[图片.png|320]]\r\n![remote](https://example.com/image.png)\r\n`<script>`\r\n';
+    const file = await writeExportFile('Markdown', 'md', original, async () => { throw new Error('Markdown must not print'); }, temp);
+    assert.equal(path.extname(file), '.md');
+    assert.equal(await fs.readFile(file, 'utf8'), original);
   });
   await test('selection exports only its content and images without expanding another note', async () => {
     reads.length = 0;
@@ -47,6 +65,40 @@ try {
     assert.match(selected, /这是分享的选段/);
     assert.doesNotMatch(selected, /好 软件|app.vault.delete/);
     assert.match(selected, /!\[\[Other note\]\]/);
+  });
+  await test('HTML and Markdown embedded images render as images without reading attachments or printing Base64', async () => {
+    const uri = 'data:image/png;base64,' + png.toString('base64');
+    const content = `<img src="${uri}" alt="整机 > 外观 &amp; 图" width="1100" onerror="alert(1)" style="position:fixed">\n<img src='${uri}' width='320' height='200' />\n\n文字 <IMG SRC="${uri}" WIDTH="240"> 继续。\n\n![内嵌图片](${uri})`;
+    const exported = await buildExportHtml({ ...source, content }, { ...renderer, readImage: async () => { throw new Error('Embedded images must not read disk'); } });
+    const doc = new JSDOM(exported).window.document;
+    const images = [...doc.querySelectorAll('article img')];
+    assert.equal(images.length, 4);
+    assert.ok(images.every(image => image.src === uri));
+    assert.equal(images[0].alt, '整机 > 外观 & 图');
+    assert.equal(images[0].getAttribute('width'), '1100');
+    assert.equal(images[1].getAttribute('height'), '200');
+    assert.equal(images[2].getAttribute('width'), '240');
+    assert.match(doc.querySelector('article').textContent, /文字.*继续/);
+    assert.doesNotMatch(doc.querySelector('article').textContent, /data:image|base64/);
+    assert.equal(doc.querySelector('article [onerror], article [style]'), null);
+  });
+  await test('HTML attachment images reuse the existing resolver while image code examples stay literal', async () => {
+    const content = '<img src="photo.png" width="320">\n\n`<img src="code.png">`\n\n```html\n<img src="fenced.png">\n```\n\n<script>\n<img src="script.png">\n</script>';
+    const loaded = [];
+    const exported = await buildExportHtml({ ...source, content }, { ...renderer, readImage: async link => { loaded.push(link); return { bytes: png, mime: 'image/png' }; } });
+    assert.deepEqual(loaded, ['photo.png']);
+    const doc = new JSDOM(exported).window.document;
+    assert.equal(doc.querySelectorAll('article img').length, 1);
+    assert.match(doc.querySelector('article code').textContent, /<img/);
+    assert.equal(doc.querySelector('script'), null);
+  });
+  await test('invalid, unsupported, mismatched or oversized embedded images fail with a short error', async () => {
+    for (const uri of ['data:image/png;base64,not!base64', 'data:image/jpeg;base64,' + png.toString('base64'), 'data:text/html;base64,PHNjcmlwdD4=', 'data:image/svg+xml;base64,PHN2Zz4=']) {
+      await assert.rejects(buildExportHtml({ ...source, content: `<img src="${uri}">` }, renderer), error => /内嵌图片/.test(error.message) && error.message.length < 100);
+    }
+    const oversized = Buffer.alloc(20 * 1024 * 1024 + 1);
+    png.copy(oversized);
+    await assert.rejects(buildExportHtml({ ...source, content: `<img src="data:image/png;base64,${oversized.toString('base64')}">` }, renderer), /20 MiB/);
   });
   await test('missing, remote or oversized image content never produces a misleading successful export', async () => {
     await assert.rejects(buildExportHtml(source, { ...renderer, readImage: async () => null }), /图片无法导出/);
@@ -157,7 +209,7 @@ try {
       async loadFile(file) { assert.equal(file, '/safe/export.html'); if (fail) throw new Error('load failed'); }
       destroy() { destroyed++; }
     }
-    const bundle = await build({ entryPoints: ['src/exportFiles.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['obsidian', 'electron', '@electron/remote'], write: false, logLevel: 'silent' });
+    const bundle = await build({ entryPoints: ['src/exportFiles.ts'], loader: { '.svg': 'dataurl', '.png': 'dataurl' }, bundle: true, platform: 'node', format: 'cjs', external: ['obsidian', 'electron', '@electron/remote'], write: false, logLevel: 'silent' });
     const exported = { exports: {} };
     vm.runInNewContext(bundle.outputFiles[0].text, { module: exported, exports: exported.exports, require: name => name === 'electron' ? {} : name === '@electron/remote' ? { BrowserWindow } : name === 'obsidian' ? {} : require(name), process, Buffer, window: { setTimeout, clearTimeout } });
     await exported.exports.printExportPdf('/safe/export.html');
