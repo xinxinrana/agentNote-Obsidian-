@@ -24,7 +24,7 @@ proto.matches = function(selector) { return selector === ':popover-open' ? this.
 proto.showPopover = function() { this.removeAttribute('popover'); this.dataset.open = 'true'; this.dispatchEvent(new window.Event('toggle')); };
 proto.hidePopover = function() { this.setAttribute('popover', 'auto'); this.dataset.open = 'false'; this.dispatchEvent(new window.Event('toggle')); };
 proto.getBoundingClientRect = function() { return { left: 50, right: 350, top: 200, bottom: 242, width: 300, height: this.hasAttribute('popover') ? 225 : 42 }; };
-const bundle = await build({ entryPoints: ['src/ui/shareButton.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['obsidian'], write: false, logLevel: 'silent' });
+const bundle = await build({ entryPoints: ['src/ui/shareButton.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['obsidian'], loader: { '.css': 'text' }, write: false, logLevel: 'silent' });
 const exported = { exports: {} };
 vm.runInNewContext(bundle.outputFiles[0].text, { module: exported, exports: exported.exports, window, crypto: globalThis.crypto, require: () => ({ setIcon(element, name) { element.dataset.icon = name; } }) });
 const calls = [];
@@ -36,6 +36,11 @@ const menu = control.querySelector('[popover]');
 const items = [...menu.querySelectorAll('[role="menuitem"]')];
 const key = (target, value) => target.dispatchEvent(new window.KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true }));
 try {
+  // The plugin's separate stylesheet may be missing or stale after an update.
+  const controlStyle = window.getComputedStyle(control);
+  assert.equal(controlStyle.display, 'flex');
+  assert.match(controlStyle.backgroundImage, /linear-gradient/);
+  assert.equal(window.getComputedStyle(menu).position, 'fixed');
   assert.equal(control.querySelector('select'), null);
   assert.equal(primary.textContent, '分享当前笔记');
   assert.equal(menu.querySelector('[aria-checked]'), null);

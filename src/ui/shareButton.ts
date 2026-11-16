@@ -1,5 +1,6 @@
 import { setIcon } from "obsidian";
 import { t } from "../i18n";
+import shareButtonStyles from "./shareButton.css";
 
 type ShareFormat = "link" | "pdf" | "html" | "md";
 interface ShareButtonOptions {
@@ -17,6 +18,8 @@ export function renderShareButton(parent: HTMLElement, options: ShareButtonOptio
     { id: "md", icon: "file-text", title: t("复制 Markdown 文件"), detail: t("保留原文，图片仅保留引用地址") },
   ];
   const control = parent.createDiv({ cls: "agentnote-share-split" });
+  // Load the matching CSS even when a plugin update leaves an older styles.css installed.
+  control.createEl("style", { text: shareButtonStyles });
   const primary = control.createEl("button", { cls: "agentnote-share-primary", attr: { type: "button" } });
   const icon = primary.createSpan({ cls: "agentnote-share-action-icon", attr: { "aria-hidden": "true" } });
   const label = primary.createSpan({ text: t("分享当前笔记") });

@@ -33,7 +33,7 @@ const revealed = [];
 const electron = { shell: { showItemInFolder(path) { if (revealFailure) throw new Error('reveal failed'); revealed.push(path); } } };
 const pluginBundle = await build({
   entryPoints: ['src/main.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['obsidian', 'electron', '@electron/remote'], write: false,
-  loader: { '.svg': 'dataurl', '.png': 'dataurl', '.ico': 'dataurl' }, logLevel: 'silent',
+  loader: { '.svg': 'dataurl', '.png': 'dataurl', '.ico': 'dataurl', '.css': 'text' }, logLevel: 'silent',
   plugins: [{ name: 'export-result', setup(build) {
     build.onResolve({ filter: /^\.\/exportFiles$/ }, () => ({ path: 'exportFiles', namespace: 'fixture' }));
     build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export async function exportNoteFile() { globalThis.exportCalls++; return globalThis.exportResult; }', loader: 'js' }));

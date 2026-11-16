@@ -29,7 +29,7 @@ class Modal {
 const host = { Modal, ItemView: class {}, Notice: class {}, TFile: class {}, setIcon() {} };
 const built = await build({
   entryPoints: ['src/ui/panel.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['obsidian', 'electron'], write: false,
-  loader: { '.png': 'dataurl', '.svg': 'dataurl', '.ico': 'dataurl' }, logLevel: 'silent',
+  loader: { '.png': 'dataurl', '.svg': 'dataurl', '.ico': 'dataurl', '.css': 'text' }, logLevel: 'silent',
   plugins: [{ name: 'test-exports', setup(build) { build.onLoad({ filter: /[/\\]src[/\\]ui[/\\]panel\.ts$/ }, async args => ({ contents: await fs.readFile(args.path, 'utf8') + '\nexport { InsightsModal };', loader: 'ts' })); } }],
 });
 const timers = new Map(); let timerId = 0;

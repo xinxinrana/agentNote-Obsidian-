@@ -37,6 +37,7 @@ export class Menu {} export class Notice {} export class App {} export class TFi
 export function setIcon() {}
 `;
 function html(element) {
+  if (element.tag === 'style') return `<style>${element.text}</style>`;
   const attrs = Object.entries(element.attrs).map(([name, value]) => ` ${name}="${escape(value)}"`).join('');
   if (['img', 'input', 'br'].includes(element.tag)) return `<${element.tag}${attrs}>`;
   return `<${element.tag}${attrs}>${escape(element.text)}${element.children.map(html).join('')}</${element.tag}>`;
@@ -48,7 +49,7 @@ const base = `
 try {
   await fs.access(chrome);
   await fs.mkdir(out, { recursive:true });
-  await esbuild.build({ stdin:{ contents:'export { AgentNoteView, InsightsModal } from "./src/ui/panel"; export { VaultStore } from "./src/core/store"; export { setLanguage } from "./src/i18n";', resolveDir:root, loader:'ts' }, bundle:true, platform:'node', format:'cjs', external:['electron'], outfile:path.join(temp,'ui.cjs'), loader:{'.png':'dataurl','.svg':'dataurl','.ico':'dataurl'}, plugins:[{name:'readme-host', setup(build) {
+  await esbuild.build({ stdin:{ contents:'export { AgentNoteView, InsightsModal } from "./src/ui/panel"; export { VaultStore } from "./src/core/store"; export { setLanguage } from "./src/i18n";', resolveDir:root, loader:'ts' }, bundle:true, platform:'node', format:'cjs', external:['electron'], outfile:path.join(temp,'ui.cjs'), loader:{'.png':'dataurl','.svg':'dataurl','.ico':'dataurl','.css':'text'}, plugins:[{name:'readme-host', setup(build) {
     build.onResolve({filter:/^obsidian$/},()=>({path:'obsidian',namespace:'demo'}));
     build.onLoad({filter:/.*/,namespace:'demo'},()=>({contents:host,loader:'js'}));
     build.onLoad({filter:/[/\\]src[/\\]ui[/\\]panel\.ts$/},async args=>({contents:await fs.readFile(args.path,'utf8')+'\nexport { InsightsModal };',loader:'ts'}));
