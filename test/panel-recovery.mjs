@@ -173,7 +173,7 @@ try {
   plugin.server = { port: 27182 };
   plugin.serverPortInUse = false;
   await view.refresh();
-  const shareButton = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find((element) => element.tag === 'button' && element.cls.split(/\s+/).includes('agentnote-share-primary'));
+  const shareButton = view.contentEl.children.flatMap(function collect(element) { return [element, ...element.children.flatMap(collect)]; }).find((element) => element.tag === 'button' && element.cls === 'agentnote-share-primary');
   await shareButton.onclick();
   assert.equal(sharedPath, 'Current note.md');
   assert.match(view.contentEl.textContent, /链接已复制/);

@@ -15,8 +15,8 @@ export function renderShareButton(parent: HTMLElement, options: ShareButtonOptio
     { id: "pdf", icon: "file-text", title: t("复制 PDF 文件"), detail: t("适合发送、阅读和打印") },
     { id: "html", icon: "file-code", title: t("复制 HTML 文件"), detail: t("携带图片，浏览器直接打开") },
   ];
-  const control = parent.createDiv({ cls: "agentnote-share-actions agentnote-share-split" });
-  const primary = control.createEl("button", { cls: "mod-cta agentnote-share-primary", attr: { type: "button" } });
+  const control = parent.createDiv({ cls: "agentnote-share-split" });
+  const primary = control.createEl("button", { cls: "agentnote-share-primary", attr: { type: "button" } });
   const icon = primary.createSpan({ cls: "agentnote-share-action-icon", attr: { "aria-hidden": "true" } });
   const label = primary.createSpan({ text: t("分享当前笔记") });
   const toggle = control.createEl("button", { cls: "agentnote-share-toggle", attr: { type: "button", "aria-label": t("更多分享方式"), "aria-haspopup": "menu", "aria-expanded": "false" } });
