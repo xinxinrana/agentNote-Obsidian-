@@ -1,29 +1,48 @@
-import { Component } from "obsidian";
-import type { App, MarkdownView } from "obsidian";
+import { Component, MarkdownRenderer, getFrontMatterInfo } from "obsidian";
+import type { App } from "obsidian";
 import { renderExportDocument } from "./core/noteExport";
 import { t } from "./i18n";
 
-interface NativePrintView extends MarkdownView {
-  print?(container: HTMLElement, component: Component, includeName: boolean): Promise<HTMLElement>;
-}
-
-/** Experimental adapter: the host print renderer is private and must be checked at runtime. */
+/** Render full local content with the public host renderer, retaining native layout and resources. */
 export async function renderNativePdfDocument(app: App, parent: Component, sourcePath: string): Promise<string> {
   const file = app.vault.getFileByPath(sourcePath);
   if (!file || file.extension.toLowerCase() !== "md") throw new Error(t("请选择 Markdown 笔记导出。"));
-  let leaf = app.workspace.getLeavesOfType("markdown").find(leaf => (leaf.view as MarkdownView).file?.path === sourcePath);
-  const created = !leaf;
-  leaf ??= app.workspace.getLeaf("tab");
   const component = parent.addChild(new Component());
   const host = document.body.createDiv({ cls: "print agentnote-native-render-host" });
   try {
-    await leaf.openFile(file);
-    const view = leaf.view as NativePrintView;
-    if (typeof view.print !== "function") throw new Error(t("当前 Obsidian 不支持融合导出，请使用官方导出。"));
-    const rendered = await view.print(host, component, false);
-    if (!rendered?.matches(".markdown-preview-view")) throw new Error(t("原生打印内容不可用，请使用官方导出。"));
-    if (rendered.querySelector("iframe,object,embed,video,audio")) throw new Error(t("融合导出暂不支持交互嵌入，请使用官方导出。"));
+    const content = await app.vault.cachedRead(file);
+    const rendered = host.createDiv({ cls: "markdown-preview-view markdown-rendered" });
+    const frontmatter: unknown = app.metadataCache.getFileCache(file)?.frontmatter;
+    if (frontmatter && typeof frontmatter === "object") {
+      const value: unknown = (frontmatter as Record<string, unknown>).cssclasses ?? (frontmatter as Record<string, unknown>).cssclass;
+      const classes = (Array.isArray(value) ? value : [value]).flatMap((item: unknown) => typeof item === "string" ? item.split(/\s+/).filter(Boolean) : []);
+      if (classes.length) rendered.classList.add(...classes);
+    }
+    await MarkdownRenderer.render(app, content.slice(getFrontMatterInfo(content).contentStart), rendered, sourcePath, component);
+    if (rendered.querySelector("iframe,object,embed")) throw new Error(t("融合导出暂不支持交互嵌入，请使用官方导出。"));
     const snapshot = rendered.cloneNode(true) as HTMLElement;
+    const videos = Array.from(rendered.querySelectorAll("video"));
+    snapshot.querySelectorAll("video,audio").forEach(media => {
+      const figure = document.createElement("figure");
+      if (media.tagName === "VIDEO") {
+        const original = videos.shift();
+        let poster = original?.poster;
+        if (!poster && original && original.readyState >= 2 && original.videoWidth && original.videoHeight) {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = original.videoWidth;
+            canvas.height = original.videoHeight;
+            const context = canvas.getContext("2d");
+            if (context) { context.drawImage(original, 0, 0); poster = canvas.toDataURL("image/png"); }
+          } catch { /* Keep an explicit media label when no printable frame is available. */ }
+        }
+        if (poster) { const image = document.createElement("img"); image.src = poster; figure.append(image); }
+      }
+      const caption = document.createElement("figcaption");
+      caption.textContent = media.tagName === "VIDEO" ? t("视频（请在原笔记中播放）") : t("音频（请在原笔记中播放）");
+      figure.append(caption);
+      media.replaceWith(figure);
+    });
     const canvases = Array.from(rendered.querySelectorAll("canvas"));
     snapshot.querySelectorAll("canvas").forEach((canvas, index) => {
       const image = document.createElement("img");
@@ -98,6 +117,5 @@ export async function renderNativePdfDocument(app: App, parent: Component, sourc
   } finally {
     host.remove();
     parent.removeChild(component);
-    if (created) leaf.detach();
   }
 }

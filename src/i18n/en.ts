@@ -1,5 +1,7 @@
 /** Chinese source text is the key; placeholders preserve user content verbatim. */
 export const en: Record<string, string> = {
+  "视频（请在原笔记中播放）": "Video (play in the original note)",
+  "音频（请在原笔记中播放）": "Audio (play in the original note)",
   "融合导出资源读取失败，请使用官方导出。": "A hybrid export resource could not be read. Use native export.",
   "融合导出资源过大，请使用官方导出。": "Hybrid export resources are too large. Use native export.",
   "当前 Obsidian 不支持融合导出，请使用官方导出。": "This Obsidian version does not support hybrid export. Use native export.",
@@ -8,7 +10,7 @@ export const en: Record<string, string> = {
   "融合导出图片无法离线加载，请使用官方导出。": "Hybrid export cannot load this image offline. Use native export.",
   "融合导出仅支持整篇笔记。": "Hybrid export supports full notes only.",
   "复制融合 PDF（实验）": "Copy hybrid PDF (experimental)",
-  "原生打印正文，搭配 agentNote 版式": "Native print content with agentNote typography",
+  "原生渲染正文，搭配 agentNote 版式": "Native rendered content with agentNote typography",
 
   "笔记导出": "Note export",
   "Obsidian 官方导出 PDF": "Obsidian PDF export",
