@@ -5,7 +5,8 @@ import { execFile } from "child_process";
 import { fileURLToPath, pathToFileURL } from "url";
 import { language, t } from "../i18n";
 import { escapeHtml, imageMime, prepareShareMarkdown, restoreShareSlots, readInlineImage } from "./shareMarkdown";
-import { sharePageStyles } from "./sharePage";
+import { exportStyles } from "./exportStyles";
+import agentNoteLogo from "../../assets/brand/xiaoji-mark.svg";
 import { shareBrand, shareBrandStyles } from "./shareBrand";
 
 export type ExportFormat = "pdf" | "html" | "md";
@@ -38,11 +39,7 @@ export async function buildExportHtml(source: ExportSource, renderer: ExportRend
   }
   const rendered = await renderer.renderMarkdown(prepared.markdown, source.sourcePath);
   const body = restoreShareSlots(rendered, prepared, "", images).replaceAll('loading="lazy"', 'loading="eager"');
-  return `<!doctype html><html lang="${language() === "en" ? "en" : "zh-CN"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(source.title)}</title><style>${sharePageStyles}${shareBrandStyles}
-:root{color-scheme:light;--bg:#fff;--ink:#282330;--muted:#756c80;--line:#e5dfeb;--soft:#f8f5fc;--accent:#7443b7}body{background:#fff;color:#282330}header{display:block}header h1{margin:0}article{margin-top:24px}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{object-fit:contain}thead{display:table-header-group}
-@page{size:A4;margin:14mm}
-@media print{main{max-width:none;padding:0}header{padding-bottom:12px}h1,h2,h3{break-after:avoid}tr,img{break-inside:avoid}pre{overflow:visible}table{display:table;width:100%;font-size:12px}td,th{overflow-wrap:anywhere}article img{max-height:105mm}a{color:inherit}body{font-size:12px}h1{font-size:25px}footer{break-inside:avoid;margin-top:24px}}
-</style></head><body><main><header><h1>${escapeHtml(source.title)}</h1>${source.selection ? `<p>${escapeHtml(t("这是分享的选段，不是全文。"))}</p>` : ""}</header><article>${body}</article><footer>${shareBrand()}</footer></main></body></html>`;
+  return `<!doctype html><html lang="${language() === "en" ? "en" : "zh-CN"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(source.title)}</title><style>${exportStyles}${shareBrandStyles}</style></head><body><main><header class="document-header"><div class="document-brand"><img src="${escapeHtml(agentNoteLogo)}" alt="" width="25" height="25"><strong>agentNote</strong><span>${escapeHtml(t("笔记导出"))}</span></div><h1>${escapeHtml(source.title)}</h1><div class="document-rule" aria-hidden="true"></div>${source.selection ? `<p class="document-scope">${escapeHtml(t("这是分享的选段，不是全文。"))}</p>` : ""}</header><article>${body}</article><footer>${shareBrand()}</footer></main></body></html>`;
 }
 
 /** Keep the file after copying: native file clipboards reference a path until paste. */

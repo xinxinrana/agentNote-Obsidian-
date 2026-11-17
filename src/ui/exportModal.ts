@@ -10,6 +10,14 @@ export class ExportNoteModal extends Modal {
   onOpen(): void {
     this.contentEl.createEl("h2", { text: t("导出文件分享") });
     this.contentEl.createEl("p", { text: t("选择 PDF、HTML 或 Markdown，生成的文件会复制到剪贴板，可直接粘贴发送。") });
+    if (this.selection === undefined) {
+      const native = new Setting(this.contentEl).setName(t("Obsidian 官方导出 PDF")).setDesc(t("复杂页面样式推荐使用；打开原生导出配置"));
+      native.addButton(button => button.setButtonText(t("打开官方导出")).onClick(async () => {
+        button.setDisabled(true);
+        try { if (await this.plugin.exportFileFromPanel(this.sourcePath, "native-pdf")) this.close(); }
+        finally { button.setDisabled(false); }
+      }));
+    }
     this.contentEl.createEl("p", { text: t("PDF 和 HTML 携带笔记库中的图片；Markdown 保留原文和图片引用地址。") });
     new Setting(this.contentEl).setName(t("文件格式")).addDropdown(dropdown => dropdown.addOptions({ pdf: "PDF", html: "HTML", md: "Markdown" }).setValue(this.format).onChange(value => { this.format = value as ExportFormat; }));
     const button = this.contentEl.createEl("button", { cls: "mod-cta", text: t("生成并复制文件") });

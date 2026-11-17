@@ -1,4 +1,4 @@
-import { exportNoteFile } from "./exportFiles";
+import { exportNoteFile, openNativePdfExport } from "./exportFiles";
 import type { ExportFormat } from "./core/noteExport";
 import { ExportNoteModal, MarkdownExportNotice } from "./ui/exportModal";
 import { createShareRenderer, readShareImage } from "./shareRenderer";
@@ -389,8 +389,13 @@ export default class AgentNotePlugin extends Plugin {
       return false;
     }
   }
-  async exportFileFromPanel(sourcePath: string, format: ExportFormat, selection?: string): Promise<boolean> {
+  async exportFileFromPanel(sourcePath: string, format: ExportFormat | "native-pdf", selection?: string): Promise<boolean> {
     try {
+      if (format === "native-pdf") {
+        if (selection !== undefined) throw new Error(t("官方导出仅支持整篇笔记，请在笔记分享菜单中使用。"));
+        await openNativePdfExport(this.app, sourcePath);
+        return true;
+      }
       if (format === "md" && !this.settings.markdownExportNoticeDismissed) {
         const accepted = await new Promise<{ accepted: boolean; remember: boolean }>(resolve => {
           new MarkdownExportNotice(this.app, (accepted, remember) => resolve({ accepted, remember })).open();

@@ -1,5 +1,14 @@
 /** Chinese source text is the key; placeholders preserve user content verbatim. */
 export const en: Record<string, string> = {
+  "笔记导出": "Note export",
+  "Obsidian 官方导出 PDF": "Obsidian PDF export",
+  "复杂页面样式推荐使用；打开原生导出配置": "Recommended for complex layouts; opens native export settings",
+  "打开官方导出": "Open native export",
+  "正在打开导出…": "Opening export\u2026",
+  "已打开导出配置": "Export settings opened",
+  "当前 Obsidian 无法打开官方导出，请从笔记菜单选择导出为 PDF。": "Native export could not be opened. Choose Export to PDF from the note menu.",
+  "官方导出仅支持整篇笔记，请在笔记分享菜单中使用。": "Native export supports full notes only. Use the note sharing menu.",
+
   "部分历史暂时不可用，已保留原文件：{0}": "Some history is temporarily unavailable. Original files are preserved: {0}",
   "活动记录 ID 重复且内容不同：{0}": "Activity ID has conflicting content: {0}",
   "本机引用索引格式无效": "The local reference index is invalid",

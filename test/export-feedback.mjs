@@ -36,7 +36,7 @@ const pluginBundle = await build({
   loader: { '.svg': 'dataurl', '.png': 'dataurl', '.ico': 'dataurl', '.css': 'text' }, logLevel: 'silent',
   plugins: [{ name: 'export-result', setup(build) {
     build.onResolve({ filter: /^\.\/exportFiles$/ }, () => ({ path: 'exportFiles', namespace: 'fixture' }));
-    build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export async function exportNoteFile() { globalThis.exportCalls++; return globalThis.exportResult; }', loader: 'js' }));
+    build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export async function exportNoteFile() { globalThis.exportCalls++; return globalThis.exportResult; } export async function openNativePdfExport() { globalThis.nativeCalls++; }', loader: 'js' }));
   } }],
 });
 const exported = { exports: {} };
@@ -158,3 +158,30 @@ for (const selection of [undefined, '选段\n![[missing-image.png]]']) {
   await fs.rm((await import('node:path')).default.dirname(result.file), { recursive: true, force: true });
 }
 console.log('PASS Markdown export uses original note or selection without rendering or reading image files');
+
+const events = [];
+const target = { path: 'target.md', extension: 'md' };
+const existing = { view: { file: target }, async openFile(file) { assert.equal(file, target); events.push('open'); } };
+let dispatched = true;
+const app = { vault: { getFileByPath(path) { return path === target.path ? target : null; } }, workspace: {
+  getLeavesOfType(type) { assert.equal(type, 'markdown'); return [existing]; },
+  getLeaf() { throw new Error('Must reuse the target note'); },
+  setActiveLeaf(leaf, options) { assert.equal(leaf, existing); assert.equal(options.focus, true); events.push('focus'); },
+}, commands: { executeCommandById(id) { assert.equal(id, 'workspace:export-pdf'); events.push('dispatch'); return dispatched; } } };
+await nativeExport.exports.openNativePdfExport(app, target.path);
+assert.deepEqual(events, ['open', 'focus', 'dispatch']);
+dispatched = false;
+await assert.rejects(nativeExport.exports.openNativePdfExport(app, target.path), /官方导出/);
+await assert.rejects(nativeExport.exports.openNativePdfExport(app, 'missing.md'), /Markdown/);
+await assert.rejects(nativeExport.exports.openNativePdfExport({ ...app, commands: undefined }, target.path), /官方导出/);
+context.nativeCalls = 0;
+notices.length = 0;
+const exportCalls = context.exportCalls;
+assert.equal(await plugin.exportFileFromPanel(target.path, 'native-pdf'), true);
+assert.equal(context.nativeCalls, 1);
+assert.equal(context.exportCalls, exportCalls);
+assert.equal(notices.length, 0);
+assert.equal(await plugin.exportFileFromPanel(target.path, 'native-pdf', 'selection'), false);
+assert.equal(context.nativeCalls, 1);
+assert.match(notices.at(-1), /整篇笔记/);
+console.log('PASS native PDF opens the requested note before command dispatch, reports unavailable commands and never claims clipboard success or exports selections');

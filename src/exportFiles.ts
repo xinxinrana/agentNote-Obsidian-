@@ -63,3 +63,16 @@ export async function exportNoteFile(app: App, parent: Component, root: string, 
   const file = await writeExportFile(source.basename, format, output, printExportPdf);
   return { file, copied: await copyExportedFile(file) };
 }
+
+/** Dispatch the installed host command after focusing the requested full note. */
+export async function openNativePdfExport(app: App, sourcePath: string): Promise<void> {
+  const file = app.vault.getFileByPath(sourcePath);
+  if (!file || file.extension.toLowerCase() !== "md") throw new Error(t("请选择 Markdown 笔记导出。"));
+  // Command dispatch is a host capability, not a public PDF conversion API.
+  const commands = (app as App & { commands?: { executeCommandById(id: string): boolean } }).commands;
+  if (!commands?.executeCommandById) throw new Error(t("当前 Obsidian 无法打开官方导出，请从笔记菜单选择导出为 PDF。"));
+  const leaf = app.workspace.getLeavesOfType("markdown").find(leaf => (leaf.view as { file?: { path: string } }).file?.path === sourcePath) ?? app.workspace.getLeaf("tab");
+  await leaf.openFile(file);
+  app.workspace.setActiveLeaf(leaf, { focus: true });
+  if (!commands.executeCommandById("workspace:export-pdf")) throw new Error(t("当前 Obsidian 无法打开官方导出，请从笔记菜单选择导出为 PDF。"));
+}

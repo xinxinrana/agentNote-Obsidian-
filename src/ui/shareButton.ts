@@ -2,7 +2,7 @@ import { setIcon } from "obsidian";
 import { t } from "../i18n";
 import shareButtonStyles from "./shareButton.css";
 
-type ShareFormat = "link" | "pdf" | "html" | "md";
+type ShareFormat = "link" | "pdf" | "html" | "md" | "native-pdf";
 interface ShareButtonOptions {
   share(format: ShareFormat): Promise<boolean>;
 }
@@ -14,6 +14,7 @@ export function renderShareButton(parent: HTMLElement, options: ShareButtonOptio
   const formats: { id: ShareFormat; icon: string; title: string; detail: string }[] = [
     { id: "link", icon: "link", title: t("复制 Agent 链接"), detail: t("供本机 Agent 读取与写回") },
     { id: "pdf", icon: "file-text", title: t("复制 PDF 文件"), detail: t("适合发送、阅读和打印") },
+    { id: "native-pdf", icon: "printer", title: t("Obsidian 官方导出 PDF"), detail: t("复杂页面样式推荐使用；打开原生导出配置") },
     { id: "html", icon: "file-code", title: t("复制 HTML 文件"), detail: t("携带图片，浏览器直接打开") },
     { id: "md", icon: "file-text", title: t("复制 Markdown 文件"), detail: t("保留原文，图片仅保留引用地址") },
   ];
@@ -83,7 +84,7 @@ export function renderShareButton(parent: HTMLElement, options: ShareButtonOptio
     control.addClass("is-busy");
     primary.disabled = toggle.disabled = true;
     primary.setAttribute("aria-busy", "true");
-    label.setText(format === "link" ? t("正在复制链接…") : t("正在生成文件…"));
+    label.setText(format === "link" ? t("正在复制链接…") : format === "native-pdf" ? t("正在打开导出…") : t("正在生成文件…"));
     let shared = false;
     try { shared = await options.share(format); }
     finally {
@@ -94,7 +95,7 @@ export function renderShareButton(parent: HTMLElement, options: ShareButtonOptio
       reset();
       if (shared) {
         setIcon(icon, "check");
-        label.setText(format === "link" ? t("链接已复制") : t("文件已复制"));
+        label.setText(format === "link" ? t("链接已复制") : format === "native-pdf" ? t("已打开导出配置") : t("文件已复制"));
         control.addClass("is-complete");
         resetTimer = window.setTimeout(() => { if (control.isConnected) reset(); }, 2500);
       }
