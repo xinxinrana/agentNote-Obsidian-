@@ -36,12 +36,12 @@ const pluginBundle = await build({
   loader: { '.svg': 'dataurl', '.png': 'dataurl', '.ico': 'dataurl', '.css': 'text' }, logLevel: 'silent',
   plugins: [{ name: 'export-result', setup(build) {
     build.onResolve({ filter: /^\.\/exportFiles$/ }, () => ({ path: 'exportFiles', namespace: 'fixture' }));
-    build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export async function exportNoteFile() { globalThis.exportCalls++; return globalThis.exportResult; } export async function openNativePdfExport() { globalThis.nativeCalls++; }', loader: 'js' }));
+    build.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export async function exportNoteFile(...args) { globalThis.exportCalls++; if (globalThis.exportHeld) await new Promise((resolve, reject) => args[6].signal.addEventListener("abort", () => { const error = new Error("cancelled"); error.name = "AbortError"; reject(error); }, { once: true })); return globalThis.exportResult; } export async function openNativePdfExport() { globalThis.nativeCalls++; }', loader: 'js' }));
   } }],
 });
 const exported = { exports: {} };
 const context = {
-  module: exported, exports: exported.exports, Buffer, process, setTimeout, clearTimeout,
+  module: exported, exports: exported.exports, Buffer, process, setTimeout, clearTimeout, document, AbortController, window: { setTimeout, clearTimeout },
   require: name => name === 'obsidian' ? obsidian : name === 'electron' ? (() => { if (moduleFailure) throw new Error('module unavailable'); return electron; })() : require(name),
   exportCalls: 0, exportResult: { file, copied: false },
   console: { warn: (...args) => warnings.push(args) },
@@ -185,3 +185,17 @@ assert.equal(await plugin.exportFileFromPanel(target.path, 'native-pdf', 'select
 assert.equal(context.nativeCalls, 1);
 assert.match(notices.at(-1), /整篇笔记/);
 console.log('PASS native PDF opens the requested note before command dispatch, reports unavailable commands and never claims clipboard success or exports selections');
+
+notices.length = 0;
+context.exportHeld = true;
+const activeExport = plugin.exportFileFromPanel('note.md', 'html');
+await new Promise(resolve => setTimeout(resolve, 20));
+assert.ok(document.querySelector('.agentnote-export-task'));
+assert.equal(await plugin.exportFileFromPanel('note.md', 'html'), false);
+assert.match(notices.at(-1), /已有文件正在导出/);
+document.querySelector('.agentnote-export-task button').click();
+assert.equal(await activeExport, false);
+assert.equal(notices.at(-1), '导出已取消');
+assert.equal(document.querySelector('.agentnote-export-task'), null);
+context.exportHeld = false;
+console.log('PASS export lifecycle: one active job, cancel propagates to worker, no error toast on cancellation, card removed');

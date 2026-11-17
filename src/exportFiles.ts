@@ -2,14 +2,17 @@ import type { App, Component } from "obsidian";
 import { buildExportHtml, copyExportFileAndVerify, writeExportFile, writeMacFileClipboard, verifyMacFileClipboard } from "./core/noteExport";
 import type { MacFileClipboard, ExportFormat } from "./core/noteExport";
 import { createShareRenderer, readShareImage } from "./shareRenderer";
-import { continuousPdfHtml } from "./continuousPdf";
+import { prepareContinuousHtml, measureContinuousDocument } from "./continuousPdf";
 import { renderNativePdfDocument } from "./nativePdfExperiment";
+import { abortableExport, checkExport } from "./exportTask";
+import type { ExportControl } from "./exportTask";
 import { t } from "./i18n";
 
 interface PdfWindow {
   loadFile(file: string): Promise<void>;
   destroy(): void;
   webContents: {
+    debugger: { attach(version: string): void; detach(): void; sendCommand(method: string, params?: object): Promise<{ exceptionDetails?: unknown; result?: { value?: { heightMm: number; failedImages: string[] } } }> };
     printToPDF(options: { printBackground: boolean; pageSize: string; preferCSSPageSize: boolean; displayHeaderFooter: boolean; margins: { top: number; bottom: number; left: number; right: number } }): Promise<Uint8Array>;
     setWindowOpenHandler(handler: () => { action: "deny" }): void;
     on(event: string, handler: (event: { preventDefault(): void }) => void): void;
@@ -17,7 +20,7 @@ interface PdfWindow {
 }
 interface ElectronRemote { BrowserWindow: new (options: object) => PdfWindow }
 
-export async function printExportPdf(htmlPath: string): Promise<Uint8Array> {
+export async function printExportPdf(htmlPath: string, options: { continuous?: boolean; control?: ExportControl } = {}): Promise<Uint8Array> {
   let remote: ElectronRemote;
   try {
     const electron = require("electron") as { remote?: ElectronRemote };
@@ -29,13 +32,30 @@ export async function printExportPdf(htmlPath: string): Promise<Uint8Array> {
   try {
     win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     win.webContents.on("will-navigate", event => event.preventDefault());
-    return await Promise.race([
+    return await abortableExport(Promise.race([
       (async () => {
         await win.loadFile(htmlPath);
+        checkExport(options.control);
+        if (options.continuous) {
+          options.control?.onProgress?.(t("正在排版长页，可继续阅读笔记…"));
+          const debuggerApi = win.webContents.debugger;
+          debuggerApi.attach("1.3");
+          try {
+            await debuggerApi.sendCommand("Emulation.setEmulatedMedia", { media: "print" });
+            const result = await debuggerApi.sendCommand("Runtime.evaluate", { expression: `(${measureContinuousDocument.toString()})(${JSON.stringify(t("图片无法显示："))})`, awaitPromise: true, returnByValue: true });
+            if (result.exceptionDetails || !result.result?.value) {
+              const detail = JSON.stringify(result.exceptionDetails);
+              throw new Error(detail.includes("PAGE_TOO_LONG") ? t("内容超出单页 PDF 的尺寸上限，请使用官方分页导出。") : t("长页 PDF 排版失败，请重试。"));
+            }
+            for (const name of result.result.value.failedImages) options.control?.onWarning?.(name);
+          } finally { debuggerApi.detach(); }
+        }
+        checkExport(options.control);
+        options.control?.onProgress?.(t("正在生成 PDF，可继续阅读笔记…"));
         return win.webContents.printToPDF({ printBackground: true, pageSize: "A4", preferCSSPageSize: true, displayHeaderFooter: false, margins: { top: 0.55, bottom: 0.55, left: 0.55, right: 0.55 } });
       })(),
-      new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error(t("PDF 生成超时，请重试。"))), 30000); }),
-    ]);
+      new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error(t("PDF 生成超时，请重试。"))), 120000); }),
+    ]), options.control);
   } finally { if (timer) window.clearTimeout(timer); win.destroy(); }
 }
 
@@ -56,14 +76,18 @@ export async function copyExportedFile(file: string): Promise<boolean> {
   }
 }
 
-export async function exportNoteFile(app: App, parent: Component, root: string, sourcePath: string, format: ExportFormat | "hybrid-pdf", selection?: string): Promise<{ file: string; copied: boolean }> {
+export async function exportNoteFile(app: App, parent: Component, root: string, sourcePath: string, format: ExportFormat | "hybrid-pdf", selection?: string, control?: ExportControl): Promise<{ file: string; copied: boolean }> {
+  checkExport(control);
+  control?.onProgress?.(t("正在准备笔记…"));
   const source = app.vault.getFileByPath(sourcePath);
   if (!source || source.extension.toLowerCase() !== "md") throw new Error(t("请选择 Markdown 笔记导出。"));
   const content = selection ?? await app.vault.cachedRead(source);
   if (!content.trim()) throw new Error(t("笔记内容为空，无法导出。"));
   if (format === "hybrid-pdf" && selection !== undefined) throw new Error(t("融合导出仅支持整篇笔记。"));
-  const output = format === "hybrid-pdf" ? await continuousPdfHtml(await renderNativePdfDocument(app, parent, sourcePath)) : format === "md" ? content : await buildExportHtml({ title: source.basename, content, sourcePath, selection: selection !== undefined }, { renderMarkdown: createShareRenderer(app, parent), readImage: (link, originalPath) => readShareImage(app, root, link, originalPath) });
-  const file = await writeExportFile(source.basename, format === "hybrid-pdf" ? "pdf" : format, output, printExportPdf);
+  const output = format === "hybrid-pdf" ? prepareContinuousHtml(await renderNativePdfDocument(app, parent, sourcePath, control)) : format === "md" ? content : await buildExportHtml({ title: source.basename, content, sourcePath, selection: selection !== undefined }, { renderMarkdown: createShareRenderer(app, parent), readImage: (link, originalPath) => readShareImage(app, root, link, originalPath) });
+  const file = await writeExportFile(source.basename, format === "hybrid-pdf" ? "pdf" : format, output, sourceFile => printExportPdf(sourceFile, { continuous: format === "hybrid-pdf", control }));
+  checkExport(control);
+  control?.onProgress?.(t("正在复制文件…"));
   return { file, copied: await copyExportedFile(file) };
 }
 

@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { build } from 'esbuild';
+import { JSDOM } from 'jsdom';
+const dom = new JSDOM('<!doctype html><body><p id="note">笔记仍可阅读</p></body>', { pretendToBeVisual: true });
+const { document } = dom.window;
+dom.window.HTMLElement.prototype.createEl = function(tag, options = {}) { const el = document.createElement(tag); el.className = options.cls || ''; el.textContent = options.text || ''; for (const [key, value] of Object.entries(options.attr || {})) el.setAttribute(key, value); this.append(el); return el; };
+dom.window.HTMLElement.prototype.createDiv = function(options) { return this.createEl('div', options); };
+const bundle = await build({ entryPoints: ['src/ui/exportProgress.ts'], bundle: true, format: 'cjs', loader: { '.css': 'text' }, write: false, logLevel: 'silent' });
+const module = { exports: {} };
+vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, document });
+try {
+  const controller = new AbortController();
+  const task = module.exports.showExportProgress('长文章.md', controller);
+  const card = document.querySelector('.agentnote-export-task');
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.ok(document.getElementById('note'));
+  assert.equal(card.querySelector('progress').hasAttribute('value'), false);
+  task.control.onProgress('正在处理图片 3 / 17', 3, 17);
+  assert.equal(card.querySelector('progress').value, 3);
+  assert.equal(card.querySelector('progress').max, 17);
+  task.control.onProgress('正在生成 PDF，可继续阅读笔记…');
+  assert.equal(card.querySelector('progress').hasAttribute('value'), false);
+  card.querySelector('button').click();
+  assert.equal(controller.signal.aborted, true);
+  task.control.onProgress('late update');
+  assert.equal(card.querySelector('[role="status"]').textContent, '正在取消…');
+  assert.equal(card.querySelector('button').disabled, true);
+  task.close();
+  assert.equal(document.querySelector('.agentnote-export-task'), null);
+  console.log('PASS nonmodal export card: real counts, indeterminate print phase, accessible cancellation, no stale updates and cleanup');
+} finally { dom.window.close(); }

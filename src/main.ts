@@ -1,3 +1,5 @@
+import { showExportProgress } from "./ui/exportProgress";
+import { yieldExport } from "./exportTask";
 import { exportNoteFile, openNativePdfExport } from "./exportFiles";
 import type { ExportFormat } from "./core/noteExport";
 import { ExportNoteModal, MarkdownExportNotice } from "./ui/exportModal";
@@ -33,6 +35,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export default class AgentNotePlugin extends Plugin {
+  private exportController?: AbortController;
   settings: AgentNoteSettings = DEFAULT_SETTINGS;
   store!: VaultStore;
   connections!: AgentConnections;
@@ -99,6 +102,7 @@ export default class AgentNotePlugin extends Plugin {
     if (this.settings.autostartServer) await this.startServer(true);
   }
   onunload(): void {
+    this.exportController?.abort();
     removeIcon("agentnote-mark");
     this.portConflictModal?.close();
     this.bulkModal?.close();
@@ -390,6 +394,8 @@ export default class AgentNotePlugin extends Plugin {
     }
   }
   async exportFileFromPanel(sourcePath: string, format: ExportFormat | "native-pdf" | "hybrid-pdf", selection?: string): Promise<boolean> {
+    let task: ReturnType<typeof showExportProgress> | undefined;
+    let warnings = 0;
     try {
       if (format === "native-pdf") {
         if (selection !== undefined) throw new Error(t("官方导出仅支持整篇笔记，请在笔记分享菜单中使用。"));
@@ -407,7 +413,13 @@ export default class AgentNotePlugin extends Plugin {
           catch (error) { this.settings.markdownExportNoticeDismissed = false; throw error; }
         }
       }
-      const result = await exportNoteFile(this.app, this, this.store.root, sourcePath, format, selection);
+      if (this.exportController) { new Notice(t("已有文件正在导出，请等待完成或取消。")); return false; }
+      const controller = new AbortController();
+      this.exportController = controller;
+      task = showExportProgress(path.basename(sourcePath), controller);
+      task.control.onWarning = () => { warnings++; };
+      await yieldExport(task.control);
+      const result = await exportNoteFile(this.app, this, this.store.root, sourcePath, format, selection, task.control);
       if (!result.copied) {
         try {
           const { shell } = require("electron") as typeof import("electron");
@@ -419,9 +431,15 @@ export default class AgentNotePlugin extends Plugin {
         }
         return false;
       }
-      new Notice(t("{0} 文件已复制，可直接粘贴发送。", (format === "hybrid-pdf" ? "PDF" : format.toUpperCase())), 5000);
+      const label = format === "hybrid-pdf" ? "PDF" : format.toUpperCase();
+      new Notice(warnings ? t("{0} 文件已复制；{1} 张图片无法显示，已在文档中标注。", label, warnings) : t("{0} 文件已复制，可直接粘贴发送。", label), warnings ? 10000 : 5000);
       return true;
-    } catch (error) { new Notice(t("导出失败：{0}", (error as Error).message), 7000); return false; }
+    } catch (error) {
+      new Notice((error as Error).name === "AbortError" ? t("导出已取消") : t("导出失败：{0}", (error as Error).message), 7000);
+      return false;
+    } finally {
+      if (task) { task.close(); this.exportController = undefined; }
+    }
   }
   private async sharePaths(files: TAbstractFile[]): Promise<void> {
     try { this.shareServicePort(); }

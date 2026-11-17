@@ -25,7 +25,7 @@ const obsidian = { Component: class {}, getFrontMatterInfo: () => ({ contentStar
   if (renderFailure) throw new Error('render failed');
   el.innerHTML = '<div class="native-layout" style="gap:12px"><p>Native body</p><svg viewBox="0 0 20 20"><path d="M0 0L20 20"/></svg></div><img src="app://local/image.png" onload="alert(1)"><script>bad()</script>' + extra;
 } } };
-vm.runInNewContext(bundle.outputFiles[0].text, { module: exported, exports: exported.exports, document, URL, Buffer, process, AbortSignal, window: { fetch: async url => ({ ok: true, headers: { get: () => url.endsWith('.woff') ? 'font/woff' : 'image/png' }, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }) }, require: name => name === 'obsidian' ? obsidian : require(name) });
+vm.runInNewContext(bundle.outputFiles[0].text, { module: exported, exports: exported.exports, document, URL, Buffer, process, AbortSignal, window: { setTimeout, clearTimeout, fetch: async url => ({ ok: true, headers: { get: () => url.endsWith('.woff') ? 'font/woff' : 'image/png' }, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }) }, require: name => name === 'obsidian' ? obsidian : require(name) });
 try {
   const html = await exported.exports.renderNativePdfDocument(app, parent, file.path);
   const result = new JSDOM(html).window.document;
@@ -58,5 +58,16 @@ try {
   extra = '<img src="https://example.com/remote.png">';
   await assert.rejects(exported.exports.renderNativePdfDocument(app, parent, file.path), /离线加载/);
   assert.equal(children, 0);
+  extra = '';
+  const render = obsidian.MarkdownRenderer.render;
+  let started;
+  const entered = new Promise(resolve => { started = resolve; });
+  obsidian.MarkdownRenderer.render = () => { started(); return new Promise(() => {}); };
+  const controller = new AbortController();
+  const pending = exported.exports.renderNativePdfDocument(app, parent, file.path, { signal: controller.signal });
+  await entered; controller.abort();
+  await assert.rejects(pending, error => error.name === 'AbortError');
+  assert.equal(children, 0); assert.equal(document.querySelector('.agentnote-native-render-host'), null);
+  obsidian.MarkdownRenderer.render = render;
   console.log('PASS hybrid uses the public MarkdownRenderer without private view methods, preserves cssclasses/SVG/layout, embeds images/fonts and cleans up on failure');
 } finally { dom.window.close(); }

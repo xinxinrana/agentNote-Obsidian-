@@ -1,5 +1,22 @@
 /** Chinese source text is the key; placeholders preserve user content verbatim. */
 export const en: Record<string, string> = {
+  "文件导出进度": "File export progress",
+  "正在导出文件": "Exporting file",
+  "正在准备笔记…": "Preparing note\u2026",
+  "可以继续阅读笔记": "You can keep reading",
+  "取消导出": "Cancel export",
+  "正在取消…": "Cancelling\u2026",
+  "已有文件正在导出，请等待完成或取消。": "An export is already running. Wait for it or cancel.",
+  "导出已取消": "Export cancelled",
+  "正在渲染笔记…": "Rendering note\u2026",
+  "正在处理图片 {0} / {1}": "Processing image {0} / {1}",
+  "正在整理文档样式…": "Preparing document styles\u2026",
+  "正在排版长页，可继续阅读笔记…": "Laying out continuous page. You can keep reading\u2026",
+  "正在生成 PDF，可继续阅读笔记…": "Generating PDF. You can keep reading\u2026",
+  "正在复制文件…": "Copying file\u2026",
+  "图片无法显示：": "Image unavailable: ",
+  "{0} 文件已复制；{1} 张图片无法显示，已在文档中标注。": "{0} file copied; {1} images could not be displayed and are marked in the document.",
+
   "长页 PDF 排版失败，请重试。": "Continuous PDF layout failed. Try again.",
   "长页 PDF 排版超时，请重试。": "Continuous PDF layout timed out. Try again.",
   "内容超出单页 PDF 的尺寸上限，请使用官方分页导出。": "The content exceeds the single-page PDF size limit. Use native paginated export.",

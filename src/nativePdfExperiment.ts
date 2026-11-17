@@ -1,10 +1,15 @@
 import { Component, MarkdownRenderer, getFrontMatterInfo } from "obsidian";
 import type { App } from "obsidian";
 import { renderExportDocument } from "./core/noteExport";
+import { abortableExport, checkExport, compactExportImage, yieldExport } from "./exportTask";
+import type { ExportControl } from "./exportTask";
 import { t } from "./i18n";
 
 /** Render full local content with the public host renderer, retaining native layout and resources. */
-export async function renderNativePdfDocument(app: App, parent: Component, sourcePath: string): Promise<string> {
+export async function renderNativePdfDocument(app: App, parent: Component, sourcePath: string, control?: ExportControl): Promise<string> {
+  checkExport(control);
+  control?.onProgress?.(t("正在渲染笔记…"));
+  await yieldExport(control);
   const file = app.vault.getFileByPath(sourcePath);
   if (!file || file.extension.toLowerCase() !== "md") throw new Error(t("请选择 Markdown 笔记导出。"));
   const component = parent.addChild(new Component());
@@ -18,7 +23,8 @@ export async function renderNativePdfDocument(app: App, parent: Component, sourc
       const classes = (Array.isArray(value) ? value : [value]).flatMap((item: unknown) => typeof item === "string" ? item.split(/\s+/).filter(Boolean) : []);
       if (classes.length) rendered.classList.add(...classes);
     }
-    await MarkdownRenderer.render(app, content.slice(getFrontMatterInfo(content).contentStart), rendered, sourcePath, component);
+    await abortableExport(MarkdownRenderer.render(app, content.slice(getFrontMatterInfo(content).contentStart), rendered, sourcePath, component), control);
+    await yieldExport(control);
     if (rendered.querySelector("iframe,object,embed")) throw new Error(t("融合导出暂不支持交互嵌入，请使用官方导出。"));
     const snapshot = rendered.cloneNode(true) as HTMLElement;
     const videos = Array.from(rendered.querySelectorAll("video"));
@@ -58,29 +64,52 @@ export async function renderNativePdfDocument(app: App, parent: Component, sourc
     const resources = new Map<string, Promise<string>>();
     let totalBytes = 0;
     const embed = (address: string, base: string): Promise<string> => {
+      checkExport(control);
       if (address.startsWith("data:") || address.startsWith("#")) return Promise.resolve(address);
       const uri = new URL(address, base);
       if (!["app:", "blob:"].includes(uri.protocol)) throw new Error(t("融合导出图片无法离线加载，请使用官方导出。"));
       let pending = resources.get(uri.href);
       if (!pending) {
         pending = (async () => {
-          const response = await window.fetch(uri.href, { signal: AbortSignal.timeout(10000) });
+          const response = await window.fetch(uri.href, { signal: control?.signal ? AbortSignal.any([control.signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
           if (!response.ok) throw new Error(t("融合导出资源读取失败，请使用官方导出。"));
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          totalBytes += bytes.byteLength;
-          if (bytes.byteLength > 20 * 1024 * 1024 || totalBytes > 50 * 1024 * 1024) throw new Error(t("融合导出资源过大，请使用官方导出。"));
+          let bytes: Uint8Array = new Uint8Array(await response.arrayBuffer());
+          if (bytes.byteLength > 20 * 1024 * 1024) throw new Error(t("融合导出资源过大，请使用官方导出。"));
           const mime = response.headers.get("content-type")?.split(";")[0] || "application/octet-stream";
-          return `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
+          // A resource response may omit its MIME type; image decoders still inspect its bytes.
+          bytes = await compactExportImage(bytes, mime, control);
+          totalBytes += bytes.byteLength;
+          if (totalBytes > 50 * 1024 * 1024) throw new Error(t("融合导出资源过大，请使用官方导出。"));
+          await yieldExport(control);
+          return `data:${mime};base64,${Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64")}`;
         })();
         resources.set(uri.href, pending);
       }
       return pending;
     };
     // Embed host resources before moving the content into the isolated PDF window.
-    for (const image of Array.from(snapshot.querySelectorAll("img"))) {
-      image.src = await embed(image.getAttribute("src") || "", document.baseURI);
+    const images = Array.from(snapshot.querySelectorAll("img"));
+    for (const [index, image] of images.entries()) {
+      control?.onProgress?.(t("正在处理图片 {0} / {1}", index + 1, images.length), index, images.length);
+      let address = image.getAttribute("src") || "";
+      if (!address && image.getAttribute("data-src")) {
+        const target = app.metadataCache.getFirstLinkpathDest(image.getAttribute("data-src")!, sourcePath);
+        if (target) address = app.vault.getResourcePath(target);
+      }
+      const name = image.alt || image.getAttribute("data-src") || String(index + 1);
+      image.setAttribute("data-export-image", name);
+      if (!address || address === "data:,") {
+        const label = document.createElement("span");
+        label.textContent = t("图片无法显示：") + name;
+        image.replaceWith(label);
+        control?.onWarning?.(name);
+        continue;
+      }
+      image.src = await embed(address, document.baseURI);
       image.removeAttribute("srcset");
       image.loading = "eager";
+      control?.onProgress?.(t("正在处理图片 {0} / {1}", index + 1, images.length), index + 1, images.length);
+      await yieldExport(control);
     }
     for (const image of Array.from(snapshot.querySelectorAll("svg image"))) {
       const address = image.getAttribute("href") || image.getAttribute("xlink:href");
@@ -96,10 +125,14 @@ export async function renderNativePdfDocument(app: App, parent: Component, sourc
       let index = 0;
       return css.replace(/url\(\s*(['"]?)([^)'"\s]+)\1\s*\)/gi, () => `url("${values[index++]}")`);
     };
+    control?.onProgress?.(t("正在整理文档样式…"));
+    let ruleCount = 0;
     const readStyles = async (sheet: CSSStyleSheet): Promise<string> => {
       const base = sheet.href || document.baseURI;
       const rules: string[] = [];
       for (const rule of Array.from(sheet.cssRules)) {
+        if (++ruleCount % 40 === 0) await yieldExport(control);
+        checkExport(control);
         if (rule.type === 3) {
           const imported = (rule as CSSImportRule).styleSheet;
           if (!imported) throw new Error(t("融合导出资源读取失败，请使用官方导出。"));
@@ -108,7 +141,9 @@ export async function renderNativePdfDocument(app: App, parent: Component, sourc
       }
       return rules.join("\n");
     };
-    const styles = (await Promise.all(Array.from(document.styleSheets, sheet => readStyles(sheet)))).join("\n");
+    const sheets: string[] = [];
+    for (const sheet of Array.from(document.styleSheets)) { sheets.push(await readStyles(sheet)); await yieldExport(control); }
+    const styles = sheets.join("\n");
     for (const element of Array.from(snapshot.querySelectorAll<HTMLElement>("[style]"))) {
       element.setAttribute("style", await inlineStyle(element.getAttribute("style") || "", document.baseURI));
     }

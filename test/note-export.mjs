@@ -195,6 +195,8 @@ try {
   await test('Electron PDF window is hidden and sandboxed, and destroyed after printing or failure', async () => {
     let destroyed = 0;
     let fail = false;
+    let slow = false, rejectPrint, entered;
+    let attached = 0;
     class BrowserWindow {
       constructor(options) {
         assert.equal(options.show, false);
@@ -203,11 +205,18 @@ try {
         this.webContents = {
           setWindowOpenHandler(handler) { assert.equal(handler().action, 'deny'); },
           on() {},
-          async printToPDF(options) { assert.equal(options.pageSize, 'A4'); return Buffer.from('%PDF-1.7'); },
+          debugger: {
+            attach() { attached++; }, detach() { attached--; },
+            async sendCommand(method, params) {
+              if (method === 'Runtime.evaluate') { assert.equal(params.awaitPromise, true); assert.match(params.expression, /naturalWidth/); return { result: { value: { heightMm: 1200, failedImages: ['broken.png'] } } }; }
+              assert.equal(method, 'Emulation.setEmulatedMedia'); return {};
+            },
+          },
+          async printToPDF(options) { assert.equal(options.pageSize, 'A4'); if (slow) { entered(); return new Promise((_, reject) => { rejectPrint = reject; }); } return Buffer.from('%PDF-1.7'); },
         };
       }
       async loadFile(file) { assert.equal(file, '/safe/export.html'); if (fail) throw new Error('load failed'); }
-      destroy() { destroyed++; }
+      destroy() { destroyed++; rejectPrint?.(new Error("Window closed")); }
     }
     const bundle = await build({ entryPoints: ['src/exportFiles.ts'], loader: { '.svg': 'dataurl', '.png': 'dataurl' }, bundle: true, platform: 'node', format: 'cjs', external: ['obsidian', 'electron', '@electron/remote'], write: false, logLevel: 'silent' });
     const exported = { exports: {} };
@@ -217,6 +226,17 @@ try {
     fail = true;
     await assert.rejects(exported.exports.printExportPdf('/safe/export.html'), /load failed/);
     assert.equal(destroyed, 2);
+    fail = false;
+    const missing = [];
+    await exported.exports.printExportPdf('/safe/export.html', { continuous: true, control: { onWarning: name => missing.push(name) } });
+    assert.deepEqual(missing, ['broken.png']); assert.equal(attached, 0); assert.equal(destroyed, 3);
+    slow = true;
+    const controller = new AbortController();
+    const printing = new Promise(resolve => { entered = resolve; });
+    const pending = exported.exports.printExportPdf('/safe/export.html', { control: { signal: controller.signal } });
+    await printing; controller.abort();
+    await assert.rejects(pending, error => error.name === 'AbortError');
+    assert.equal(destroyed, 4);
   });
 } finally { await fs.rm(temp, { recursive: true, force: true }); }
 console.log(`${passed} note-export checks passed`);

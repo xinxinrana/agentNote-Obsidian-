@@ -1,7 +1,5 @@
-import { t } from "./i18n";
-
-// Measure the same width, typography and padding used by Chromium's print layout.
-const continuousStyles = `
+// Keep screen and print typography identical while measuring a continuous page.
+export const continuousStyles = `
 @page{margin:0}
 html,body{width:210mm!important;height:auto!important;min-height:0!important;overflow:visible!important}
 body{font-size:11pt!important;line-height:1.8!important}
@@ -11,42 +9,35 @@ article h1{font-size:19pt!important}h2{font-size:16pt!important}h3{font-size:13p
 .agentnote-export-document *{break-before:auto!important;break-after:auto!important;break-inside:auto!important;page-break-before:auto!important;page-break-after:auto!important;page-break-inside:auto!important}
 `;
 
-/** One content-sized PDF page; the measurement frame never executes note scripts. */
-export async function continuousPdfHtml(html: string): Promise<string> {
-  const content = html.replace("</head>", `<style>${continuousStyles}</style></head>`);
-  const frame = document.createElement("iframe");
-  frame.className = "agentnote-export-measure-frame";
-  frame.setAttribute("sandbox", "allow-same-origin");
-  frame.setAttribute("aria-hidden", "true");
-  frame.tabIndex = -1;
-  let timer: number | undefined;
-  try {
-    const measured = (async () => {
-      await new Promise<void>((resolve, reject) => {
-        frame.onload = () => { if (frame.contentDocument?.querySelector("main.agentnote-export-document")) resolve(); };
-        frame.onerror = () => reject(new Error(t("长页 PDF 排版失败，请重试。")));
-        frame.srcdoc = content;
-        document.body.append(frame);
-      });
-      const doc = frame.contentDocument;
-      if (!doc) throw new Error(t("长页 PDF 排版失败，请重试。"));
-      await doc.fonts.ready;
-      await Promise.all(Array.from(doc.images, image => image.decode()));
-      const main = doc.querySelector("main.agentnote-export-document");
-      if (!main) throw new Error(t("长页 PDF 排版失败，请重试。"));
-      const pixels = Math.ceil(Math.max(main.getBoundingClientRect().height, main.scrollHeight, doc.body.scrollHeight)) + 4;
-      // Standard PDF page dimensions are limited to 200 inches without UserUnit scaling.
-      if (!Number.isFinite(pixels) || pixels <= 4 || pixels > 200 * 96) throw new Error(t("内容超出单页 PDF 的尺寸上限，请使用官方分页导出。"));
-      const heightMm = Math.ceil(pixels / 96 * 25.4 * 100) / 100;
-      return content.replace("</head>", `<style>@page{size:210mm ${heightMm}mm;margin:0}</style></head>`);
-    })();
-    return await Promise.race([
-      measured,
-      new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error(t("长页 PDF 排版超时，请重试。"))), 15000); }),
-    ]);
-  } finally {
-    if (timer !== undefined) window.clearTimeout(timer);
-    frame.onload = frame.onerror = null;
-    frame.remove();
+
+export function prepareContinuousHtml(html: string): string {
+  return html.replace("</head>", `<style>${continuousStyles}</style></head>`);
+}
+
+/** Runs only in the isolated PDF renderer, never in Obsidian's workspace. */
+export async function measureContinuousDocument(missingLabel: string): Promise<{ heightMm: number; failedImages: string[] }> {
+  await document.fonts.ready;
+  const failedImages: string[] = [];
+  for (const image of Array.from(document.images)) {
+    if (image.complete && image.naturalWidth > 0) continue;
+    try { await image.decode(); } catch { /* Check actual drawable pixels instead of relying on decode() alone. */ }
+    if (image.naturalWidth > 0) continue;
+    const name = image.getAttribute("data-export-image") || image.alt || String(failedImages.length + 1);
+    if (image.closest("article")) {
+      const placeholder = document.createElement("span");
+      placeholder.textContent = `${missingLabel} ${name}`;
+      placeholder.className = "unavailable-embed";
+      image.replaceWith(placeholder);
+      failedImages.push(name);
+    } else image.remove();
   }
+  const main = document.querySelector("main.agentnote-export-document");
+  if (!main) throw new Error("LAYOUT_UNAVAILABLE");
+  const pixels = Math.ceil(Math.max(main.getBoundingClientRect().height, main.scrollHeight, document.body.scrollHeight)) + 4;
+  if (!Number.isFinite(pixels) || pixels <= 4 || pixels > 200 * 96) throw new Error("PAGE_TOO_LONG");
+  const heightMm = Math.ceil(pixels / 96 * 25.4 * 100) / 100;
+  const style = document.createElement("style");
+  style.textContent = `@page{size:210mm ${heightMm}mm;margin:0}`;
+  document.head.append(style);
+  return { heightMm, failedImages };
 }
