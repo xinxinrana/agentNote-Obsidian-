@@ -389,7 +389,7 @@ export default class AgentNotePlugin extends Plugin {
       return false;
     }
   }
-  async exportFileFromPanel(sourcePath: string, format: ExportFormat | "native-pdf", selection?: string): Promise<boolean> {
+  async exportFileFromPanel(sourcePath: string, format: ExportFormat | "native-pdf" | "hybrid-pdf", selection?: string): Promise<boolean> {
     try {
       if (format === "native-pdf") {
         if (selection !== undefined) throw new Error(t("官方导出仅支持整篇笔记，请在笔记分享菜单中使用。"));
@@ -419,7 +419,7 @@ export default class AgentNotePlugin extends Plugin {
         }
         return false;
       }
-      new Notice(t("{0} 文件已复制，可直接粘贴发送。", format.toUpperCase()), 5000);
+      new Notice(t("{0} 文件已复制，可直接粘贴发送。", (format === "hybrid-pdf" ? "PDF" : format.toUpperCase())), 5000);
       return true;
     } catch (error) { new Notice(t("导出失败：{0}", (error as Error).message), 7000); return false; }
   }

@@ -39,7 +39,12 @@ export async function buildExportHtml(source: ExportSource, renderer: ExportRend
   }
   const rendered = await renderer.renderMarkdown(prepared.markdown, source.sourcePath);
   const body = restoreShareSlots(rendered, prepared, "", images).replaceAll('loading="lazy"', 'loading="eager"');
-  return `<!doctype html><html lang="${language() === "en" ? "en" : "zh-CN"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(source.title)}</title><style>${exportStyles}${shareBrandStyles}</style></head><body><main><header class="document-header"><div class="document-brand"><img src="${escapeHtml(agentNoteLogo)}" alt="" width="25" height="25"><strong>agentNote</strong><span>${escapeHtml(t("笔记导出"))}</span></div><h1>${escapeHtml(source.title)}</h1><div class="document-rule" aria-hidden="true"></div>${source.selection ? `<p class="document-scope">${escapeHtml(t("这是分享的选段，不是全文。"))}</p>` : ""}</header><article>${body}</article><footer>${shareBrand()}</footer></main></body></html>`;
+  return renderExportDocument(source, body);
+}
+
+export function renderExportDocument(source: ExportSource, body: string, nativeStyles = ""): string {
+  const policy = nativeStyles ? "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" : "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+  return `<!doctype html><html lang="${language() === "en" ? "en" : "zh-CN"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="${policy}"><title>${escapeHtml(source.title)}</title><style>${nativeStyles.replace(/<\/style/gi, "<\\/style")}${exportStyles}${shareBrandStyles}</style></head><body${nativeStyles ? ' class="theme-light"' : ""}><main${nativeStyles ? ' class="print agentnote-export-document"' : ""}><header class="document-header"><div class="document-brand"><img src="${escapeHtml(agentNoteLogo)}" alt="" width="25" height="25"><strong>agentNote</strong><span>${escapeHtml(t("笔记导出"))}</span></div><h1>${escapeHtml(source.title)}</h1><div class="document-rule" aria-hidden="true"></div>${source.selection ? `<p class="document-scope">${escapeHtml(t("这是分享的选段，不是全文。"))}</p>` : ""}</header><article>${body}</article><footer>${shareBrand()}</footer></main></body></html>`;
 }
 
 /** Keep the file after copying: native file clipboards reference a path until paste. */
