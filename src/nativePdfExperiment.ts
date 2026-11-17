@@ -1,7 +1,7 @@
 import { Component, MarkdownRenderer, getFrontMatterInfo } from "obsidian";
 import type { App } from "obsidian";
 import { renderExportDocument } from "./core/noteExport";
-import { abortableExport, checkExport, compactExportImage, yieldExport } from "./exportTask";
+import { abortableExport, checkExport, compactExportImage, exportImageMime, yieldExport } from "./exportTask";
 import type { ExportControl } from "./exportTask";
 import { t } from "./i18n";
 
@@ -74,12 +74,13 @@ export async function renderNativePdfDocument(app: App, parent: Component, sourc
           const response = await window.fetch(uri.href, { signal: control?.signal ? AbortSignal.any([control.signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
           if (!response.ok) throw new Error(t("融合导出资源读取失败，请使用官方导出。"));
           let bytes: Uint8Array = new Uint8Array(await response.arrayBuffer());
-          if (bytes.byteLength > 20 * 1024 * 1024) throw new Error(t("融合导出资源过大，请使用官方导出。"));
-          const mime = response.headers.get("content-type")?.split(";")[0] || "application/octet-stream";
+          const mime = exportImageMime(bytes, response.headers.get("content-type")?.split(";")[0] || "application/octet-stream");
           // A resource response may omit its MIME type; image decoders still inspect its bytes.
           bytes = await compactExportImage(bytes, mime, control);
           totalBytes += bytes.byteLength;
-          if (totalBytes > 50 * 1024 * 1024) throw new Error(t("融合导出资源过大，请使用官方导出。"));
+          const name = decodeURIComponent(uri.pathname.split("/").pop() || "resource");
+          if (bytes.byteLength > 20 * 1024 * 1024) throw new Error(t("资源「{0}」优化后仍有 {1} MiB，超过单个资源 20 MiB 上限。", name, (bytes.byteLength / 1024 / 1024).toFixed(1)));
+          if (totalBytes > 50 * 1024 * 1024) throw new Error(t("处理「{0}」后，导出资源合计 {1} MiB，超过 50 MiB 上限。", name, (totalBytes / 1024 / 1024).toFixed(1)));
           await yieldExport(control);
           return `data:${mime};base64,${Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64")}`;
         })();

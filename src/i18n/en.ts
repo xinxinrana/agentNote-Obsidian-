@@ -1,5 +1,7 @@
 /** Chinese source text is the key; placeholders preserve user content verbatim. */
 export const en: Record<string, string> = {
+  "资源「{0}」优化后仍有 {1} MiB，超过单个资源 20 MiB 上限。": "Resource \"{0}\" is still {1} MiB after optimization, exceeding the 20 MiB per-resource limit.",
+  "处理「{0}」后，导出资源合计 {1} MiB，超过 50 MiB 上限。": "After processing \"{0}\", export resources total {1} MiB, exceeding the 50 MiB limit.",
   "文件导出进度": "File export progress",
   "正在导出文件": "Exporting file",
   "正在准备笔记…": "Preparing note\u2026",

@@ -23,6 +23,15 @@ export async function abortableExport<T>(pending: Promise<T>, control?: ExportCo
   } finally { signal.removeEventListener("abort", cancel); }
 }
 
+/** Extensions and app:// response headers may describe .png aliases of JPEG/WebP files. */
+export function exportImageMime(bytes: Uint8Array, fallback: string): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if ([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((value, index) => bytes[index] === value)) return "image/png";
+  if (String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" && String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP") return "image/webp";
+  if (["GIF87a", "GIF89a"].includes(String.fromCharCode(...bytes.subarray(0, 6)))) return "image/gif";
+  return fallback.toLowerCase();
+}
+
 /** Decode/resize large raster assets asynchronously before sending them to the PDF process. */
 export async function compactExportImage(bytes: Uint8Array, mime: string, control?: ExportControl): Promise<Uint8Array> {
   checkExport(control);
@@ -40,6 +49,7 @@ export async function compactExportImage(bytes: Uint8Array, mime: string, contro
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob = await canvas.convertToBlob({ type: mime, quality: 0.9 });
     checkExport(control);
-    return new Uint8Array(await blob.arrayBuffer());
+    const compacted = new Uint8Array(await blob.arrayBuffer());
+    return compacted.byteLength < bytes.byteLength ? compacted : bytes;
   } finally { image.close(); }
 }

@@ -85,12 +85,17 @@ try {
     const small=await module.exports.compactExportImage(raw,'image/png');
     const image=await createImageBitmap(new Blob([small],{type:'image/png'}));
     const result={width:image.width,height:image.height,reduced:small.byteLength<raw.byteLength};image.close();
+    const jpeg=new Uint8Array(await new Blob([await canvas.convertToBlob({type:'image/jpeg'}),new Uint8Array(600000)]).arrayBuffer());
+    const actualMime=module.exports.exportImageMime(jpeg,'image/png');
+    const optimized=await module.exports.compactExportImage(jpeg,actualMime);
+    result.jpegAlias=actualMime==='image/jpeg'&&module.exports.exportImageMime(optimized,'image/png')==='image/jpeg';
+    result.noInflation=optimized.byteLength<=jpeg.byteLength;
     const invalid=new Uint8Array(600000);result.invalidPreserved=(await module.exports.compactExportImage(invalid,'image/png')).length===invalid.length;
     const controller=new AbortController();controller.abort();
     try{await module.exports.compactExportImage(raw,'image/png',{signal:controller.signal})}catch(error){result.cancelled=error.name==='AbortError'}
     return result;
   })()`);
-  assert.deepEqual(compacted, { width: 2400, height: 1600, reduced: true, invalidPreserved: true, cancelled: true });
+  assert.deepEqual(compacted, { width: 2400, height: 1600, reduced: true, jpegAlias: true, noInflation: true, invalidPreserved: true, cancelled: true });
   console.log('PASS real browser image compaction: bounded dimensions, smaller payload, damaged image recovery and cancellation');
   console.log('PASS oversized documents are rejected without truncation or leftover frames');
 } finally {
