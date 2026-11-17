@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "deploy:test": "npm run build && node scripts/deploy-test.mjs",
     "preview:pet": "node scripts/build-pet-preview.mjs",
-    "lint:review": "eslint src"
+    "lint:review": "eslint src",
+    "test:continuous-pdf": "npm run build && node test/continuous-pdf.mjs"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",

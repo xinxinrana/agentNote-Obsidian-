@@ -1,5 +1,8 @@
 /** Chinese source text is the key; placeholders preserve user content verbatim. */
 export const en: Record<string, string> = {
+  "长页 PDF 排版失败，请重试。": "Continuous PDF layout failed. Try again.",
+  "长页 PDF 排版超时，请重试。": "Continuous PDF layout timed out. Try again.",
+  "内容超出单页 PDF 的尺寸上限，请使用官方分页导出。": "The content exceeds the single-page PDF size limit. Use native paginated export.",
   "视频（请在原笔记中播放）": "Video (play in the original note)",
   "音频（请在原笔记中播放）": "Audio (play in the original note)",
   "融合导出资源读取失败，请使用官方导出。": "A hybrid export resource could not be read. Use native export.",
@@ -10,7 +13,7 @@ export const en: Record<string, string> = {
   "融合导出图片无法离线加载，请使用官方导出。": "Hybrid export cannot load this image offline. Use native export.",
   "融合导出仅支持整篇笔记。": "Hybrid export supports full notes only.",
   "复制融合 PDF（实验）": "Copy hybrid PDF (experimental)",
-  "原生渲染正文，搭配 agentNote 版式": "Native rendered content with agentNote typography",
+  "长页不分页，搭配 agentNote 版式": "One continuous page with agentNote typography",
 
   "笔记导出": "Note export",
   "Obsidian 官方导出 PDF": "Obsidian PDF export",

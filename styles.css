@@ -2011,3 +2011,5 @@ span.agentnote-agent-icon svg {
 .agentnote-share-render-host { position: fixed; left: -10000px; top: 0; width: 800px; visibility: hidden; pointer-events: none; }
 
 .agentnote-native-render-host { position: fixed !important; left: -10000px !important; top: 0 !important; width: 174mm !important; height: auto !important; pointer-events: none !important; }
+
+.agentnote-export-measure-frame { position: fixed; left: -10000px; top: 0; width: 210mm; height: 1px; border: 0; pointer-events: none; }

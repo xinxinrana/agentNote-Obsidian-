@@ -2,6 +2,7 @@ import type { App, Component } from "obsidian";
 import { buildExportHtml, copyExportFileAndVerify, writeExportFile, writeMacFileClipboard, verifyMacFileClipboard } from "./core/noteExport";
 import type { MacFileClipboard, ExportFormat } from "./core/noteExport";
 import { createShareRenderer, readShareImage } from "./shareRenderer";
+import { continuousPdfHtml } from "./continuousPdf";
 import { renderNativePdfDocument } from "./nativePdfExperiment";
 import { t } from "./i18n";
 
@@ -61,7 +62,7 @@ export async function exportNoteFile(app: App, parent: Component, root: string, 
   const content = selection ?? await app.vault.cachedRead(source);
   if (!content.trim()) throw new Error(t("笔记内容为空，无法导出。"));
   if (format === "hybrid-pdf" && selection !== undefined) throw new Error(t("融合导出仅支持整篇笔记。"));
-  const output = format === "hybrid-pdf" ? await renderNativePdfDocument(app, parent, sourcePath) : format === "md" ? content : await buildExportHtml({ title: source.basename, content, sourcePath, selection: selection !== undefined }, { renderMarkdown: createShareRenderer(app, parent), readImage: (link, originalPath) => readShareImage(app, root, link, originalPath) });
+  const output = format === "hybrid-pdf" ? await continuousPdfHtml(await renderNativePdfDocument(app, parent, sourcePath)) : format === "md" ? content : await buildExportHtml({ title: source.basename, content, sourcePath, selection: selection !== undefined }, { renderMarkdown: createShareRenderer(app, parent), readImage: (link, originalPath) => readShareImage(app, root, link, originalPath) });
   const file = await writeExportFile(source.basename, format === "hybrid-pdf" ? "pdf" : format, output, printExportPdf);
   return { file, copied: await copyExportedFile(file) };
 }
