@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 const dom = new JSDOM('<!doctype html><body><p id="note">笔记仍可阅读</p></body>', { pretendToBeVisual: true });
 const { document } = dom.window;
+const style = dom.window.document.createElement('style');
+style.textContent = await fs.readFile('styles.css', 'utf8');
+dom.window.document.head.append(style);
 dom.window.HTMLElement.prototype.createEl = function(tag, options = {}) { const el = document.createElement(tag); el.className = options.cls || ''; el.textContent = options.text || ''; for (const [key, value] of Object.entries(options.attr || {})) el.setAttribute(key, value); this.append(el); return el; };
 dom.window.HTMLElement.prototype.createDiv = function(options) { return this.createEl('div', options); };
 const bundle = await build({ entryPoints: ['src/ui/exportProgress.ts'], bundle: true, format: 'cjs', loader: { '.css': 'text' }, write: false, logLevel: 'silent' });

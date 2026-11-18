@@ -8,6 +8,7 @@ export default [{
   languageOptions: { parser: tseslint.parser, parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
   plugins: { obsidianmd, "@typescript-eslint": tseslint.plugin },
   rules: {
+    "obsidianmd/no-forbidden-elements": "error",
     "obsidianmd/no-static-styles-assignment": "error",
     "obsidianmd/prefer-create-el": "warn",
     "obsidianmd/prefer-window-timers": "warn",

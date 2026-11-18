@@ -13,7 +13,7 @@ interface PdfWindow {
   destroy(): void;
   webContents: {
     debugger: { attach(version: string): void; detach(): void; sendCommand(method: string, params?: object): Promise<{ exceptionDetails?: unknown; result?: { value?: { heightMm: number; failedImages: string[] } } }> };
-    printToPDF(options: { printBackground: boolean; pageSize: string; preferCSSPageSize: boolean; displayHeaderFooter: boolean; margins: { top: number; bottom: number; left: number; right: number } }): Promise<Uint8Array>;
+    printToPDF(options: { printBackground: boolean; pageSize: string | { width: number; height: number }; preferCSSPageSize: boolean; displayHeaderFooter: boolean; margins: { top: number; bottom: number; left: number; right: number } }): Promise<Uint8Array>;
     setWindowOpenHandler(handler: () => { action: "deny" }): void;
     on(event: string, handler: (event: { preventDefault(): void }) => void): void;
   };
@@ -36,6 +36,7 @@ export async function printExportPdf(htmlPath: string, options: { continuous?: b
       (async () => {
         await win.loadFile(htmlPath);
         checkExport(options.control);
+        let pageSize: string | { width: number; height: number } = "A4";
         if (options.continuous) {
           options.control?.onProgress?.(t("正在排版长页，可继续阅读笔记…"));
           const debuggerApi = win.webContents.debugger;
@@ -47,12 +48,13 @@ export async function printExportPdf(htmlPath: string, options: { continuous?: b
               const detail = JSON.stringify(result.exceptionDetails);
               throw new Error(detail.includes("PAGE_TOO_LONG") ? t("内容超出单页 PDF 的尺寸上限，请使用官方分页导出。") : t("长页 PDF 排版失败，请重试。"));
             }
+            pageSize = { width: 210 / 25.4, height: result.result.value.heightMm / 25.4 };
             for (const name of result.result.value.failedImages) options.control?.onWarning?.(name);
           } finally { debuggerApi.detach(); }
         }
         checkExport(options.control);
         options.control?.onProgress?.(t("正在生成 PDF，可继续阅读笔记…"));
-        return win.webContents.printToPDF({ printBackground: true, pageSize: "A4", preferCSSPageSize: true, displayHeaderFooter: false, margins: { top: 0.55, bottom: 0.55, left: 0.55, right: 0.55 } });
+        return win.webContents.printToPDF({ printBackground: true, pageSize, preferCSSPageSize: !options.continuous, displayHeaderFooter: false, margins: options.continuous ? { top: 0, bottom: 0, left: 0, right: 0 } : { top: 0.55, bottom: 0.55, left: 0.55, right: 0.55 } });
       })(),
       new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error(t("PDF 生成超时，请重试。"))), 120000); }),
     ]), options.control);

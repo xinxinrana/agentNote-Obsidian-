@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
@@ -6,6 +7,9 @@ import { JSDOM } from 'jsdom';
 const dom = new JSDOM('<!doctype html><body><div id="card"></div></body>', { pretendToBeVisual: true });
 const { window } = dom;
 const proto = window.HTMLElement.prototype;
+const style = dom.window.document.createElement('style');
+style.textContent = await fs.readFile('styles.css', 'utf8');
+dom.window.document.head.append(style);
 proto.createEl = function(tag, options = {}) {
   const child = window.document.createElement(tag);
   child.className = options.cls || '';
@@ -36,7 +40,7 @@ const menu = control.querySelector('[popover]');
 const items = [...menu.querySelectorAll('[role="menuitem"]')];
 const key = (target, value) => target.dispatchEvent(new window.KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true }));
 try {
-  // The plugin's separate stylesheet may be missing or stale after an update.
+  // Obsidian loads the release's styles.css before rendering the controls.
   const controlStyle = window.getComputedStyle(control);
   assert.equal(controlStyle.display, 'flex');
   assert.match(controlStyle.backgroundImage, /linear-gradient/);

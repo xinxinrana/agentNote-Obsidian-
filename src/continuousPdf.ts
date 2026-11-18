@@ -1,6 +1,6 @@
 // Keep screen and print typography identical while measuring a continuous page.
 export const continuousStyles = `
-@page{margin:0}
+@page{size:auto!important;margin:0!important}
 html,body{width:210mm!important;height:auto!important;min-height:0!important;overflow:visible!important}
 body{font-size:11pt!important;line-height:1.8!important}
 main.agentnote-export-document{box-sizing:border-box!important;width:210mm!important;max-width:none!important;margin:0!important;padding:18mm!important}
@@ -36,8 +36,5 @@ export async function measureContinuousDocument(missingLabel: string): Promise<{
   const pixels = Math.ceil(Math.max(main.getBoundingClientRect().height, main.scrollHeight, document.body.scrollHeight)) + 4;
   if (!Number.isFinite(pixels) || pixels <= 4 || pixels > 200 * 96) throw new Error("PAGE_TOO_LONG");
   const heightMm = Math.ceil(pixels / 96 * 25.4 * 100) / 100;
-  const style = document.createElement("style");
-  style.textContent = `@page{size:210mm ${heightMm}mm;margin:0}`;
-  document.head.append(style);
   return { heightMm, failedImages };
 }

@@ -1,13 +1,11 @@
 import { t } from "../i18n";
 import type { ExportControl } from "../exportTask";
-import styles from "./exportProgress.css";
 
 /** A nonmodal, cancellable task card; no simulated percentages. */
 export function showExportProgress(title: string, controller: AbortController): { control: ExportControl; close(): void } {
   const card = document.body.createDiv({ cls: "agentnote-export-task" });
   card.setAttribute("role", "region");
   card.setAttribute("aria-label", t("文件导出进度"));
-  card.createEl("style", { text: styles });
   card.createEl("div", { cls: "agentnote-export-task-heading", text: t("正在导出文件") });
   card.createEl("div", { cls: "agentnote-export-task-title", text: title });
   const status = card.createEl("div", { cls: "agentnote-export-task-status", text: t("正在准备笔记…"), attr: { role: "status", "aria-live": "polite" } });

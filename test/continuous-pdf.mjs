@@ -52,7 +52,7 @@ try {
     assert.ok(result.heightMm > 0);
     assert.equal(result.failedImages.length, 0);
     assert.equal(await evaluate('document.querySelectorAll("iframe").length'), 0);
-    const { data } = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false });
+    const { data } = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: false, displayHeaderFooter: false, paperWidth: 210 / 25.4, paperHeight: result.heightMm / 25.4, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 });
     const pdf = Buffer.from(data, 'base64');
     const pages = [...pdf.toString('latin1').matchAll(/\/Type\s*\/Page\b/g)].length;
     assert.equal(pages, 1, `${name} PDF must contain exactly one page`);

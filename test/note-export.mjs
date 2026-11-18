@@ -212,7 +212,7 @@ try {
               assert.equal(method, 'Emulation.setEmulatedMedia'); return {};
             },
           },
-          async printToPDF(options) { assert.equal(options.pageSize, 'A4'); if (slow) { entered(); return new Promise((_, reject) => { rejectPrint = reject; }); } return Buffer.from('%PDF-1.7'); },
+          async printToPDF(options) { if (typeof options.pageSize === 'object') { assert.equal(options.pageSize.width, 210 / 25.4); assert.equal(options.pageSize.height, 1200 / 25.4); assert.equal(options.preferCSSPageSize, false); assert.equal(options.margins.top, 0); } else assert.equal(options.pageSize, 'A4'); if (slow) { entered(); return new Promise((_, reject) => { rejectPrint = reject; }); } return Buffer.from('%PDF-1.7'); },
         };
       }
       async loadFile(file) { assert.equal(file, '/safe/export.html'); if (fail) throw new Error('load failed'); }
