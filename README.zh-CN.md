@@ -53,7 +53,7 @@ agentNote 是一个 Obsidian 桌面插件。把你选中的笔记、文件夹或
 
 1. **安装并启用**：在 Obsidian 社区插件中搜索 **agentNote**，安装并启用，然后打开 agentNote 接入台，确认本地服务正在运行。
 2. **接入一个 Agent**：点击“接入”，把复制的安装任务发给它，完成 Skill 安装与上报。
-3. **分享，然后继续对话**：右键一份笔记，选择 **agentNote: 分享给 agent**，把链接发给 Agent。需要保存成果时，说“写到 Obsidian”。
+3. **分享，然后继续对话**：右键一份笔记，选择 **通过 agentNote 分享**，把链接发给 Agent。需要保存成果时，说“写到 Obsidian”。
 
 [查看图文教程](docs/如何使用.md) · [下载最新版本](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest)
 

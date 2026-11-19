@@ -28,7 +28,7 @@ Markdown preserves the original text and image references without bundling image
 
 1. Open the **agentNote connection panel** and confirm the green local-service light.
 2. Connect one installed agent and restart it once.
-3. Right-click a file, select **agentNote: Share with agent**, paste the copied address into a conversation, and state the desired task.
+3. Right-click a file, select **Share via agentNote**, paste the copied address into a conversation, and state the desired task.
 
 For the illustrated walkthrough, read [How to Use agentNote](How%20to%20Use.md).
 
@@ -36,7 +36,7 @@ For the illustrated walkthrough, read [How to Use agentNote](How%20to%20Use.md).
 
 ### Share a file or folder
 
-Right-click the item in Obsidian's file explorer and select **agentNote: Share with agent**. The address is copied automatically.
+Right-click the item in Obsidian's file explorer and select **Share via agentNote**. The address is copied automatically.
 
 | Target | What the agent receives |
 | --- | --- |
@@ -47,7 +47,7 @@ Folders do not expand recursively, so unrelated material is not handed over acci
 
 ### Share selected text
 
-Select text in the editor, then run **agentNote: Share selected content** from the command palette or editor context menu. The link is copied automatically.
+Select text in the editor, then run **agentNote: Share selected content** from the command palette, or choose **Share selected text via agentNote** from the editor context menu. The link is copied automatically.
 
 ### Use a shared address
 

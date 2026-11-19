@@ -10,7 +10,7 @@ function workflowSteps() {
   {
     id: "share",
     title: t("分享笔记"),
-    caption: t("右键一份笔记，选择“agentNote: 分享给 agent”，地址会自动复制。"),
+    caption: t("右键一份笔记，选择“通过 agentNote 分享”，地址会自动复制。"),
   },
   {
     id: "send",
@@ -62,7 +62,7 @@ function renderScene(parent: HTMLElement, index: number): void {
     createFile(notes, t("会议纪要.md"));
     const menu = notes.createDiv({ cls: "agentnote-demo-menu" });
     menu.createDiv({ text: t("打开文件") });
-    menu.createEl("strong", { text: t("agentNote: 分享给 agent") });
+    menu.createEl("strong", { text: t("通过 agentNote 分享") });
     notes.createDiv({ cls: "agentnote-demo-toast", text: t("✓ 分享地址已复制") });
     createCursor(notes);
   } else if (index === 2) {

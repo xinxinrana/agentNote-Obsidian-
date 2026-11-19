@@ -85,17 +85,16 @@ export default class AgentNotePlugin extends Plugin {
     this.addCommand({ id: "export-current-note", name: t("导出 PDF、HTML 或 Markdown 文件"), callback: () => { const file = this.app.workspace.getActiveFile(); if (file) new ExportNoteModal(this, file.path).open(); } });
     this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
       if (!editor.getSelection()) return;
-      menu.addItem((item) => item.setTitle(t("agentNote: 分享选中内容")).setIcon("link").onClick(() => void this.shareSelection(editor)));
+      menu.addItem((item) => item.setTitle(t("通过 agentNote 分享选中内容")).setIcon("link").onClick(() => void this.shareSelection(editor)));
       const file = this.app.workspace.getActiveFile();
       if (file) menu.addItem(item => item.setTitle(t("agentNote: 导出选段文件")).setIcon("file-output").onClick(() => new ExportNoteModal(this, file.path, editor.getSelection()).open()));
     }));
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-      menu.addItem((item) => item.setTitle(t("agentNote: 分享给 agent")).setIcon("link").onClick(() => void this.sharePath(file.path)));
-      if (file instanceof TFile && file.extension.toLowerCase() === "md") menu.addItem(item => item.setTitle(t("agentNote: 导出 PDF / HTML / Markdown")).setIcon("file-output").onClick(() => new ExportNoteModal(this, file.path).open()));
+      menu.addItem((item) => item.setTitle(t("通过 agentNote 分享")).setIcon("link").onClick(() => void this.sharePath(file.path)));
     }));
     this.registerEvent(this.app.workspace.on("files-menu", (menu, files) => {
       if (files.length < 2) return;
-      menu.addItem((item) => item.setTitle(t("agentNote: 分享选中项目给 agent")).setIcon("link").onClick(() => void this.sharePaths(files)));
+      menu.addItem((item) => item.setTitle(t("通过 agentNote 分享选中项目")).setIcon("link").onClick(() => void this.sharePaths(files)));
     }));
     this.app.workspace.onLayoutReady(() => this.registerLocalActivityTracking());
     this.scheduleColdBackup();

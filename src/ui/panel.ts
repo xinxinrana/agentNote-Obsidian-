@@ -406,7 +406,7 @@ export class QuickStartModal extends Modal {
     renderMacOsReminder(this.contentEl);
     this.stopDemo = renderWorkflowDemo(this.contentEl);
     const steps = this.contentEl.createEl("ol", { cls: "agentnote-guide-steps" });
-    for (const [title, description] of [[t("确认本地服务"), t("在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。")], [t("接入一个 agent"), t("点击目标 Agent 的“接入”，查看并复制安装任务。Agent 安装并上报后，可在接入台核对状态。")], [t("分享并开始工作"), t("右键文件或文件夹选择“agentNote: 分享给 agent”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。")]] as const) {
+    for (const [title, description] of [[t("确认本地服务"), t("在接入台确认绿色状态灯和“服务正在运行”。服务只在本机 127.0.0.1 上提供内容。")], [t("接入一个 agent"), t("点击目标 Agent 的“接入”，查看并复制安装任务。Agent 安装并上报后，可在接入台核对状态。")], [t("分享并开始工作"), t("右键文件或文件夹选择“通过 agentNote 分享”。把复制的地址发送给 agent，并说明要它总结、审阅、计划或更新什么。")]] as const) {
       const item = steps.createEl("li"); item.createEl("strong", { text: title }); item.createEl("p", { text: description });
     }
     const example = this.contentEl.createDiv({ cls: "agentnote-guide-example" }); example.createEl("strong", { text: t("可直接发送给 agent") }); example.createEl("code", { text: t("请读取这个资料，整理重点、待办和风险：<粘贴 agentNote 地址>") });

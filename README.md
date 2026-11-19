@@ -53,7 +53,7 @@ Your knowledge profile records which notes were read or developed, which agents 
 
 1. **Install and enable.** Search for **agentNote** in Obsidian Community plugins. Open the agentNote panel and check that the local service is running.
 2. **Connect an agent.** Click **Connect** and send it the copied installation task. The agent installs the Skill and reports its connection.
-3. **Share and keep working.** Right-click a note, choose **agentNote: Share with agent**, and send the link. When you want to keep the result, say “write to Obsidian.”
+3. **Share and keep working.** Right-click a note, choose **Share via agentNote**, and send the link. When you want to keep the result, say “write to Obsidian.”
 
 [Follow the illustrated guide](docs/How%20to%20Use.md) · [Download the latest release](https://github.com/xinxinrana/agentNote-Obsidian-/releases/latest)
 
