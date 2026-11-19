@@ -15,9 +15,9 @@
 
 <p align="center"><a href="https://community.obsidian.md/plugins/agentnote">Install</a> · <a href="docs/How%20to%20Use.md">Get started</a> · <a href="https://agentnote-intro.app.workbuddy.host/">Website</a> · <a href="README.zh-CN.md">简体中文</a></p>
 
-![Past notes come together as a new piece of work, then return to your own archive. Concept artwork for agentNote.](docs/img/readme/knowledge-in-motion.png)
+![Public demo: work saved in your own vault, with the current note and collaboration records in the agentNote panel.](docs/img/readme/workspace-demo-en.png)
 
-<p align="center"><sub>Build on what you know. Keep what you create. Concept artwork, not a software interface.</sub></p>
+<p align="center"><sub>From existing material to a new note. Interface demonstration with public sample content.</sub></p>
 
 agentNote is an Obsidian desktop plugin. Share a note, a folder, or a passage with agents such as Claude Code, Codex, and WorkBuddy. Let them work with your context, then save the results back to your vault.
 
@@ -36,10 +36,6 @@ When a conversation produces something worth keeping, just ask:
 > Use these research and method notes to plan the next steps, then write the plan to Obsidian.
 
 The result becomes an ordinary Markdown note in your vault. Edit it, connect it to other notes, hand it to another agent, or use it in your next task. “Update the note we just made” continues work on the same note.
-
-![Public demo: work saved in your own vault, with the current note and collaboration records in the agentNote panel.](docs/img/readme/workspace-demo-en.png)
-
-<p align="center"><sub>From existing material to a new note. Interface demonstration with public sample content.</sub></p>
 
 ## See the work your knowledge takes part in
 

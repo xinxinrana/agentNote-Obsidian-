@@ -15,9 +15,9 @@
 
 <p align="center"><a href="https://community.obsidian.md/plugins/agentnote">安装插件</a> · <a href="docs/如何使用.md">三分钟开始</a> · <a href="https://agentnote-intro.app.workbuddy.host/">产品网站</a> · <a href="README.md">English</a></p>
 
-![旧笔记汇聚成新的成果，再回到自己的知识库。agentNote 概念主视觉。](docs/img/readme/knowledge-in-motion.png)
+![公开演示：成果保存在自己的笔记库，右侧 agentNote 面板展示当前笔记与协作记录。](docs/img/readme/workspace-demo-zh.png)
 
-<p align="center"><sub>让已有的知识，长出新的成果。概念视觉，非软件界面。</sub></p>
+<p align="center"><sub>从已有资料到新的笔记。界面演示使用公开示例内容。</sub></p>
 
 agentNote 是一个 Obsidian 桌面插件。把你选中的笔记、文件夹或一段内容交给 Claude Code、Codex、WorkBuddy 等 Agent，让它带着你的背景工作，再把成果写回自己的笔记库。
 
@@ -36,10 +36,6 @@ agentNote 是一个 Obsidian 桌面插件。把你选中的笔记、文件夹或
 > 结合这些研究和方法笔记，整理下一步行动，把方案写到 Obsidian。
 
 成果会成为普通的 Markdown 笔记，留在你的库里。可以继续编辑、建立双链、交给另一个 Agent，或在下次任务中接着使用。说“修改刚才那篇”，也可以继续更新原笔记。
-
-![公开演示：成果保存在自己的笔记库，右侧 agentNote 面板展示当前笔记与协作记录。](docs/img/readme/workspace-demo-zh.png)
-
-<p align="center"><sub>从已有资料到新的笔记。界面演示使用公开示例内容。</sub></p>
 
 ## 回头看，知识一直在参与
 
